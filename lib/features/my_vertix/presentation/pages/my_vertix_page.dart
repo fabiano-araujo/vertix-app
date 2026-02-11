@@ -6,6 +6,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/feed_service.dart';
 import '../../../../core/models/user_model.dart';
 import '../../../../core/models/episode_model.dart';
+import '../../../../core/utils/logger.dart';
 
 /// My Vertix Page - User profile and library
 /// Shows: Profile, Continue Watching, Likes, History, Downloads
@@ -16,7 +17,7 @@ class MyVertixPage extends StatefulWidget {
   State<MyVertixPage> createState() => _MyVertixPageState();
 }
 
-class _MyVertixPageState extends State<MyVertixPage> {
+class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
   final FeedService _feedService = FeedService();
 
@@ -30,32 +31,75 @@ class _MyVertixPageState extends State<MyVertixPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAuthState();
+    }
+  }
+
+  /// Verifica se o estado de autenticacao mudou
+  Future<void> _checkAuthState() async {
+    final isNowLoggedIn = await _authService.isAuthenticated();
+    final currentUser = _authService.currentUser;
+
+    // Recarrega se o estado mudou
+    if (isNowLoggedIn != _isLoggedIn ||
+        (isNowLoggedIn && _user?.id != currentUser?.id)) {
+      Logger.i('MY_VERTIX', 'Estado de auth mudou, recarregando...');
+      _loadData();
+    }
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
     _isLoggedIn = await _authService.isAuthenticated();
+    Logger.i('MY_VERTIX', 'isLoggedIn: $_isLoggedIn');
 
     if (_isLoggedIn) {
-      // Load user profile
-      final profileResponse = await _authService.getProfile();
-      if (profileResponse.success) {
-        _user = profileResponse.user;
+      // Primeiro tenta usar o usuario ja carregado do login
+      _user = _authService.currentUser;
+      Logger.i('MY_VERTIX', 'currentUser from cache: ${_user?.name}');
+
+      // Se nao tiver, busca do servidor
+      if (_user == null) {
+        Logger.i('MY_VERTIX', 'Buscando perfil do servidor...');
+        final profileResponse = await _authService.getProfile();
+        if (profileResponse.success) {
+          _user = profileResponse.user;
+          Logger.s('MY_VERTIX', 'Perfil carregado: ${_user?.name}');
+        } else {
+          Logger.e('MY_VERTIX', 'Falha ao carregar perfil: ${profileResponse.message}');
+        }
       }
 
       // Load user content
-      final continueWatching = await _feedService.getContinueWatching(limit: 10);
-      final liked = await _feedService.getLikedEpisodes(limit: 10);
-      final history = await _feedService.getHistory(limit: 10);
+      try {
+        final continueWatching = await _feedService.getContinueWatching(limit: 10);
+        final liked = await _feedService.getLikedEpisodes(limit: 10);
+        final history = await _feedService.getHistory(limit: 10);
 
-      setState(() {
-        _continueWatching = continueWatching.data;
-        _likedEpisodes = liked.data;
-        _history = history.data;
-        _isLoading = false;
-      });
+        setState(() {
+          _continueWatching = continueWatching.data;
+          _likedEpisodes = liked.data;
+          _history = history.data;
+          _isLoading = false;
+        });
+      } catch (e) {
+        Logger.e('MY_VERTIX', 'Erro ao carregar conteudo', e);
+        setState(() => _isLoading = false);
+      }
     } else {
       setState(() => _isLoading = false);
     }
@@ -163,7 +207,7 @@ class _MyVertixPageState extends State<MyVertixPage> {
         children: [
           // Avatar
           GestureDetector(
-            onTap: _isLoggedIn ? null : () => context.push('/login'),
+            onTap: _isLoggedIn ? null : _goToLogin,
             child: Container(
               width: 100,
               height: 100,
@@ -241,6 +285,18 @@ class _MyVertixPageState extends State<MyVertixPage> {
     );
   }
 
+  Future<void> _goToLogin() async {
+    await context.push('/login');
+    // Recarrega apos voltar da tela de login
+    _loadData();
+  }
+
+  Future<void> _goToRegister() async {
+    await context.push('/register');
+    // Recarrega apos voltar da tela de registro
+    _loadData();
+  }
+
   Widget _buildLoginPrompt(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -255,7 +311,7 @@ class _MyVertixPageState extends State<MyVertixPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => context.push('/login'),
+              onPressed: _goToLogin,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -269,7 +325,7 @@ class _MyVertixPageState extends State<MyVertixPage> {
           ),
           const SizedBox(height: 12),
           TextButton(
-            onPressed: () => context.push('/register'),
+            onPressed: _goToRegister,
             child: const Text('Criar conta'),
           ),
         ],

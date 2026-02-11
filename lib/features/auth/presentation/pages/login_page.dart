@@ -45,7 +45,7 @@ class _LoginPageState extends State<LoginPage> {
 
     if (response.success) {
       if (mounted) {
-        context.go('/');
+        context.pop(true); // Retorna true para indicar login bem-sucedido
       }
     } else {
       setState(() => _errorMessage = response.message);

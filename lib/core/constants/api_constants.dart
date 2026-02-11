@@ -4,7 +4,7 @@ class ApiConstants {
 
   /// Base URL for the API
   /// Change this to your production URL when deploying
-  static const String baseUrl = 'http://localhost:3000';
+  static const String baseUrl = 'https://vertix-api.snapdark.com';
 
   /// API Endpoints
   static const String auth = '/auth';

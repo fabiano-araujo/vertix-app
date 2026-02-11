@@ -51,7 +51,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
     if (response.success) {
       if (mounted) {
-        context.go('/');
+        context.pop(true); // Retorna true para indicar registro bem-sucedido
       }
     } else {
       setState(() => _errorMessage = response.message);

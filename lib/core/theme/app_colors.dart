@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// VERTIX Color Palette - Dark Premium Theme
-/// NOT a Netflix copy - distinctive premium dark theme with subtle red accents
+/// Distinctive premium dark theme with electric blue accents
 class AppColors {
   AppColors._();
 
@@ -22,23 +22,23 @@ class AppColors {
   static const Color surfaceLighter = Color(0xFF2A2A2A);
 
   // ============================================
-  // PRIMARY COLORS (Red accent)
+  // PRIMARY COLORS (Electric Blue accent)
   // ============================================
 
-  /// Primary brand color - Subtle red
-  static const Color primary = Color(0xFFE50914);
+  /// Primary brand color - Electric blue
+  static const Color primary = Color(0xFF3B82F6);
 
   /// Lighter primary for highlights
-  static const Color primaryLight = Color(0xFFFF1F2A);
+  static const Color primaryLight = Color(0xFF60A5FA);
 
   /// Darker primary for pressed states
-  static const Color primaryDark = Color(0xFFB20710);
+  static const Color primaryDark = Color(0xFF2563EB);
 
-  /// Subtle accent - Burgundy
-  static const Color accent = Color(0xFF831010);
+  /// Subtle accent - Deep blue
+  static const Color accent = Color(0xFF1D4ED8);
 
-  /// Glow effect color (25% opacity red)
-  static const Color accentGlow = Color(0x40E50914);
+  /// Glow effect color (25% opacity blue)
+  static const Color accentGlow = Color(0x403B82F6);
 
   // ============================================
   // TEXT COLORS
@@ -66,8 +66,8 @@ class AppColors {
   /// Warning color - Yellow
   static const Color warning = Color(0xFFF5C518);
 
-  /// Error color - Red (same as primary)
-  static const Color error = Color(0xFFE50914);
+  /// Error color - Red
+  static const Color error = Color(0xFFEF4444);
 
   /// Info color - Blue
   static const Color info = Color(0xFF2196F3);
@@ -77,7 +77,7 @@ class AppColors {
   // ============================================
 
   /// Like button active color
-  static const Color likeActive = Color(0xFFE50914);
+  static const Color likeActive = Color(0xFF3B82F6);
 
   /// Overlay color for video controls
   static const Color overlay = Color(0x80000000);
@@ -109,8 +109,8 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0xFFE50914),
-      Color(0xFF831010),
+      Color(0xFF3B82F6),
+      Color(0xFF1D4ED8),
     ],
   );
 
@@ -132,18 +132,18 @@ class AppColors {
   // ============================================
 
   static const MaterialColor primarySwatch = MaterialColor(
-    0xFFE50914,
+    0xFF3B82F6,
     <int, Color>{
-      50: Color(0xFFFDE7E8),
-      100: Color(0xFFF9C3C5),
-      200: Color(0xFFF59B9F),
-      300: Color(0xFFF17278),
-      400: Color(0xFFEE545B),
-      500: Color(0xFFE50914),
-      600: Color(0xFFD00812),
-      700: Color(0xFFB20710),
-      800: Color(0xFF94060D),
-      900: Color(0xFF64040A),
+      50: Color(0xFFEFF6FF),
+      100: Color(0xFFDBEAFE),
+      200: Color(0xFFBFDBFE),
+      300: Color(0xFF93C5FD),
+      400: Color(0xFF60A5FA),
+      500: Color(0xFF3B82F6),
+      600: Color(0xFF2563EB),
+      700: Color(0xFF1D4ED8),
+      800: Color(0xFF1E40AF),
+      900: Color(0xFF1E3A8A),
     },
   );
 }

@@ -128,37 +128,37 @@ class AppTheme {
         labelStyle: const TextStyle(color: AppColors.textSecondary),
       ),
 
-      // Bottom Navigation Bar Theme
+      // Bottom Navigation Bar Theme - Netflix style
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textTertiary,
+        selectedItemColor: AppColors.textPrimary,
+        unselectedItemColor: AppColors.textSecondary,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
         selectedLabelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
         unselectedLabelStyle: TextStyle(fontSize: 12),
       ),
 
-      // Navigation Bar Theme (Material 3)
+      // Navigation Bar Theme (Material 3) - Netflix style
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.primary.withValues(alpha: 0.2),
+        indicatorColor: Colors.transparent,
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: AppColors.primary);
+            return const IconThemeData(color: AppColors.textPrimary);
           }
-          return const IconThemeData(color: AppColors.textTertiary);
+          return const IconThemeData(color: AppColors.textSecondary);
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
-              color: AppColors.primary,
+              color: AppColors.textPrimary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             );
           }
           return const TextStyle(
-            color: AppColors.textTertiary,
+            color: AppColors.textSecondary,
             fontSize: 12,
           );
         }),
