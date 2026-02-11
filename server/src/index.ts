@@ -52,8 +52,8 @@ const start = async () => {
             }
         }, 6 * 60 * 60 * 1000); // 6 horas em milissegundos
         
-        await app.listen({ port: 3004, host: '0.0.0.0' });
-        console.log(`Servidor rodando em http://localhost:3004`);
+        await app.listen({ port: 3005, host: '0.0.0.0' });
+        console.log(`Servidor rodando em http://localhost:3005`);
     } catch (err) {
         console.error('Erro ao iniciar o servidor:', err);
         process.exit(1);
