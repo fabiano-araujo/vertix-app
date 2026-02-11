@@ -1,10 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/feed_service.dart';
+import '../../../../core/models/user_model.dart';
+import '../../../../core/models/episode_model.dart';
 
 /// My Vertix Page - User profile and library
 /// Shows: Profile, Continue Watching, Likes, History, Downloads
-class MyVertixPage extends StatelessWidget {
+class MyVertixPage extends StatefulWidget {
   const MyVertixPage({super.key});
+
+  @override
+  State<MyVertixPage> createState() => _MyVertixPageState();
+}
+
+class _MyVertixPageState extends State<MyVertixPage> {
+  final AuthService _authService = AuthService();
+  final FeedService _feedService = FeedService();
+
+  UserModel? _user;
+  List<EpisodeModel> _continueWatching = [];
+  List<EpisodeModel> _likedEpisodes = [];
+  List<EpisodeModel> _history = [];
+  bool _isLoading = true;
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+
+    _isLoggedIn = await _authService.isAuthenticated();
+
+    if (_isLoggedIn) {
+      // Load user profile
+      final profileResponse = await _authService.getProfile();
+      if (profileResponse.success) {
+        _user = profileResponse.user;
+      }
+
+      // Load user content
+      final continueWatching = await _feedService.getContinueWatching(limit: 10);
+      final liked = await _feedService.getLikedEpisodes(limit: 10);
+      final history = await _feedService.getHistory(limit: 10);
+
+      setState(() {
+        _continueWatching = continueWatching.data;
+        _likedEpisodes = liked.data;
+        _history = history.data;
+        _isLoading = false;
+      });
+    } else {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    await _authService.logout();
+    setState(() {
+      _isLoggedIn = false;
+      _user = null;
+      _continueWatching = [];
+      _likedEpisodes = [];
+      _history = [];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -14,49 +80,79 @@ class MyVertixPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         title: const Text('Minha Vertix'),
         actions: [
+          if (_isLoggedIn && _user?.isAdmin == true)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings),
+              onPressed: () => context.push('/admin'),
+              tooltip: 'Admin',
+            ),
           IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.settings_outlined),
             onPressed: () {},
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Profile Section
-            _buildProfileSection(context),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              color: AppColors.primary,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    // Profile Section
+                    _buildProfileSection(context),
 
-            const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-            // Menu Options
-            _buildMenuSection(context),
+                    if (!_isLoggedIn) ...[
+                      _buildLoginPrompt(context),
+                    ] else ...[
+                      // Menu Options
+                      _buildMenuSection(context),
 
-            const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-            // Liked Content Section
-            _buildContentSection(
-              context,
-              'Series e filmes que voce curtiu',
-              Icons.favorite,
+                      // Continue Watching Section
+                      if (_continueWatching.isNotEmpty)
+                        _buildContentSection(
+                          context,
+                          'Continue Assistindo',
+                          Icons.play_circle_outline,
+                          _continueWatching,
+                        ),
+
+                      // Liked Content Section
+                      if (_likedEpisodes.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        _buildContentSection(
+                          context,
+                          'Minhas Curtidas',
+                          Icons.favorite,
+                          _likedEpisodes,
+                        ),
+                      ],
+
+                      // History Section
+                      if (_history.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        _buildContentSection(
+                          context,
+                          'Historico',
+                          Icons.history,
+                          _history,
+                        ),
+                      ],
+                    ],
+
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
             ),
-
-            const SizedBox(height: 24),
-
-            // My List Section
-            _buildContentSection(
-              context,
-              'Minha lista',
-              Icons.add,
-            ),
-
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
     );
   }
 
@@ -66,37 +162,115 @@ class MyVertixPage extends StatelessWidget {
       child: Column(
         children: [
           // Avatar
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppColors.warning,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Center(
-              child: Text(
-                ':)',
-                style: TextStyle(
-                  fontSize: 40,
-                  color: AppColors.background,
-                ),
+          GestureDetector(
+            onTap: _isLoggedIn ? null : () => context.push('/login'),
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: _isLoggedIn ? AppColors.primary : AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(16),
               ),
+              child: _user?.photo != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: CachedNetworkImage(
+                        imageUrl: _user!.photo!,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Center(
+                      child: _isLoggedIn
+                          ? Text(
+                              _user?.initials ?? 'U',
+                              style: const TextStyle(
+                                fontSize: 40,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.person,
+                              size: 48,
+                              color: AppColors.textSecondary,
+                            ),
+                    ),
             ),
           ),
           const SizedBox(height: 16),
 
-          // Name with dropdown
+          // Name
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Usuario',
+                _isLoggedIn ? (_user?.displayName ?? 'Usuario') : 'Visitante',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
               ),
-              const Icon(Icons.arrow_drop_down),
+              if (_isLoggedIn)
+                IconButton(
+                  icon: const Icon(Icons.logout, size: 20),
+                  onPressed: _logout,
+                  tooltip: 'Sair',
+                ),
             ],
+          ),
+
+          if (_isLoggedIn && _user?.isCreator == true)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withAlpha(50),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary.withAlpha(100)),
+              ),
+              child: Text(
+                _user?.isAdmin == true ? 'Administrador' : 'Criador',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoginPrompt(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          Text(
+            'Faca login para acessar suas curtidas, historico e muito mais!',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => context.push('/login'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Entrar'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: () => context.push('/register'),
+            child: const Text('Criar conta'),
           ),
         ],
       ),
@@ -118,6 +292,12 @@ class MyVertixPage extends StatelessWidget {
           icon: Icons.download_outlined,
           title: 'Downloads',
           subtitle: 'Os filmes e series baixados ficam aqui.',
+          onTap: () {},
+        ),
+        _buildMenuItem(
+          context,
+          icon: Icons.history,
+          title: 'Historico completo',
           onTap: () {},
         ),
       ],
@@ -177,6 +357,7 @@ class MyVertixPage extends StatelessWidget {
     BuildContext context,
     String title,
     IconData icon,
+    List<EpisodeModel> episodes,
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,11 +365,16 @@ class MyVertixPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleSmall,
+              Icon(icon, size: 20, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
               ),
               TextButton(
                 onPressed: () {},
@@ -201,82 +387,115 @@ class MyVertixPage extends StatelessWidget {
 
         // Horizontal scroll of content
         SizedBox(
-          height: 150,
+          height: 160,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: 5,
-            itemBuilder: (context, index) => _buildContentCard(context, index),
+            itemCount: episodes.length,
+            itemBuilder: (context, index) =>
+                _buildContentCard(context, episodes[index]),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildContentCard(BuildContext context, int index) {
-    return Container(
-      width: 110,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Thumbnail
-          Container(
-            height: 100,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(12),
-              image: DecorationImage(
-                image: NetworkImage(
-                  'https://picsum.photos/200/300?random=${index + 20}',
+  Widget _buildContentCard(BuildContext context, EpisodeModel episode) {
+    return GestureDetector(
+      onTap: () => context.push('/player/${episode.id}'),
+      child: Container(
+        width: 120,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Thumbnail
+            Container(
+              height: 100,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    episode.thumbnailUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: episode.thumbnailUrl!,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) =>
+                                Container(color: AppColors.surfaceLight),
+                            errorWidget: (_, __, ___) => const Icon(
+                              Icons.movie_outlined,
+                              color: AppColors.textSecondary,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.movie_outlined,
+                            color: AppColors.textSecondary,
+                          ),
+                    // Progress bar
+                    if (episode.watchProgress > 0)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: LinearProgressIndicator(
+                          value: episode.watchProgress,
+                          backgroundColor: Colors.black45,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppColors.primary,
+                          ),
+                          minHeight: 3,
+                        ),
+                      ),
+                    // Play icon
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                fit: BoxFit.cover,
               ),
             ),
-            child: Stack(
-              children: [
-                // Share button
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: AppColors.background.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Icon(
-                      Icons.share,
-                      size: 16,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
+            const SizedBox(height: 8),
+
+            // Title
+            Text(
+              episode.title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+
+            // Series name
+            if (episode.series != null)
+              Text(
+                episode.series!.title,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textTertiary,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Title
-          Text(
-            'Titulo ${index + 1}',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-
-          // Subtitle
-          const Text(
-            'Compartil...',
-            style: TextStyle(
-              fontSize: 10,
-              color: AppColors.textTertiary,
-            ),
-          ),
-        ],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
       ),
     );
   }

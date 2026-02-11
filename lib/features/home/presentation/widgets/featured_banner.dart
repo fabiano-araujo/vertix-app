@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/models/series_model.dart';
 
 /// Featured Banner at the top of Home page
 /// Shows a featured series with large cover
 class FeaturedBanner extends StatelessWidget {
-  const FeaturedBanner({super.key});
+  final SeriesModel? series;
+  final VoidCallback? onPlay;
+  final VoidCallback? onInfo;
+
+  const FeaturedBanner({
+    super.key,
+    this.series,
+    this.onPlay,
+    this.onInfo,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +28,7 @@ class FeaturedBanner extends StatelessWidget {
         children: [
           // Background Image
           CachedNetworkImage(
-            imageUrl: 'https://picsum.photos/800/1200?random=featured',
+            imageUrl: series?.coverUrl ?? 'https://picsum.photos/800/1200?random=featured',
             fit: BoxFit.cover,
             placeholder: (context, url) => Container(
               color: AppColors.surface,
@@ -37,8 +47,8 @@ class FeaturedBanner extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  AppColors.background.withValues(alpha: 0.3),
-                  AppColors.background.withValues(alpha: 0.8),
+                  AppColors.background.withAlpha(80),
+                  AppColors.background.withAlpha(200),
                   AppColors.background,
                 ],
                 stops: const [0.0, 0.5, 0.75, 1.0],
@@ -58,18 +68,20 @@ class FeaturedBanner extends StatelessWidget {
                 // Genre Tags
                 Row(
                   children: [
-                    _buildTag('Drama'),
+                    _buildTag(series?.genre ?? 'Drama'),
+                    if (series?.isAiGenerated == true) ...[
+                      const SizedBox(width: 8),
+                      _buildTag('IA', highlighted: true),
+                    ],
                     const SizedBox(width: 8),
-                    _buildTag('Suspense'),
-                    const SizedBox(width: 8),
-                    _buildTag('2024'),
+                    _buildTag('${series?.totalEpisodesCount ?? 0} eps'),
                   ],
                 ),
                 const SizedBox(height: 12),
 
                 // Title
                 Text(
-                  'Serie em Destaque',
+                  series?.title ?? 'Serie em Destaque',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: AppColors.textPrimary,
@@ -79,7 +91,7 @@ class FeaturedBanner extends StatelessWidget {
 
                 // Description
                 Text(
-                  'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
+                  series?.description ?? 'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
                       ),
@@ -94,7 +106,7 @@ class FeaturedBanner extends StatelessWidget {
                     // Play Button
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {},
+                        onPressed: onPlay,
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Assistir'),
                         style: ElevatedButton.styleFrom(
@@ -120,7 +132,7 @@ class FeaturedBanner extends StatelessWidget {
 
                     // Info Button
                     IconButton(
-                      onPressed: () {},
+                      onPressed: onInfo ?? onPlay,
                       icon: const Icon(Icons.info_outline),
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.surfaceLight,
@@ -138,17 +150,22 @@ class FeaturedBanner extends StatelessWidget {
     );
   }
 
-  Widget _buildTag(String text) {
+  Widget _buildTag(String text, {bool highlighted = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight.withValues(alpha: 0.8),
+        color: highlighted
+            ? AppColors.primary.withAlpha(80)
+            : AppColors.surfaceLight.withAlpha(200),
         borderRadius: BorderRadius.circular(4),
+        border: highlighted
+            ? Border.all(color: AppColors.primary.withAlpha(150))
+            : null,
       ),
       child: Text(
         text,
-        style: const TextStyle(
-          color: AppColors.textSecondary,
+        style: TextStyle(
+          color: highlighted ? AppColors.primary : AppColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),

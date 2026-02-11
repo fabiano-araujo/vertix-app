@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/feed_service.dart';
+import '../../../../core/services/episode_service.dart';
+import '../../../../core/models/episode_model.dart';
+import '../../../player/presentation/widgets/comments_sheet.dart';
 
 /// For You Page - TikTok-style vertical video feed
 /// Full-screen vertical swipe navigation with autoplay
@@ -12,45 +19,124 @@ class ForYouPage extends StatefulWidget {
 
 class _ForYouPageState extends State<ForYouPage> {
   late PageController _pageController;
-  int _currentIndex = 0;
+  final FeedService _feedService = FeedService();
+  final EpisodeService _episodeService = EpisodeService();
 
-  // Mock data
-  final List<Map<String, dynamic>> _episodes = List.generate(
-    10,
-    (index) => {
-      'id': index,
-      'title': 'Episodio ${index + 1}',
-      'seriesTitle': 'Serie Exemplo',
-      'description': 'Uma descricao envolvente do episodio que prende a atencao.',
-      'likes': 15000 + (index * 1000),
-      'comments': 230 + (index * 50),
-      'shares': 45 + (index * 10),
-    },
-  );
+  int _currentIndex = 0;
+  bool _isLoading = true;
+  List<EpisodeModel> _episodes = [];
+  Map<int, VideoPlayerController> _controllers = {};
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
+    _loadFeed();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    for (var controller in _controllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  void _onPageChanged(int index) {
-    setState(() => _currentIndex = index);
+  Future<void> _loadFeed() async {
+    setState(() => _isLoading = true);
+
+    final response = await _feedService.getForYouFeed(limit: 20);
+
+    if (response.success) {
+      setState(() {
+        _episodes = response.data;
+        _isLoading = false;
+      });
+
+      if (_episodes.isNotEmpty) {
+        _preloadVideos(0);
+      }
+    } else {
+      setState(() => _isLoading = false);
+    }
   }
 
-  String _formatNumber(int number) {
-    if (number >= 1000000) {
-      return '${(number / 1000000).toStringAsFixed(1)}M';
-    } else if (number >= 1000) {
-      return '${(number / 1000).toStringAsFixed(1)}K';
+  void _preloadVideos(int currentIndex) {
+    // Preload current and next 2 videos
+    for (int i = currentIndex; i <= currentIndex + 2 && i < _episodes.length; i++) {
+      if (!_controllers.containsKey(i)) {
+        final controller = VideoPlayerController.networkUrl(
+          Uri.parse(_episodes[i].videoUrl),
+        );
+        _controllers[i] = controller;
+        controller.initialize().then((_) {
+          if (i == currentIndex && mounted) {
+            controller.play();
+            controller.setLooping(true);
+          }
+        });
+      }
     }
-    return number.toString();
+
+    // Dispose old controllers to save memory
+    _controllers.removeWhere((key, controller) {
+      if (key < currentIndex - 1 || key > currentIndex + 2) {
+        controller.dispose();
+        return true;
+      }
+      return false;
+    });
+  }
+
+  void _onPageChanged(int index) {
+    // Pause previous video
+    _controllers[_currentIndex]?.pause();
+
+    setState(() => _currentIndex = index);
+
+    // Play current video
+    _controllers[index]?.play();
+
+    // Preload more videos
+    _preloadVideos(index);
+
+    // Record view
+    if (index < _episodes.length) {
+      _episodeService.recordView(_episodes[index].id);
+    }
+
+    // Load more when near end
+    if (index >= _episodes.length - 3) {
+      _loadMoreEpisodes();
+    }
+  }
+
+  Future<void> _loadMoreEpisodes() async {
+    final response = await _feedService.getForYouFeed(
+      limit: 10,
+      offset: _episodes.length,
+    );
+
+    if (response.success && response.data.isNotEmpty) {
+      setState(() {
+        _episodes.addAll(response.data);
+      });
+    }
+  }
+
+  Future<void> _toggleLike(int index) async {
+    final episode = _episodes[index];
+    final response = await _episodeService.toggleLike(episode.id);
+
+    if (response.success) {
+      setState(() {
+        _episodes[index] = episode.copyWith(
+          isLiked: response.isLiked,
+          likesCount: response.likesCount,
+        );
+      });
+    }
   }
 
   @override
@@ -70,47 +156,88 @@ class _ForYouPageState extends State<ForYouPage> {
         ),
         centerTitle: true,
       ),
-      body: PageView.builder(
-        controller: _pageController,
-        scrollDirection: Axis.vertical,
-        onPageChanged: _onPageChanged,
-        itemCount: _episodes.length,
-        itemBuilder: (context, index) {
-          final episode = _episodes[index];
-          return _buildVideoItem(episode, index == _currentIndex);
-        },
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          : _episodes.isEmpty
+              ? _buildEmptyState()
+              : PageView.builder(
+                  controller: _pageController,
+                  scrollDirection: Axis.vertical,
+                  onPageChanged: _onPageChanged,
+                  itemCount: _episodes.length,
+                  itemBuilder: (context, index) {
+                    return _buildVideoItem(_episodes[index], index);
+                  },
+                ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.movie_outlined,
+            size: 64,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Nenhum video disponivel',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: _loadFeed,
+            child: const Text('Tentar novamente'),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildVideoItem(Map<String, dynamic> episode, bool isActive) {
+  Widget _buildVideoItem(EpisodeModel episode, int index) {
+    final controller = _controllers[index];
+    final isActive = index == _currentIndex;
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Video/Image Placeholder
-        Container(
-          color: AppColors.surface,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.play_circle_outline,
-                  size: 80,
-                  color: AppColors.textSecondary.withValues(alpha: 0.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Video ${episode['id'] + 1}',
-                  style: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.5),
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+        // Video Player or Thumbnail
+        if (controller != null && controller.value.isInitialized)
+          GestureDetector(
+            onTap: () {
+              if (controller.value.isPlaying) {
+                controller.pause();
+              } else {
+                controller.play();
+              }
+              setState(() {});
+            },
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: controller.value.aspectRatio,
+                child: VideoPlayer(controller),
+              ),
             ),
+          )
+        else
+          Container(
+            color: AppColors.surface,
+            child: episode.thumbnailUrl != null
+                ? CachedNetworkImage(
+                    imageUrl: episode.thumbnailUrl!,
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                    errorWidget: (_, __, ___) => _buildPlaceholder(episode),
+                  )
+                : _buildPlaceholder(episode),
           ),
-        ),
 
         // Gradient Overlay
         Container(
@@ -118,6 +245,23 @@ class _ForYouPageState extends State<ForYouPage> {
             gradient: AppColors.videoOverlayGradient,
           ),
         ),
+
+        // Play/Pause indicator
+        if (controller != null && !controller.value.isPlaying && isActive)
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(50),
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 48,
+              ),
+            ),
+          ),
 
         // Bottom Info
         Positioned(
@@ -128,9 +272,10 @@ class _ForYouPageState extends State<ForYouPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Series title
-              Row(
-                children: [
-                  Container(
+              if (episode.series != null)
+                GestureDetector(
+                  onTap: () => context.push('/series/${episode.seriesId}'),
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 4,
@@ -140,7 +285,7 @@ class _ForYouPageState extends State<ForYouPage> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      episode['seriesTitle'],
+                      episode.series!.title,
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 12,
@@ -148,13 +293,12 @@ class _ForYouPageState extends State<ForYouPage> {
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
               const SizedBox(height: 8),
 
               // Episode title
               Text(
-                episode['title'],
+                'Ep ${episode.episodeNumber} - ${episode.title}',
                 style: const TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 18,
@@ -164,20 +308,21 @@ class _ForYouPageState extends State<ForYouPage> {
               const SizedBox(height: 8),
 
               // Description
-              Text(
-                episode['description'],
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
+              if (episode.description != null)
+                Text(
+                  episode.description!,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 14,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
               const SizedBox(height: 16),
 
               // View Full Series Button
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () => context.push('/series/${episode.seriesId}'),
                 icon: const Icon(Icons.playlist_play, size: 20),
                 label: const Text('Ver serie completa'),
                 style: OutlinedButton.styleFrom(
@@ -201,27 +346,26 @@ class _ForYouPageState extends State<ForYouPage> {
             children: [
               // Like
               _buildActionButton(
-                icon: Icons.favorite_border,
-                activeIcon: Icons.favorite,
-                label: _formatNumber(episode['likes']),
-                color: AppColors.likeActive,
-                onTap: () {},
+                icon: episode.isLiked ? Icons.favorite : Icons.favorite_border,
+                label: episode.formattedLikes,
+                color: episode.isLiked ? AppColors.likeActive : AppColors.textPrimary,
+                onTap: () => _toggleLike(index),
               ),
               const SizedBox(height: 20),
 
               // Comment
               _buildActionButton(
                 icon: Icons.chat_bubble_outline,
-                label: _formatNumber(episode['comments']),
-                onTap: () => _showCommentsSheet(context),
+                label: episode.formattedComments,
+                onTap: () => _showCommentsSheet(episode.id),
               ),
               const SizedBox(height: 20),
 
               // Share
               _buildActionButton(
                 icon: Icons.share_outlined,
-                label: _formatNumber(episode['shares']),
-                onTap: () {},
+                label: episode.formattedShares,
+                onTap: () => _episodeService.recordShare(episode.id),
               ),
               const SizedBox(height: 20),
 
@@ -236,24 +380,50 @@ class _ForYouPageState extends State<ForYouPage> {
         ),
 
         // Progress indicator at bottom
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          child: LinearProgressIndicator(
-            value: 0.3, // Mock progress
-            backgroundColor: AppColors.surfaceLighter,
-            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-            minHeight: 3,
+        if (controller != null && controller.value.isInitialized)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: VideoProgressIndicator(
+              controller,
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: AppColors.primary,
+                backgroundColor: AppColors.surfaceLighter,
+                bufferedColor: AppColors.textTertiary,
+              ),
+            ),
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildPlaceholder(EpisodeModel episode) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.play_circle_outline,
+            size: 80,
+            color: AppColors.textSecondary.withAlpha(128),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Ep ${episode.episodeNumber}',
+            style: TextStyle(
+              color: AppColors.textSecondary.withAlpha(128),
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildActionButton({
     required IconData icon,
-    IconData? activeIcon,
     required String label,
     Color? color,
     required VoidCallback onTap,
@@ -266,7 +436,7 @@ class _ForYouPageState extends State<ForYouPage> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.6),
+              color: AppColors.surface.withAlpha(150),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -291,187 +461,12 @@ class _ForYouPageState extends State<ForYouPage> {
     );
   }
 
-  void _showCommentsSheet(BuildContext context) {
+  void _showCommentsSheet(int episodeId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            // Handle
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.textTertiary,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Comentarios',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-            ),
-
-            const Divider(height: 1),
-
-            // Comments List
-            Expanded(
-              child: ListView.builder(
-                controller: scrollController,
-                padding: const EdgeInsets.all(16),
-                itemCount: 10,
-                itemBuilder: (context, index) => _buildCommentItem(index),
-              ),
-            ),
-
-            // Comment Input
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceLight,
-                border: Border(
-                  top: BorderSide(color: AppColors.surfaceLighter),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.surfaceLighter,
-                    child: Icon(Icons.person, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Adicione um comentario...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: AppColors.surfaceLighter,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  IconButton(
-                    icon: const Icon(Icons.send, color: AppColors.primary),
-                    onPressed: () {},
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCommentItem(int index) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.surfaceLighter,
-            child: Text(
-              'U${index + 1}',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      'Usuario ${index + 1}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${index + 1}h',
-                      style: const TextStyle(
-                        color: AppColors.textTertiary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Este e um comentario de exemplo. Muito bom o conteudo!',
-                  style: TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {},
-                      child: const Row(
-                        children: [
-                          Icon(Icons.favorite_border, size: 16),
-                          SizedBox(width: 4),
-                          Text('123', style: TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    GestureDetector(
-                      onTap: () {},
-                      child: const Text(
-                        'Responder',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
+      builder: (context) => CommentsSheet(episodeId: episodeId),
     );
   }
 }

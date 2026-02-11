@@ -10,6 +10,7 @@ class SeriesCarousel extends StatelessWidget {
   final Color? iconColor;
   final List<Map<String, dynamic>> items;
   final VoidCallback? onSeeAll;
+  final Function(int id)? onItemTap;
 
   const SeriesCarousel({
     super.key,
@@ -18,6 +19,7 @@ class SeriesCarousel extends StatelessWidget {
     this.iconColor,
     required this.items,
     this.onSeeAll,
+    this.onItemTap,
   });
 
   @override
@@ -69,9 +71,9 @@ class SeriesCarousel extends StatelessWidget {
                 title: item['title'],
                 coverUrl: item['coverUrl'],
                 genre: item['genre'],
-                onTap: () {
-                  // TODO: Navigate to series detail
-                },
+                onTap: onItemTap != null
+                    ? () => onItemTap!(item['id'])
+                    : null,
               );
             },
           ),
