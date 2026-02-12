@@ -13,7 +13,6 @@ class MainShell extends StatelessWidget {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/for-you')) return 1;
     if (location.startsWith('/my-vertix')) return 2;
-    if (location.startsWith('/search')) return 3;
     return 0; // Home
   }
 
@@ -27,9 +26,6 @@ class MainShell extends StatelessWidget {
         break;
       case 2:
         context.go('/my-vertix');
-        break;
-      case 3:
-        context.go('/search');
         break;
     }
   }
@@ -73,11 +69,6 @@ class MainShell extends StatelessWidget {
                 icon: Icon(Icons.person_outline),
                 selectedIcon: Icon(Icons.person),
                 label: 'Minha Vertix',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.search_outlined),
-                selectedIcon: Icon(Icons.search),
-                label: 'Buscar',
               ),
             ],
           ),

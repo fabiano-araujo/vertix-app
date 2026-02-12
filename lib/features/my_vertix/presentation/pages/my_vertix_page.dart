@@ -124,6 +124,10 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
         backgroundColor: Colors.transparent,
         title: const Text('Minha Vertix'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search'),
+          ),
           if (_isLoggedIn && _user?.isAdmin == true)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings),

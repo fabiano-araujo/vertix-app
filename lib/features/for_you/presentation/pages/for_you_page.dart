@@ -155,6 +155,12 @@ class _ForYouPageState extends State<ForYouPage> {
           ),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search'),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../network/api_client.dart';
 import '../constants/api_constants.dart';
 import '../models/user_model.dart';
@@ -6,6 +8,8 @@ import '../utils/logger.dart';
 /// Auth Service for VERTIX
 class AuthService {
   final ApiClient _client = ApiClient();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  static const String _userKey = 'cached_user';
 
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -13,6 +17,37 @@ class AuthService {
 
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
+
+  /// Inicializa o servico carregando usuario do cache
+  Future<void> init() async {
+    await _loadCachedUser();
+  }
+
+  /// Carrega usuario do cache local
+  Future<void> _loadCachedUser() async {
+    try {
+      final userJson = await _storage.read(key: _userKey);
+      if (userJson != null) {
+        _currentUser = UserModel.fromJson(jsonDecode(userJson));
+        Logger.i(Logger.tagAuth, 'Usuario carregado do cache: ${_currentUser?.name}');
+      }
+    } catch (e) {
+      Logger.e(Logger.tagAuth, 'Erro ao carregar usuario do cache', e);
+    }
+  }
+
+  /// Salva usuario no cache local
+  Future<void> _cacheUser(UserModel? user) async {
+    try {
+      if (user != null) {
+        await _storage.write(key: _userKey, value: jsonEncode(user.toJson()));
+      } else {
+        await _storage.delete(key: _userKey);
+      }
+    } catch (e) {
+      Logger.e(Logger.tagAuth, 'Erro ao salvar usuario no cache', e);
+    }
+  }
 
   /// Login with email and password
   Future<AuthResponse> login(String email, String password) async {
@@ -34,6 +69,7 @@ class AuthService {
       if (authResponse.success && authResponse.token != null) {
         await _client.setToken(authResponse.token!);
         _currentUser = authResponse.user;
+        await _cacheUser(_currentUser);
         Logger.authSuccess('Login realizado: ${_currentUser?.name}');
       } else {
         Logger.w(Logger.tagAuth, 'Login falhou: ${authResponse.message}');
@@ -78,6 +114,7 @@ class AuthService {
       if (authResponse.success && authResponse.token != null) {
         await _client.setToken(authResponse.token!);
         _currentUser = authResponse.user;
+        await _cacheUser(_currentUser);
         Logger.authSuccess('Registro realizado: ${_currentUser?.name}');
       } else {
         Logger.w(Logger.tagAuth, 'Registro falhou: ${authResponse.message}');
@@ -120,6 +157,7 @@ class AuthService {
       if (authResponse.success && authResponse.token != null) {
         await _client.setToken(authResponse.token!);
         _currentUser = authResponse.user;
+        await _cacheUser(_currentUser);
         Logger.authSuccess('Login Google realizado: ${_currentUser?.name}');
       }
 
@@ -137,7 +175,7 @@ class AuthService {
   Future<AuthResponse> getProfile() async {
     try {
       Logger.auth('Buscando perfil do usuario');
-      final response = await _client.get(ApiConstants.user);
+      final response = await _client.get(ApiConstants.userProfile);
 
       if (response.data['success'] == true && response.data['user'] != null) {
         _currentUser = UserModel.fromJson(response.data['user']);
@@ -166,6 +204,7 @@ class AuthService {
   Future<void> logout() async {
     Logger.auth('Fazendo logout: ${_currentUser?.email}');
     await _client.clearToken();
+    await _cacheUser(null);
     _currentUser = null;
     Logger.authSuccess('Logout realizado');
   }

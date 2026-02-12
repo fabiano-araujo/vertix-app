@@ -128,6 +128,10 @@ class _HomePageState extends State<HomePage> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search'),
+          ),
+          IconButton(
             icon: const Icon(Icons.cast_outlined),
             onPressed: () {},
           ),

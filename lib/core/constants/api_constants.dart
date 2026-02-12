@@ -46,8 +46,8 @@ class ApiConstants {
   static const String adminAnalytics = '$admin/analytics';
   static const String adminUsers = '$admin/users';
 
-  // User
-  static const String user = '/user';
+  // User Profile
+  static const String userProfile = '$auth/me';
 
   // Timeouts
   static const Duration connectionTimeout = Duration(seconds: 30);
