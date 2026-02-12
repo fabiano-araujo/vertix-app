@@ -73,12 +73,10 @@ flutter_launcher_icons:
   min_sdk_android: 21
   remove_alpha_ios: true
 
-# Configuração da splash screen nativa
+# Configuração da splash screen nativa (apenas fundo preto, animação é feita no Flutter)
 flutter_native_splash:
   color: "#000000"
-  image: assets/icons/logo_splash.png
   android_12:
     color: "#000000"
-    image: assets/icons/logo_splash.png
   ios: true
   android: true
