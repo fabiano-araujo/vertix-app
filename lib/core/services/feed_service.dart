@@ -20,17 +20,11 @@ class FeedService {
     try {
       final response = await _client.get(
         ApiConstants.feedForYou,
-        queryParameters: {
-          'limit': limit,
-          'offset': offset,
-        },
+        queryParameters: {'limit': limit, 'offset': offset},
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -43,10 +37,7 @@ class FeedService {
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -59,10 +50,7 @@ class FeedService {
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -93,10 +81,7 @@ class FeedService {
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -108,17 +93,11 @@ class FeedService {
     try {
       final response = await _client.get(
         ApiConstants.feedHistory,
-        queryParameters: {
-          'limit': limit,
-          'offset': offset,
-        },
+        queryParameters: {'limit': limit, 'offset': offset},
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -130,17 +109,11 @@ class FeedService {
     try {
       final response = await _client.get(
         ApiConstants.feedLikes,
-        queryParameters: {
-          'limit': limit,
-          'offset': offset,
-        },
+        queryParameters: {'limit': limit, 'offset': offset},
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 
@@ -153,17 +126,11 @@ class FeedService {
     try {
       final response = await _client.get(
         '${ApiConstants.feed}/genre/$genre',
-        queryParameters: {
-          'limit': limit,
-          'offset': offset,
-        },
+        queryParameters: {'limit': limit, 'offset': offset},
       );
       return EpisodeListResponse.fromJson(response.data);
     } catch (e) {
-      return EpisodeListResponse(
-        success: false,
-        data: [],
-      );
+      return EpisodeListResponse(success: false, data: []);
     }
   }
 }
@@ -189,11 +156,18 @@ class HomeFeedResponse {
   });
 
   factory HomeFeedResponse.fromJson(Map<String, dynamic> json) {
+    final payload = json['data'] is Map<String, dynamic>
+        ? json['data'] as Map<String, dynamic>
+        : json;
+
     // Parse genres map
-    final genresData = json['genres'] as Map<String, dynamic>? ?? {};
+    final genresData =
+        (payload['genres'] ?? payload['byGenre']) as Map<String, dynamic>? ??
+        {};
     final genres = <String, List<SeriesModel>>{};
     genresData.forEach((key, value) {
-      genres[key] = (value as List<dynamic>?)
+      genres[key] =
+          (value as List<dynamic>?)
               ?.map((e) => SeriesModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [];
@@ -201,22 +175,27 @@ class HomeFeedResponse {
 
     return HomeFeedResponse(
       success: json['success'] as bool,
-      featured: json['featured'] != null
-          ? SeriesModel.fromJson(json['featured'] as Map<String, dynamic>)
+      featured: payload['featured'] != null
+          ? SeriesModel.fromJson(payload['featured'] as Map<String, dynamic>)
           : null,
-      trending: (json['trending'] as List<dynamic>?)
+      trending:
+          (payload['trending'] as List<dynamic>?)
               ?.map((e) => SeriesModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      newReleases: (json['newReleases'] as List<dynamic>?)
+      newReleases:
+          (payload['newReleases'] as List<dynamic>?)
               ?.map((e) => SeriesModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      continueWatching: (json['continueWatching'] as List<dynamic>?)
+      continueWatching:
+          (payload['continueWatching'] as List<dynamic>?)
               ?.map((e) => EpisodeModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
-      recommendations: (json['recommendations'] as List<dynamic>?)
+      recommendations:
+          ((payload['recommendations'] ?? payload['recommended'])
+                  as List<dynamic>?)
               ?.map((e) => SeriesModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],

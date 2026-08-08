@@ -42,6 +42,7 @@ class ApiConstants {
   // Admin
   static const String admin = '/admin';
   static const String adminGenerateSeries = '$admin/series/generate';
+  static const String adminAvailableSeries = '$admin/series/available';
   static const String adminJobs = '$admin/jobs';
   static const String adminAnalytics = '$admin/analytics';
   static const String adminUsers = '$admin/users';

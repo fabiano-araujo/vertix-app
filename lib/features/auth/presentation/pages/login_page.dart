@@ -45,7 +45,11 @@ class _LoginPageState extends State<LoginPage> {
 
     if (response.success) {
       if (mounted) {
-        context.pop(true); // Retorna true para indicar login bem-sucedido
+        if (context.canPop()) {
+          context.pop(true); // Retorna true para indicar login bem-sucedido
+        } else {
+          context.go('/');
+        }
       }
     } else {
       setState(() => _errorMessage = response.message);
@@ -61,7 +65,13 @@ class _LoginPageState extends State<LoginPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/');
+            }
+          },
         ),
       ),
       body: SafeArea(

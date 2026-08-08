@@ -13,6 +13,7 @@ import feedRoutes from "./feed.routes";
 import commentRoutes from "./comment.routes";
 import searchRoutes from "./search.routes";
 import adminRoutes from "./admin.routes";
+import openrouterVideoRoutes from "./openrouter-video.routes";
 
 const router = (app: any) => {
     // Existing routes
@@ -31,6 +32,7 @@ const router = (app: any) => {
     commentRoutes(app);
     searchRoutes(app);
     adminRoutes(app);
+    openrouterVideoRoutes(app);
 }
 
 export default router;

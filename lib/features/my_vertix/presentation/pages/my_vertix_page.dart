@@ -71,6 +71,8 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
       // Primeiro tenta usar o usuario ja carregado do login
       _user = _authService.currentUser;
       Logger.i('MY_VERTIX', 'currentUser from cache: ${_user?.name}');
+      Logger.i('MY_VERTIX', 'user.role: ${_user?.role}');
+      Logger.i('MY_VERTIX', 'user.isAdmin: ${_user?.isAdmin}');
 
       // Se nao tiver, busca do servidor
       if (_user == null) {
@@ -131,7 +133,14 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
           if (_isLoggedIn && _user?.isAdmin == true)
             IconButton(
               icon: const Icon(Icons.admin_panel_settings),
-              onPressed: () => context.push('/admin'),
+              onPressed: () {
+                Logger.i('MY_VERTIX', '=== ADMIN BUTTON PRESSED ===');
+                Logger.i('MY_VERTIX', 'User: ${_user?.name}');
+                Logger.i('MY_VERTIX', 'Role: ${_user?.role}');
+                Logger.i('MY_VERTIX', 'isAdmin: ${_user?.isAdmin}');
+                Logger.i('MY_VERTIX', 'Navigating to /admin...');
+                context.push('/admin');
+              },
               tooltip: 'Admin',
             ),
           IconButton(

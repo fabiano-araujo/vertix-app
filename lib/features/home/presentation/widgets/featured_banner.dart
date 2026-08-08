@@ -10,16 +10,18 @@ class FeaturedBanner extends StatelessWidget {
   final VoidCallback? onPlay;
   final VoidCallback? onInfo;
 
-  const FeaturedBanner({
-    super.key,
-    this.series,
-    this.onPlay,
-    this.onInfo,
-  });
+  const FeaturedBanner({super.key, this.series, this.onPlay, this.onInfo});
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final thumbnailUrl = series?.thumbnailUrl;
+    final coverUrl = series?.coverUrl;
+    final imageUrl = thumbnailUrl != null && thumbnailUrl.isNotEmpty
+        ? thumbnailUrl
+        : coverUrl != null && coverUrl.isNotEmpty
+        ? coverUrl
+        : 'https://picsum.photos/800/1200?random=featured';
 
     return SizedBox(
       height: size.height * 0.55,
@@ -28,11 +30,9 @@ class FeaturedBanner extends StatelessWidget {
         children: [
           // Background Image
           CachedNetworkImage(
-            imageUrl: series?.coverUrl ?? 'https://picsum.photos/800/1200?random=featured',
+            imageUrl: imageUrl,
             fit: BoxFit.cover,
-            placeholder: (context, url) => Container(
-              color: AppColors.surface,
-            ),
+            placeholder: (context, url) => Container(color: AppColors.surface),
             errorWidget: (context, url, error) => Container(
               color: AppColors.surface,
               child: const Icon(Icons.error),
@@ -79,22 +79,13 @@ class FeaturedBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // Title
-                Text(
-                  series?.title ?? 'Serie em Destaque',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                ),
-                const SizedBox(height: 8),
-
                 // Description
                 Text(
-                  series?.description ?? 'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
+                  series?.description ??
+                      'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

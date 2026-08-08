@@ -66,8 +66,17 @@ class _HomePageState extends State<HomePage> {
           _trending = homeResponse.trending;
           _newReleases = homeResponse.newReleases;
           _recommendations = homeResponse.recommendations;
-          _action = homeResponse.genres['Acao'] ?? [];
-          _romance = homeResponse.genres['Romance'] ?? [];
+          _action =
+              homeResponse.genres['Acao'] ?? homeResponse.genres['acao'] ?? [];
+          _romance =
+              homeResponse.genres['Romance'] ??
+              homeResponse.genres['romance'] ??
+              [];
+          _featuredSeries =
+              homeResponse.featured ??
+              (_trending.isNotEmpty
+                  ? _trending.first
+                  : (_newReleases.isNotEmpty ? _newReleases.first : null));
           _isLoading = false;
         });
       } else {
@@ -98,12 +107,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<Map<String, dynamic>> _seriesToMaps(List<SeriesModel> series) {
-    return series.map((s) => {
-      'id': s.id,
-      'title': s.title,
-      'coverUrl': s.coverUrl,
-      'genre': s.genre,
-    }).toList();
+    return series
+        .map(
+          (s) => {
+            'id': s.id,
+            'title': s.title,
+            'coverUrl': s.coverUrl,
+            'genre': s.genre,
+          },
+        )
+        .toList();
   }
 
   @override
@@ -119,10 +132,10 @@ class _HomePageState extends State<HomePage> {
             Text(
               'VERTIX',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                  ),
+                color: AppColors.primary,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
             ),
           ],
         ),
@@ -131,10 +144,7 @@ class _HomePageState extends State<HomePage> {
             icon: const Icon(Icons.search),
             onPressed: () => context.push('/search'),
           ),
-          IconButton(
-            icon: const Icon(Icons.cast_outlined),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.cast_outlined), onPressed: () {}),
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {},
@@ -167,7 +177,10 @@ class _HomePageState extends State<HomePage> {
                   // Quick Filters
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -196,43 +209,59 @@ class _HomePageState extends State<HomePage> {
                   // Novidades (New Releases)
                   if (_newReleases.isNotEmpty)
                     SliverToBoxAdapter(
-                      child: SeriesCarousel(
-                        title: 'Novidades',
-                        icon: Icons.new_releases_outlined,
-                        items: _seriesToMaps(_newReleases),
-                        onItemTap: (id) => context.push('/series/$id'),
-                      ).animate().fadeIn(duration: 300.ms, delay: 100.ms).slideX(begin: 0.1),
+                      child:
+                          SeriesCarousel(
+                                title: 'Novidades',
+                                icon: Icons.new_releases_outlined,
+                                items: _seriesToMaps(_newReleases),
+                                onItemTap: (id) => context.push('/series/$id'),
+                              )
+                              .animate()
+                              .fadeIn(duration: 300.ms, delay: 100.ms)
+                              .slideX(begin: 0.1),
                     ),
 
                   // Recomendado para voce
                   if (_recommendations.isNotEmpty)
                     SliverToBoxAdapter(
-                      child: SeriesCarousel(
-                        title: 'Recomendado para voce',
-                        icon: Icons.thumb_up_outlined,
-                        items: _seriesToMaps(_recommendations),
-                        onItemTap: (id) => context.push('/series/$id'),
-                      ).animate().fadeIn(duration: 300.ms, delay: 200.ms).slideX(begin: 0.1),
+                      child:
+                          SeriesCarousel(
+                                title: 'Recomendado para voce',
+                                icon: Icons.thumb_up_outlined,
+                                items: _seriesToMaps(_recommendations),
+                                onItemTap: (id) => context.push('/series/$id'),
+                              )
+                              .animate()
+                              .fadeIn(duration: 300.ms, delay: 200.ms)
+                              .slideX(begin: 0.1),
                     ),
 
                   // Acao
                   if (_action.isNotEmpty)
                     SliverToBoxAdapter(
-                      child: SeriesCarousel(
-                        title: 'Acao',
-                        items: _seriesToMaps(_action),
-                        onItemTap: (id) => context.push('/series/$id'),
-                      ).animate().fadeIn(duration: 300.ms, delay: 300.ms).slideX(begin: 0.1),
+                      child:
+                          SeriesCarousel(
+                                title: 'Acao',
+                                items: _seriesToMaps(_action),
+                                onItemTap: (id) => context.push('/series/$id'),
+                              )
+                              .animate()
+                              .fadeIn(duration: 300.ms, delay: 300.ms)
+                              .slideX(begin: 0.1),
                     ),
 
                   // Romance
                   if (_romance.isNotEmpty)
                     SliverToBoxAdapter(
-                      child: SeriesCarousel(
-                        title: 'Romance',
-                        items: _seriesToMaps(_romance),
-                        onItemTap: (id) => context.push('/series/$id'),
-                      ).animate().fadeIn(duration: 300.ms, delay: 400.ms).slideX(begin: 0.1),
+                      child:
+                          SeriesCarousel(
+                                title: 'Romance',
+                                items: _seriesToMaps(_romance),
+                                onItemTap: (id) => context.push('/series/$id'),
+                              )
+                              .animate()
+                              .fadeIn(duration: 300.ms, delay: 400.ms)
+                              .slideX(begin: 0.1),
                     ),
 
                   // Empty state fallback
@@ -251,7 +280,9 @@ class _HomePageState extends State<HomePage> {
                               const SizedBox(height: 16),
                               Text(
                                 'Nenhuma serie disponivel',
-                                style: TextStyle(color: AppColors.textSecondary),
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                ),
                               ),
                             ],
                           ),
@@ -260,9 +291,7 @@ class _HomePageState extends State<HomePage> {
                     ),
 
                   // Bottom padding
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 100),
-                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               ),
       ),

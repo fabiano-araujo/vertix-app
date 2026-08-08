@@ -13,6 +13,18 @@
             "deviceId": "chrome"
         },
         {
+            "name": "Vertix (Codex Browser Web Server)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "web-server",
+            "toolArgs": [
+                "--web-hostname",
+                "127.0.0.1",
+                "--web-port",
+                "5955"
+            ]
+        },
+        {
             "name": "Vertix (Windows)",
             "request": "launch",
             "type": "dart",

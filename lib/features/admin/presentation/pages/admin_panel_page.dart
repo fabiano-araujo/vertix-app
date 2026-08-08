@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/logger.dart';
 
 /// Admin Panel Page
 /// For AI Series Generation and Management
@@ -26,8 +27,11 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   String _targetAudience = 'Geral';
 
   List<GenerationJob> _jobs = [];
+  List<AdminSeriesSummary> _availableSeries = [];
   bool _isLoading = false;
+  bool _isLoadingSeries = false;
   bool _isGenerating = false;
+  String _seriesStatusFilter = 'ALL';
 
   final List<String> _genres = [
     'Acao',
@@ -52,6 +56,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   void initState() {
     super.initState();
     _checkAuth();
+    _loadAvailableSeries();
     _loadJobs();
   }
 
@@ -62,14 +67,24 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
   }
 
   Future<void> _checkAuth() async {
+    Logger.i('ADMIN', '=== ADMIN PAGE _checkAuth ===');
     final isAuth = await _authService.isAuthenticated();
+    final user = _authService.currentUser;
+    Logger.i('ADMIN', 'isAuthenticated: $isAuth');
+    Logger.i('ADMIN', 'currentUser: ${user?.name}');
+    Logger.i('ADMIN', 'user.role: ${user?.role}');
+    Logger.i('ADMIN', 'authService.isAdmin: ${_authService.isAdmin}');
+
     if (!isAuth || !_authService.isAdmin) {
+      Logger.w('ADMIN', 'Acesso negado! Redirecionando para /');
       if (mounted) {
         context.go('/');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Acesso nao autorizado')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Acesso nao autorizado')));
       }
+    } else {
+      Logger.s('ADMIN', 'Acesso autorizado!');
     }
   }
 
@@ -78,9 +93,24 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
 
     final response = await _adminService.getJobs();
 
+    if (!mounted) return;
     setState(() {
       _jobs = response.data;
       _isLoading = false;
+    });
+  }
+
+  Future<void> _loadAvailableSeries() async {
+    setState(() => _isLoadingSeries = true);
+
+    final response = await _adminService.getAvailableSeries(
+      status: _seriesStatusFilter,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _availableSeries = response.data;
+      _isLoadingSeries = false;
     });
   }
 
@@ -97,6 +127,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       targetAudience: _targetAudience,
     );
 
+    if (!mounted) return;
     setState(() => _isGenerating = false);
 
     if (response.success) {
@@ -132,10 +163,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadJobs,
-          ),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadJobs),
         ],
       ),
       body: SingleChildScrollView(
@@ -144,12 +172,188 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Generation Form
+            _buildAvailableSeriesSection(),
+
+            const SizedBox(height: 24),
+
             _buildGenerationForm(),
 
             const SizedBox(height: 32),
 
             // Jobs List
             _buildJobsList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailableSeriesSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surfaceLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.video_library, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Series disponiveis',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _loadAvailableSeries,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Somente admins acessam estes dados de producao, referencias e pontos da pipeline.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildStatusFilter('ALL', 'Todas'),
+              _buildStatusFilter('DRAFT', 'Rascunhos'),
+              _buildStatusFilter('PUBLISHED', 'Publicadas'),
+              _buildStatusFilter('ARCHIVED', 'Arquivadas'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingSeries)
+            const Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            )
+          else if (_availableSeries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'Nenhuma serie encontrada',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _availableSeries.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                return _buildAvailableSeriesCard(_availableSeries[index]);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusFilter(String value, String label) {
+    final selected = _seriesStatusFilter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      selectedColor: AppColors.primary.withAlpha(60),
+      backgroundColor: AppColors.surfaceLight,
+      labelStyle: TextStyle(
+        color: selected ? AppColors.primary : AppColors.textSecondary,
+        fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+      ),
+      onSelected: (_) {
+        setState(() => _seriesStatusFilter = value);
+        _loadAvailableSeries();
+      },
+    );
+  }
+
+  Widget _buildAvailableSeriesCard(AdminSeriesSummary series) {
+    return InkWell(
+      onTap: () =>
+          context.push('/admin-production/${series.id}', extra: series),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: 58,
+                height: 78,
+                color: AppColors.surfaceLighter,
+                child: series.coverUrl.isNotEmpty
+                    ? Image.network(
+                        series.coverUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.movie),
+                      )
+                    : const Icon(Icons.movie),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    series.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildChip(series.status),
+                      _buildChip(series.genre),
+                      _buildChip('${series.episodeCount} eps'),
+                      _buildChip('${series.referenceCount} refs'),
+                      _buildChip('${series.storyPointCount} pontos'),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    series.hasProductionPlan
+                        ? 'Pipeline salva: ${series.productionPlan!.source}'
+                        : 'Sem dados Seedance salvos ainda',
+                    style: TextStyle(
+                      color: series.hasProductionPlan
+                          ? AppColors.success
+                          : AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: AppColors.textSecondary),
           ],
         ),
       ),
@@ -175,9 +379,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 const SizedBox(width: 8),
                 Text(
                   'Gerar Serie com IA',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -224,7 +428,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedGenre,
+                    initialValue: _selectedGenre,
                     decoration: InputDecoration(
                       labelText: 'Genero',
                       filled: true,
@@ -236,10 +440,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                     ),
                     dropdownColor: AppColors.surface,
                     items: _genres.map((genre) {
-                      return DropdownMenuItem(
-                        value: genre,
-                        child: Text(genre),
-                      );
+                      return DropdownMenuItem(value: genre, child: Text(genre));
                     }).toList(),
                     onChanged: (value) {
                       setState(() => _selectedGenre = value!);
@@ -249,7 +450,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _targetAudience,
+                    initialValue: _targetAudience,
                     decoration: InputDecoration(
                       labelText: 'Publico',
                       filled: true,
@@ -358,14 +559,11 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
           children: [
             Text(
               'Geracoes Recentes',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
-            TextButton(
-              onPressed: _loadJobs,
-              child: const Text('Atualizar'),
-            ),
+            TextButton(onPressed: _loadJobs, child: const Text('Atualizar')),
           ],
         ),
         const SizedBox(height: 16),
@@ -438,9 +636,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               children: [
                 Text(
                   job.inputData?['theme'] ?? 'Serie ${job.id}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -478,8 +674,9 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
               if (job.isCompleted && job.seriesId != null) ...[
                 const SizedBox(height: 8),
                 TextButton(
-                  onPressed: () => context.push('/series/${job.seriesId}'),
-                  child: const Text('Ver Serie'),
+                  onPressed: () =>
+                      context.push('/admin-production/${job.seriesId}'),
+                  child: const Text('Ver Producao'),
                 ),
               ],
             ],
@@ -498,10 +695,7 @@ class _AdminPanelPageState extends State<AdminPanelPage> {
       ),
       child: Text(
         text,
-        style: TextStyle(
-          color: AppColors.textSecondary,
-          fontSize: 11,
-        ),
+        style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
       ),
     );
   }

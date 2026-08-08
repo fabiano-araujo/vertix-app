@@ -11,9 +11,6 @@ const SITE_URL = process.env.SITE_URL || 'http://localhost:3000';
 const SITE_NAME = process.env.SITE_NAME || 'Projeto Base';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-// Para debugging
-console.log('API KEY (primeiros 10 caracteres):', OPENROUTER_API_KEY.substring(0, 10) + '...');
-
 // Modelos disponíveis
 export const AVAILABLE_MODELS = {
   // OpenAI Models

@@ -53,3 +53,22 @@ node_modules/
 
 # Claude
 .claude/
+
+# Local development tools and browser/test artifacts
+/.codex_tools/
+/.playwright-mcp/
+/tmp/
+/*.png
+
+# Generated series content (kept locally, not versioned)
+/*_assets/
+/generated_assets/
+/output/
+/outputs/
+/seedance_refs/
+/series_bibles/
+/seedance_notion_prompts/
+/server/public/openrouter-video-runs/
+/*.mp4
+/dorama_*.md
+/notion_snapshot.md

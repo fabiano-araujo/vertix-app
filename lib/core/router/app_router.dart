@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../services/admin_service.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/for_you/presentation/pages/for_you_page.dart';
 import '../../features/my_vertix/presentation/pages/my_vertix_page.dart';
@@ -10,6 +11,8 @@ import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/series/presentation/pages/series_detail_page.dart';
 import '../../features/player/presentation/pages/player_page.dart';
 import '../../features/admin/presentation/pages/admin_panel_page.dart';
+import '../../features/admin/presentation/pages/admin_production_detail_page.dart';
+import '../../features/admin/presentation/pages/admin_production_page.dart';
 
 /// App Router Configuration
 /// Uses go_router for declarative routing
@@ -32,30 +35,44 @@ class AppRouter {
           GoRoute(
             path: '/',
             name: 'home',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: HomePage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HomePage()),
           ),
           GoRoute(
             path: '/for-you',
             name: 'forYou',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ForYouPage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ForYouPage()),
           ),
           GoRoute(
             path: '/my-vertix',
             name: 'myVertix',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: MyVertixPage(),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: MyVertixPage()),
+          ),
+          GoRoute(
+            path: '/admin-production',
+            name: 'adminProduction',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminProductionPage()),
+          ),
+          GoRoute(
+            path: '/admin-production/:id',
+            name: 'adminProductionDetail',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: AdminProductionDetailPage(
+                seriesId: int.parse(state.pathParameters['id']!),
+                summary: state.extra is AdminSeriesSummary
+                    ? state.extra as AdminSeriesSummary
+                    : null,
+              ),
             ),
           ),
           GoRoute(
             path: '/search',
             name: 'search',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: SearchPage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: SearchPage()),
           ),
         ],
       ),
@@ -71,9 +88,8 @@ class AppRouter {
       GoRoute(
         path: '/series/:id',
         name: 'seriesDetail',
-        builder: (context, state) => SeriesDetailPage(
-          seriesId: int.parse(state.pathParameters['id']!),
-        ),
+        builder: (context, state) =>
+            SeriesDetailPage(seriesId: int.parse(state.pathParameters['id']!)),
       ),
       GoRoute(
         path: '/login',

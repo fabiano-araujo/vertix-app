@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/auth_service.dart';
 
 /// Main Shell with Bottom Navigation
 /// Contains the 4 main tabs: Home, Para Voce, Minha Vertix, Buscar
@@ -9,10 +10,13 @@ class MainShell extends StatelessWidget {
 
   const MainShell({super.key, required this.child});
 
+  bool get _showAdminTab => AuthService().currentUser?.isAdmin == true;
+
   int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
     if (location.startsWith('/for-you')) return 1;
     if (location.startsWith('/my-vertix')) return 2;
+    if (_showAdminTab && location.startsWith('/admin-production')) return 3;
     return 0; // Home
   }
 
@@ -27,12 +31,38 @@ class MainShell extends StatelessWidget {
       case 2:
         context.go('/my-vertix');
         break;
+      case 3:
+        context.go('/admin-production');
+        break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final selectedIndex = _calculateSelectedIndex(context);
+    final destinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: 'Home',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.play_circle_outline),
+        selectedIcon: Icon(Icons.play_circle),
+        label: 'Para Voce',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.person_outline),
+        selectedIcon: Icon(Icons.person),
+        label: 'Minha Vertix',
+      ),
+      if (_showAdminTab)
+        const NavigationDestination(
+          icon: Icon(Icons.admin_panel_settings_outlined),
+          selectedIcon: Icon(Icons.admin_panel_settings),
+          label: 'Producoes',
+        ),
+    ];
 
     return Scaffold(
       body: child,
@@ -40,10 +70,7 @@ class MainShell extends StatelessWidget {
         decoration: const BoxDecoration(
           color: AppColors.surface,
           border: Border(
-            top: BorderSide(
-              color: AppColors.surfaceLighter,
-              width: 0.5,
-            ),
+            top: BorderSide(color: AppColors.surfaceLighter, width: 0.5),
           ),
         ),
         child: SafeArea(
@@ -54,23 +81,7 @@ class MainShell extends StatelessWidget {
             elevation: 0,
             height: 65,
             labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Home',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.play_circle_outline),
-                selectedIcon: Icon(Icons.play_circle),
-                label: 'Para Voce',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Minha Vertix',
-              ),
-            ],
+            destinations: destinations,
           ),
         ),
       ),
