@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../network/api_client.dart';
 import '../constants/api_constants.dart';
@@ -7,6 +8,17 @@ import '../utils/logger.dart';
 
 /// Auth Service for VERTIX
 class AuthService {
+  // These defaults are only used by debug builds. They can be overridden
+  // without changing the source with --dart-define when needed.
+  static const String _developmentAdminEmail = String.fromEnvironment(
+    'VERTIX_DEBUG_ADMIN_EMAIL',
+    defaultValue: 'vertix.debug.admin@snapdark.com',
+  );
+  static const String _developmentAdminPassword = String.fromEnvironment(
+    'VERTIX_DEBUG_ADMIN_PASSWORD',
+    defaultValue: 'VertixDebugAdmin_2026!',
+  );
+
   final ApiClient _client = ApiClient();
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   static const String _userKey = 'cached_user';
@@ -29,7 +41,10 @@ class AuthService {
       final userJson = await _storage.read(key: _userKey);
       if (userJson != null) {
         _currentUser = UserModel.fromJson(jsonDecode(userJson));
-        Logger.i(Logger.tagAuth, 'Usuario carregado do cache: ${_currentUser?.name}');
+        Logger.i(
+          Logger.tagAuth,
+          'Usuario carregado do cache: ${_currentUser?.name}',
+        );
       }
     } catch (e) {
       Logger.e(Logger.tagAuth, 'Erro ao carregar usuario do cache', e);
@@ -59,7 +74,7 @@ class AuthService {
         ApiConstants.login,
         data: {
           'email': email,
-          'senha': password,  // Backend espera 'senha'
+          'senha': password, // Backend espera 'senha'
         },
       );
 
@@ -78,11 +93,25 @@ class AuthService {
       return authResponse;
     } catch (e) {
       Logger.authError('Erro no login', e);
-      return AuthResponse(
-        success: false,
-        message: _handleError(e),
+      return AuthResponse(success: false, message: _handleError(e));
+    }
+  }
+
+  /// Login automático para desenvolvimento local.
+  ///
+  /// O método é deliberadamente bloqueado fora de debug, para que a conta
+  /// técnica e suas credenciais nunca sejam usadas por builds de produção.
+  Future<AuthResponse> loginAsDevelopmentAdmin() {
+    if (!kDebugMode) {
+      return Future.value(
+        AuthResponse(
+          success: false,
+          message: 'Login automático disponível apenas em modo debug',
+        ),
       );
     }
+
+    return login(_developmentAdminEmail, _developmentAdminPassword);
   }
 
   /// Register new user
@@ -93,16 +122,16 @@ class AuthService {
   }) async {
     try {
       Logger.auth('Registrando usuario: $email');
-      Logger.request('POST', '${ApiConstants.baseUrl}${ApiConstants.register}', {
-        'nome': name,
-        'email': email,
-        'senha': '***',
-      });
+      Logger.request(
+        'POST',
+        '${ApiConstants.baseUrl}${ApiConstants.register}',
+        {'nome': name, 'email': email, 'senha': '***'},
+      );
 
       final response = await _client.post(
         ApiConstants.register,
         data: {
-          'nome': name,      // Backend espera 'nome'
+          'nome': name, // Backend espera 'nome'
           'email': email,
           'senha': password, // Backend espera 'senha'
         },
@@ -123,10 +152,7 @@ class AuthService {
       return authResponse;
     } catch (e) {
       Logger.authError('Erro no registro', e);
-      return AuthResponse(
-        success: false,
-        message: _handleError(e),
-      );
+      return AuthResponse(success: false, message: _handleError(e));
     }
   }
 
@@ -139,7 +165,10 @@ class AuthService {
   }) async {
     try {
       Logger.auth('Login com Google: $email');
-      Logger.request('POST', '${ApiConstants.baseUrl}${ApiConstants.googleAuth}');
+      Logger.request(
+        'POST',
+        '${ApiConstants.baseUrl}${ApiConstants.googleAuth}',
+      );
 
       final response = await _client.post(
         ApiConstants.googleAuth,
@@ -164,10 +193,7 @@ class AuthService {
       return authResponse;
     } catch (e) {
       Logger.authError('Erro no login Google', e);
-      return AuthResponse(
-        success: false,
-        message: _handleError(e),
-      );
+      return AuthResponse(success: false, message: _handleError(e));
     }
   }
 
@@ -180,10 +206,7 @@ class AuthService {
       if (response.data['success'] == true && response.data['user'] != null) {
         _currentUser = UserModel.fromJson(response.data['user']);
         Logger.authSuccess('Perfil carregado: ${_currentUser?.name}');
-        return AuthResponse(
-          success: true,
-          user: _currentUser,
-        );
+        return AuthResponse(success: true, user: _currentUser);
       }
 
       Logger.w(Logger.tagAuth, 'Falha ao buscar perfil');
@@ -193,10 +216,7 @@ class AuthService {
       );
     } catch (e) {
       Logger.authError('Erro ao buscar perfil', e);
-      return AuthResponse(
-        success: false,
-        message: _handleError(e),
-      );
+      return AuthResponse(success: false, message: _handleError(e));
     }
   }
 

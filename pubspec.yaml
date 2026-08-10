@@ -62,6 +62,9 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+    - series_bibles/nivalis-memorias-de-gelo/character_references/
+    - series_bibles/nivalis-memorias-de-gelo/location_references/location_reference_banco_termico_film_real_v6.png
+    - series_bibles/kuroshiro-lamina-do-vazio/storyboards_v8_keyframes_contact.jpg
 
 # Configuração do ícone do app
 flutter_launcher_icons:

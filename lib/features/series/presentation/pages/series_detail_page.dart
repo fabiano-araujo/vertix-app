@@ -121,7 +121,7 @@ class _SeriesDetailPageState extends State<SeriesDetailPage> {
               fit: StackFit.expand,
               children: [
                 CachedNetworkImage(
-                  imageUrl: _series!.coverUrl,
+                  imageUrl: _series!.heroImageUrl,
                   fit: BoxFit.cover,
                   placeholder: (_, __) => Container(color: AppColors.surface),
                   errorWidget: (_, __, ___) => Container(

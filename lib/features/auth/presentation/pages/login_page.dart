@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -22,6 +23,17 @@ class _LoginPageState extends State<LoginPage> {
   String? _errorMessage;
 
   @override
+  void initState() {
+    super.initState();
+
+    if (kDebugMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loginAsDevelopmentAdmin();
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -29,6 +41,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -41,18 +54,48 @@ class _LoginPageState extends State<LoginPage> {
       _passwordController.text,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (response.success) {
-      if (mounted) {
-        if (context.canPop()) {
-          context.pop(true); // Retorna true para indicar login bem-sucedido
-        } else {
-          context.go('/');
-        }
-      }
+      _finishLogin();
     } else {
       setState(() => _errorMessage = response.message);
+    }
+  }
+
+  Future<void> _loginAsDevelopmentAdmin() async {
+    if (_isLoading) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final response = await _authService.loginAsDevelopmentAdmin();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (response.success) {
+      _finishLogin();
+    } else {
+      // Keep the normal form available if the development API is offline.
+      setState(() {
+        _errorMessage =
+            'Login automatico de desenvolvimento falhou: '
+            '${response.message ?? 'erro desconhecido'}';
+      });
+    }
+  }
+
+  void _finishLogin() {
+    if (!mounted) return;
+
+    if (context.canPop()) {
+      context.pop(true); // Retorna true para indicar login bem-sucedido
+    } else {
+      context.go('/');
     }
   }
 
@@ -89,10 +132,10 @@ class _LoginPageState extends State<LoginPage> {
                   child: Text(
                     'VERTIX',
                     style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 8,
-                        ),
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 8,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -100,9 +143,9 @@ class _LoginPageState extends State<LoginPage> {
                   child: Text(
                     'Streaming Vertical',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                          letterSpacing: 2,
-                        ),
+                      color: AppColors.textSecondary,
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
 
@@ -112,15 +155,15 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   'Entrar',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Acesse sua conta para continuar',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                 ),
 
                 const SizedBox(height: 32),
@@ -137,7 +180,11 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                        const Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -195,7 +242,9 @@ class _LoginPageState extends State<LoginPage> {
                     prefixIcon: const Icon(Icons.lock_outlined),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -267,17 +316,23 @@ class _LoginPageState extends State<LoginPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: Divider(color: AppColors.textSecondary.withOpacity(0.3)),
+                      child: Divider(
+                        color: AppColors.textSecondary.withOpacity(0.3),
+                      ),
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
                         'ou',
-                        style: TextStyle(color: AppColors.textSecondary.withOpacity(0.7)),
+                        style: TextStyle(
+                          color: AppColors.textSecondary.withOpacity(0.7),
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: Divider(color: AppColors.textSecondary.withOpacity(0.3)),
+                      child: Divider(
+                        color: AppColors.textSecondary.withOpacity(0.3),
+                      ),
                     ),
                   ],
                 ),
@@ -291,7 +346,9 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _isLoading ? null : _googleSignIn,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
-                      side: BorderSide(color: AppColors.textSecondary.withOpacity(0.3)),
+                      side: BorderSide(
+                        color: AppColors.textSecondary.withOpacity(0.3),
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -300,7 +357,8 @@ class _LoginPageState extends State<LoginPage> {
                       'https://www.google.com/favicon.ico',
                       height: 24,
                       width: 24,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata),
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.g_mobiledata),
                     ),
                     label: const Text('Continuar com Google'),
                   ),

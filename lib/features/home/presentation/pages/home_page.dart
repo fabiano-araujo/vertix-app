@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/feed_service.dart';
 import '../../../../core/services/series_service.dart';
+import '../../../../core/services/episode_service.dart';
 import '../../../../core/models/series_model.dart';
 import '../widgets/series_carousel.dart';
 import '../widgets/featured_banner.dart';
@@ -21,6 +22,7 @@ class _HomePageState extends State<HomePage> {
   final ScrollController _scrollController = ScrollController();
   final FeedService _feedService = FeedService();
   final SeriesService _seriesService = SeriesService();
+  final EpisodeService _episodeService = EpisodeService();
 
   bool _showAppBarBackground = false;
   bool _isLoading = true;
@@ -106,6 +108,26 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Future<void> _openFirstEpisode(int seriesId) async {
+    final response = await _episodeService.getEpisodesBySeries(
+      seriesId,
+      limit: 1,
+    );
+
+    if (!mounted) return;
+
+    if (response.success && response.data.isNotEmpty) {
+      context.push('/player/${response.data.first.id}');
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Esta série ainda não possui episódios disponíveis.'),
+      ),
+    );
+  }
+
   List<Map<String, dynamic>> _seriesToMaps(List<SeriesModel> series) {
     return series
         .map(
@@ -168,7 +190,7 @@ class _HomePageState extends State<HomePage> {
                       series: _featuredSeries,
                       onPlay: () {
                         if (_featuredSeries != null) {
-                          context.push('/series/${_featuredSeries!.id}');
+                          _openFirstEpisode(_featuredSeries!.id);
                         }
                       },
                     ),
@@ -202,7 +224,7 @@ class _HomePageState extends State<HomePage> {
                         icon: Icons.local_fire_department,
                         iconColor: AppColors.primary,
                         items: _seriesToMaps(_trending),
-                        onItemTap: (id) => context.push('/series/$id'),
+                        onItemTap: _openFirstEpisode,
                       ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.1),
                     ),
 
@@ -214,7 +236,7 @@ class _HomePageState extends State<HomePage> {
                                 title: 'Novidades',
                                 icon: Icons.new_releases_outlined,
                                 items: _seriesToMaps(_newReleases),
-                                onItemTap: (id) => context.push('/series/$id'),
+                                onItemTap: _openFirstEpisode,
                               )
                               .animate()
                               .fadeIn(duration: 300.ms, delay: 100.ms)
@@ -229,7 +251,7 @@ class _HomePageState extends State<HomePage> {
                                 title: 'Recomendado para voce',
                                 icon: Icons.thumb_up_outlined,
                                 items: _seriesToMaps(_recommendations),
-                                onItemTap: (id) => context.push('/series/$id'),
+                                onItemTap: _openFirstEpisode,
                               )
                               .animate()
                               .fadeIn(duration: 300.ms, delay: 200.ms)
@@ -243,7 +265,7 @@ class _HomePageState extends State<HomePage> {
                           SeriesCarousel(
                                 title: 'Acao',
                                 items: _seriesToMaps(_action),
-                                onItemTap: (id) => context.push('/series/$id'),
+                                onItemTap: _openFirstEpisode,
                               )
                               .animate()
                               .fadeIn(duration: 300.ms, delay: 300.ms)
@@ -257,7 +279,7 @@ class _HomePageState extends State<HomePage> {
                           SeriesCarousel(
                                 title: 'Romance',
                                 items: _seriesToMaps(_romance),
-                                onItemTap: (id) => context.push('/series/$id'),
+                                onItemTap: _openFirstEpisode,
                               )
                               .animate()
                               .fadeIn(duration: 300.ms, delay: 400.ms)

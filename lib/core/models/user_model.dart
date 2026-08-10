@@ -22,7 +22,10 @@ class UserModel {
     return UserModel(
       id: json['id'] as int,
       name: json['name'] as String,
-      email: json['email'] as String,
+      // Series endpoints return a compact `createdBy` object without email.
+      // Keep parsing partial user payloads valid while preserving the email
+      // whenever it is available (for example, in auth responses).
+      email: json['email'] as String? ?? '',
       username: json['username'] as String?,
       photo: json['photo'] as String?,
       role: json['role'] as String? ?? 'USER',

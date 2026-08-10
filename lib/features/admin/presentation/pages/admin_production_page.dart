@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class AdminProductionPage extends StatefulWidget {
@@ -16,12 +17,16 @@ class AdminProductionPage extends StatefulWidget {
 class _AdminProductionPageState extends State<AdminProductionPage> {
   final AdminService _adminService = AdminService();
   final AuthService _authService = AuthService();
+  final LocalProductionWorkspaceService _localService =
+      LocalProductionWorkspaceService();
   final TextEditingController _searchController = TextEditingController();
 
-  List<AdminSeriesSummary> _series = [];
+  List<ProductionCatalogItem> _series = [];
   bool _isLoading = true;
   String _statusFilter = 'ALL';
+  String _sourceFilter = 'ALL';
   String? _error;
+  bool _remoteUnavailable = false;
 
   bool get _isAdmin => _authService.currentUser?.isAdmin == true;
 
@@ -48,16 +53,46 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
       _error = null;
     });
 
-    final response = await _adminService.getAvailableSeries(
+    final localFuture = _localService.getLocalCatalog();
+    final remoteFuture = _adminService.getAvailableSeries(
       status: _statusFilter,
       search: _searchController.text,
     );
+    final localItems = await localFuture;
+    final remoteResponse = await remoteFuture;
+
+    final query = _searchController.text.trim().toLowerCase();
+    final filteredLocal = localItems.where((item) {
+      final statusMatches =
+          _statusFilter == 'ALL' || item.status == _statusFilter;
+      final searchMatches =
+          query.isEmpty ||
+          item.title.toLowerCase().contains(query) ||
+          item.description.toLowerCase().contains(query) ||
+          item.genre.toLowerCase().contains(query) ||
+          (item.sourcePath?.toLowerCase().contains(query) ?? false);
+      return statusMatches && searchMatches;
+    });
+    final remoteItems = remoteResponse.data.map(
+      ProductionCatalogItem.fromRemote,
+    );
+    final merged =
+        <ProductionCatalogItem>[
+          if (_sourceFilter != 'REMOTE') ...filteredLocal,
+          if (_sourceFilter != 'LOCAL') ...remoteItems,
+        ]..sort((a, b) {
+          if (a.isLocal != b.isLocal) return a.isLocal ? -1 : 1;
+          return a.title.compareTo(b.title);
+        });
 
     if (!mounted) return;
     setState(() {
-      _series = response.data;
+      _series = merged;
       _isLoading = false;
-      _error = response.success ? null : 'Erro ao carregar producoes';
+      _remoteUnavailable = !remoteResponse.success;
+      _error = merged.isEmpty && !remoteResponse.success
+          ? 'Nao foi possivel carregar producoes'
+          : null;
     });
   }
 
@@ -72,6 +107,11 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
         title: const Text('Producoes'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: _showCreateProjectDialog,
+            tooltip: 'Nova obra local',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadSeries,
             tooltip: 'Atualizar',
@@ -85,6 +125,10 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           children: [
             _buildHeader(),
+            if (_remoteUnavailable) ...[
+              const SizedBox(height: 12),
+              _buildRemoteWarning(),
+            ],
             const SizedBox(height: 16),
             _buildSearch(),
             const SizedBox(height: 14),
@@ -102,7 +146,26 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
             else if (_series.isEmpty)
               _buildMessage(Icons.video_library_outlined, 'Nenhuma serie')
             else
-              ..._series.map(_buildSeriesCard),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final columns = constraints.maxWidth >= 880 ? 2 : 1;
+                  final width = columns == 1
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth - 12) / 2;
+                  return Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _series
+                        .map(
+                          (series) => SizedBox(
+                            width: width,
+                            child: _buildSeriesCard(series),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
           ],
         ),
       ),
@@ -148,13 +211,13 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Series em producao',
+                Text(
+                  '${_series.length} obras no studio',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Prompts, takes, assets e pontos da pipeline.',
+                  'Banco remoto + projetos locais, prompts, takes e timeline.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -192,15 +255,53 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
   }
 
   Widget _buildFilters() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildFilterChip('ALL', 'Todas'),
-        _buildFilterChip('DRAFT', 'Rascunhos'),
-        _buildFilterChip('PUBLISHED', 'Publicadas'),
-        _buildFilterChip('ARCHIVED', 'Arquivadas'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildSourceChip('ALL', 'Tudo'),
+            _buildSourceChip('LOCAL', 'Workspace local'),
+            _buildSourceChip('REMOTE', 'Vertix API'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildFilterChip('ALL', 'Todos os status'),
+            _buildFilterChip('IN_PRODUCTION', 'Em producao'),
+            _buildFilterChip('DRAFT', 'Rascunhos'),
+            _buildFilterChip('PUBLISHED', 'Publicadas'),
+            _buildFilterChip('ARCHIVED', 'Arquivadas'),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildSourceChip(String value, String label) {
+    final selected = _sourceFilter == value;
+    return ChoiceChip(
+      avatar: Icon(
+        value == 'LOCAL' ? Icons.computer : Icons.cloud_outlined,
+        size: 16,
+      ),
+      label: Text(label),
+      selected: selected,
+      selectedColor: AppColors.primary.withAlpha(50),
+      backgroundColor: AppColors.surface,
+      labelStyle: TextStyle(
+        color: selected ? AppColors.primary : AppColors.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
+      onSelected: (_) {
+        setState(() => _sourceFilter = value);
+        _loadSeries();
+      },
     );
   }
 
@@ -222,99 +323,260 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
     );
   }
 
-  Widget _buildSeriesCard(AdminSeriesSummary series) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: AppColors.surface,
+  Widget _buildSeriesCard(ProductionCatalogItem series) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () =>
-              context.push('/admin-production/${series.id}', extra: series),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 68,
-                    height: 92,
-                    color: AppColors.surfaceLight,
-                    child: series.coverUrl.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: series.coverUrl,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) =>
-                                const Icon(Icons.movie),
-                          )
-                        : const Icon(Icons.movie),
-                  ),
+        onTap: () =>
+            context.push('/admin-production/${series.routeId}', extra: series),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  width: 68,
+                  height: 92,
+                  color: AppColors.surfaceLight,
+                  child: series.coverAssetPath != null
+                      ? Image.asset(
+                          series.coverAssetPath!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              _buildCoverFallback(series),
+                        )
+                      : (series.coverUrl?.isNotEmpty ?? false)
+                      ? CachedNetworkImage(
+                          imageUrl: series.coverUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) =>
+                              _buildCoverFallback(series),
+                        )
+                      : _buildCoverFallback(series),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        series.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      series.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
                       ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          _buildInfoPill(series.status),
-                          _buildInfoPill(series.genre),
-                          _buildInfoPill('${series.episodeCount} eps'),
-                          _buildInfoPill('${series.referenceCount} assets'),
-                          _buildInfoPill('${series.storyPointCount} pontos'),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        series.hasProductionPlan
-                            ? 'Pipeline: ${series.productionPlan!.source}'
-                            : 'Sem pipeline salva',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: series.hasProductionPlan
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        _buildInfoPill(
+                          series.isLocal ? 'LOCAL' : 'API',
+                          color: series.isLocal
                               ? AppColors.success
-                              : AppColors.textSecondary,
-                          fontSize: 12,
+                              : AppColors.primary,
                         ),
+                        _buildInfoPill(series.status),
+                        _buildInfoPill(series.genre),
+                        _buildInfoPill(
+                          '${series.episodeCount}/${series.targetEpisodeCount} eps',
+                        ),
+                        _buildInfoPill('${series.referenceCount} assets'),
+                        _buildInfoPill('${series.takeCount} takes'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      series.sourcePath ?? series.sourceLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 9),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: LinearProgressIndicator(
+                              minHeight: 5,
+                              value: series.progress.clamp(0.0, 1.0),
+                              backgroundColor: AppColors.surfaceLighter,
+                              valueColor: const AlwaysStoppedAnimation(
+                                AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${(series.progress * 100).round()}%',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-              ],
-            ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInfoPill(String text) {
+  Widget _buildCoverFallback(ProductionCatalogItem series) {
+    final hue = series.title.codeUnits.fold<int>(0, (sum, item) => sum + item);
+    final color = HSVColor.fromAHSV(
+      1,
+      (hue % 360).toDouble(),
+      0.65,
+      0.72,
+    ).toColor();
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [color.withAlpha(180), AppColors.surface],
+        ),
+      ),
+      child: const Center(child: Icon(Icons.movie_creation_outlined, size: 30)),
+    );
+  }
+
+  Widget _buildInfoPill(String text, {Color? color}) {
+    final effectiveColor = color ?? AppColors.textSecondary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: effectiveColor.withAlpha(25),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+      child: Text(text, style: TextStyle(color: effectiveColor, fontSize: 11)),
+    );
+  }
+
+  Widget _buildRemoteWarning() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withAlpha(18),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.warning.withAlpha(65)),
       ),
+      child: const Row(
+        children: [
+          Icon(Icons.cloud_off_outlined, color: AppColors.warning, size: 20),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'A API nao respondeu. Os projetos e as edicoes locais continuam disponiveis.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCreateProjectDialog() async {
+    final titleController = TextEditingController();
+    final genreController = TextEditingController(text: 'drama vertical');
+    var format = 'vertical_series';
+    final project = await showDialog<ProductionProject>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Nova obra local'),
+          content: SizedBox(
+            width: 430,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  autofocus: true,
+                  decoration: const InputDecoration(labelText: 'Titulo'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: genreController,
+                  decoration: const InputDecoration(labelText: 'Genero'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: format,
+                  decoration: const InputDecoration(labelText: 'Formato'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'vertical_series',
+                      child: Text('Serie / filme vertical'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'anime_vertical',
+                      child: Text('Anime vertical'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'animated_webtoon',
+                      child: Text('Webtoon animado'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) setDialogState(() => format = value);
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final title = titleController.text.trim();
+                if (title.isEmpty) return;
+                final created = await _localService.createProject(
+                  title: title,
+                  genre: genreController.text.trim().isEmpty
+                      ? 'vertical'
+                      : genreController.text.trim(),
+                  formatFamily: format,
+                );
+                if (dialogContext.mounted) {
+                  Navigator.pop(dialogContext, created);
+                }
+              },
+              child: const Text('Criar no workspace'),
+            ),
+          ],
+        ),
+      ),
+    );
+    titleController.dispose();
+    genreController.dispose();
+    if (project == null || !mounted) return;
+    await _loadSeries();
+    if (!mounted) return;
+    context.push(
+      '/admin-production/${project.virtualId}',
+      extra: ProductionCatalogItem.fromLocal(project),
     );
   }
 

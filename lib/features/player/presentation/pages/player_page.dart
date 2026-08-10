@@ -305,11 +305,22 @@ class _PlayerPageState extends State<PlayerPage> {
                     ),
                   ),
                   if (_episode!.series != null)
-                    Text(
-                      _episode!.series!.title,
-                      style: TextStyle(
-                        color: Colors.white.withAlpha(180),
-                        fontSize: 14,
+                    Semantics(
+                      button: true,
+                      label: 'Abrir série ${_episode!.series!.title}',
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(6),
+                        onTap: () => context.push('/series/${_episode!.seriesId}'),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            _episode!.series!.title,
+                            style: TextStyle(
+                              color: Colors.white.withAlpha(180),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   const SizedBox(height: 16),
@@ -337,15 +348,6 @@ class _PlayerPageState extends State<PlayerPage> {
                         onTap: () {
                           _episodeService.recordShare(widget.episodeId);
                           // TODO: Implement share
-                        },
-                      ),
-                      _buildActionButton(
-                        icon: Icons.playlist_play,
-                        label: 'Serie',
-                        onTap: () {
-                          if (_episode?.seriesId != null) {
-                            context.push('/series/${_episode!.seriesId}');
-                          }
                         },
                       ),
                     ],

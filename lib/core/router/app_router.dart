@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../services/admin_service.dart';
+import '../services/local_production_workspace_service.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/for_you/presentation/pages/for_you_page.dart';
 import '../../features/my_vertix/presentation/pages/my_vertix_page.dart';
@@ -11,7 +11,7 @@ import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/series/presentation/pages/series_detail_page.dart';
 import '../../features/player/presentation/pages/player_page.dart';
 import '../../features/admin/presentation/pages/admin_panel_page.dart';
-import '../../features/admin/presentation/pages/admin_production_detail_page.dart';
+import '../../features/admin/presentation/pages/admin_production_editor_page.dart';
 import '../../features/admin/presentation/pages/admin_production_page.dart';
 
 /// App Router Configuration
@@ -60,10 +60,10 @@ class AppRouter {
             path: '/admin-production/:id',
             name: 'adminProductionDetail',
             pageBuilder: (context, state) => NoTransitionPage(
-              child: AdminProductionDetailPage(
+              child: AdminProductionEditorPage(
                 seriesId: int.parse(state.pathParameters['id']!),
-                summary: state.extra is AdminSeriesSummary
-                    ? state.extra as AdminSeriesSummary
+                item: state.extra is ProductionCatalogItem
+                    ? state.extra as ProductionCatalogItem
                     : null,
               ),
             ),

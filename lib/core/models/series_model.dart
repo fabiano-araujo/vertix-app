@@ -105,6 +105,14 @@ class SeriesModel {
   }
 
   int get totalEpisodesCount => episodeCount ?? totalEpisodes;
+
+  /// Artwork used by the home hero and the series detail backdrop.
+  /// The thumbnail is the wide artwork shown on the home screen; fall back
+  /// to the cover when the API does not provide one.
+  String get heroImageUrl {
+    final thumbnail = thumbnailUrl?.trim();
+    return thumbnail != null && thumbnail.isNotEmpty ? thumbnail : coverUrl;
+  }
 }
 
 /// Series List Response

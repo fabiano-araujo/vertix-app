@@ -214,7 +214,7 @@ function simpleStatusMessage(message) {
 function resetDefaults() {
   controls.adminToken.value = '';
   controls.provider.value = 'openrouter';
-  controls.model.value = 'bytedance/seedance-2.0-20260414';
+  controls.model.value = 'bytedance/seedance-2.5';
   controls.duration.value = '15';
   controls.resolution.value = '480p';
   controls.aspect.value = '9:16';
@@ -407,7 +407,11 @@ function restoreCache() {
   const settings = cache.settings || {};
   const prompts = cache.prompts || {};
   controls.provider.value = settings.provider || controls.provider.value;
-  controls.model.value = settings.model || controls.model.value;
+  const cachedModel = String(settings.model || '').trim();
+  controls.model.value =
+    cachedModel && cachedModel !== 'bytedance/seedance-2.0-20260414'
+      ? cachedModel
+      : controls.model.value;
   controls.duration.value = settings.duration || controls.duration.value;
   controls.resolution.value = settings.resolution || controls.resolution.value;
   controls.aspect.value = settings.aspectRatio || controls.aspect.value;

@@ -15,12 +15,8 @@ class FeaturedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final thumbnailUrl = series?.thumbnailUrl;
-    final coverUrl = series?.coverUrl;
-    final imageUrl = thumbnailUrl != null && thumbnailUrl.isNotEmpty
-        ? thumbnailUrl
-        : coverUrl != null && coverUrl.isNotEmpty
-        ? coverUrl
+    final imageUrl = series?.heroImageUrl.isNotEmpty == true
+        ? series!.heroImageUrl
         : 'https://picsum.photos/800/1200?random=featured';
 
     return SizedBox(

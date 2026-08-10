@@ -10,7 +10,7 @@ dotenv.config();
 const OPENROUTER_VIDEO_BASE_URL = 'https://openrouter.ai/api/v1';
 const WAVESPEED_BASE_URL = 'https://api.wavespeed.ai/api/v3';
 const ELEVENLABS_BASE_URL = 'https://api.elevenlabs.io/v1';
-const DEFAULT_MODEL = 'bytedance/seedance-2.0-20260414';
+const DEFAULT_MODEL = 'bytedance/seedance-2.5';
 const SEGMIND_SEEDANCE_ENDPOINT = process.env.SEGMIND_SEEDANCE_ENDPOINT || 'https://api.segmind.com/v1/seedance-2.0';
 const MAX_AUDIO_REFERENCES = 3;
 

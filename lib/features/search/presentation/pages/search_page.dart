@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/search_service.dart';
 import '../../../../core/services/series_service.dart';
+import '../../../../core/services/episode_service.dart';
 import '../../../../core/models/series_model.dart';
 
 /// Search Page
@@ -21,6 +22,7 @@ class _SearchPageState extends State<SearchPage> {
   final FocusNode _focusNode = FocusNode();
   final SearchService _searchService = SearchService();
   final SeriesService _seriesService = SeriesService();
+  final EpisodeService _episodeService = EpisodeService();
 
   bool _isSearching = false;
   bool _isLoading = false;
@@ -102,6 +104,26 @@ class _SearchPageState extends State<SearchPage> {
   void _searchFor(String query) {
     _searchController.text = query;
     _focusNode.unfocus();
+  }
+
+  Future<void> _openFirstEpisode(int seriesId) async {
+    final response = await _episodeService.getEpisodesBySeries(
+      seriesId,
+      limit: 1,
+    );
+
+    if (!mounted) return;
+
+    if (response.success && response.data.isNotEmpty) {
+      context.push('/player/${response.data.first.id}');
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Esta série ainda não possui episódios disponíveis.'),
+      ),
+    );
   }
 
   @override
@@ -259,9 +281,9 @@ class _SearchPageState extends State<SearchPage> {
       ),
       trailing: IconButton(
         icon: const Icon(Icons.play_circle_outline),
-        onPressed: () => context.push('/series/${series.id}'),
+        onPressed: () => _openFirstEpisode(series.id),
       ),
-      onTap: () => context.push('/series/${series.id}'),
+      onTap: () => _openFirstEpisode(series.id),
     );
   }
 
@@ -339,7 +361,7 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildSearchResultCard(SeriesModel series) {
     return GestureDetector(
-      onTap: () => context.push('/series/${series.id}'),
+      onTap: () => _openFirstEpisode(series.id),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

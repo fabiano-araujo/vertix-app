@@ -326,20 +326,6 @@ class _ForYouPageState extends State<ForYouPage> {
                 ),
               const SizedBox(height: 16),
 
-              // View Full Series Button
-              OutlinedButton.icon(
-                onPressed: () => context.push('/series/${episode.seriesId}'),
-                icon: const Icon(Icons.playlist_play, size: 20),
-                label: const Text('Ver serie completa'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.textSecondary),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-              ),
             ],
           ),
         ),
