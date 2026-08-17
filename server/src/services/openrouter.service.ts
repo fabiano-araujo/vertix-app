@@ -224,11 +224,21 @@ export const generateText = async (
     max_tokens?: number;
     model?: string;
     streaming?: boolean;
+    timeout?: number;
+    reasoning?: {
+      effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+      max_tokens?: number;
+      exclude?: boolean;
+    };
     response_format?: { type: 'json_object' | 'text' };
   } = {},
   abortController?: AbortController
 ): Promise<string | Readable> => {
   try {
+    if (!OPENROUTER_API_KEY.trim()) {
+      throw new Error('OPENROUTER_API_KEY nao configurada no servidor');
+    }
+
     const streaming = options.streaming || false;
 
     // Constrói as mensagens baseado no tipo do prompt
@@ -252,8 +262,13 @@ export const generateText = async (
     if (options.response_format) {
       request.response_format = options.response_format;
     }
+    if (options.reasoning) {
+      request.reasoning = options.reasoning;
+    }
 
-    console.log(`Enviando requisição para gerar texto com o modelo ${request.model} (streaming: ${streaming}):`, JSON.stringify(request, null, 2));
+    console.log(
+      `Enviando texto para OpenRouter model=${request.model} streaming=${streaming} max_tokens=${options.max_tokens || 'default'}`,
+    );
 
     // Configuração básica para a requisição
     const config = {
@@ -263,7 +278,8 @@ export const generateText = async (
         'X-Title': SITE_NAME,
         'Content-Type': 'application/json'
       },
-      signal: abortController ? abortController.signal : undefined
+      signal: abortController ? abortController.signal : undefined,
+      timeout: options.timeout || 180000,
     };
 
     if (streaming) {
@@ -279,14 +295,20 @@ export const generateText = async (
       return response.data;
     } else {
       const response = await axios.post<OpenRouterResponse>(API_URL, request, config);
-
-      console.log('Resposta recebida:', JSON.stringify(response.data, null, 2));
-
-      if (response.data && response.data.choices && response.data.choices.length > 0) {
-        return response.data.choices[0].message.content;
+      const choice = response.data?.choices?.[0] as any;
+      const content = typeof choice?.message?.content === 'string'
+        ? choice.message.content
+        : '';
+      const usage = response.data?.usage as any;
+      console.log(
+        `OpenRouter ok model=${request.model} finish=${choice?.finish_reason || 'unknown'} content_len=${content.length} completion=${usage?.completion_tokens || 0} reasoning=${usage?.completion_tokens_details?.reasoning_tokens || 0}`,
+      );
+      if (content.trim()) {
+        return content;
       }
-      
-      throw new Error('Resposta vazia do OpenRouter');
+      throw new Error(
+        `OpenRouter retornou resposta vazia (finish=${choice?.finish_reason || 'unknown'}, reasoning_tokens=${usage?.completion_tokens_details?.reasoning_tokens || 0})`,
+      );
     }
   } catch (error: any) {
     // Verifica se o erro foi causado por um abort manual

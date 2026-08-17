@@ -33,11 +33,27 @@ extension _AdminProductionEditorReferencesExtension
         _panel(
           title: title,
           icon: Icons.collections_bookmark_outlined,
-          trailing: FilledButton.icon(
-            onPressed: () =>
-                _showAddReferenceDialog(initialCategory: initialCategory),
-            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-            label: Text(addLabel),
+          trailing: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _isAnyGenerationBusy
+                    ? null
+                    : _showAutomaticPreparationDialog,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Gerar fichas com Codex'),
+              ),
+              FilledButton.icon(
+                onPressed: _isAnyGenerationBusy
+                    ? null
+                    : () => _showAddReferenceDialog(
+                        initialCategory: initialCategory,
+                      ),
+                icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+                label: Text(addLabel),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,6 +250,18 @@ extension _AdminProductionEditorReferencesExtension
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, height: 1.35),
+                    ),
+                  ),
+                ],
+                if (reference.publicUrl?.isNotEmpty != true &&
+                    reference.assetPath?.isNotEmpty != true) ...[
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Imagem não gerada automaticamente. Anexe uma referência quando quiser.',
+                    style: TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 10,
+                      height: 1.35,
                     ),
                   ),
                 ],

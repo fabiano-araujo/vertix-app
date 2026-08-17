@@ -264,6 +264,8 @@ extension _AdminProductionEditorStudioExtension
 
   Widget _buildStudioMainPane() {
     return switch (_studioTabIndex) {
+      0 => ColoredBox(color: const Color(0xFF121418), child: _buildOverview()),
+      1 => _buildScript(),
       2 => _buildReferences(
         categories: const {
           'CHARACTER_MASTER',
@@ -305,7 +307,7 @@ extension _AdminProductionEditorStudioExtension
         addLabel: 'Adicionar adereço',
         initialCategory: 'OBJECT_REFERENCE',
       ),
-      _ => _buildEditor(),
+      _ => _buildScript(),
     };
   }
 
@@ -353,7 +355,12 @@ extension _AdminProductionEditorStudioExtension
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final showAssistant = constraints.maxWidth >= 980;
+                  final chatBrief = _isChatBrief;
+                  final showAssistant =
+                      chatBrief || constraints.maxWidth >= 900;
+                  if (chatBrief && constraints.maxWidth < 900) {
+                    return _buildWritingAssistant();
+                  }
                   return Row(
                     children: [
                       if (showAssistant) ...[
@@ -466,8 +473,19 @@ extension _AdminProductionEditorStudioExtension
               OutlinedButton.icon(
                 onPressed: () => setState(() => _showTechnicalEditor = true),
                 icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
-                label: Text(wide ? 'Quadro do projeto' : 'Quadro'),
+                label: Text(wide ? 'Abrir quadro do projeto' : 'Quadro'),
               ),
+              if (_isAutomaticPreparationRunning) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'Preparação $_automaticPreparationCompleted/$_automaticPreparationTotal',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(width: 4),
               IconButton(
                 tooltip: 'Salvar',
@@ -527,25 +545,45 @@ extension _AdminProductionEditorStudioExtension
   );
 
   Widget _buildWritingAssistant() {
-    final episode = _episode!;
-    final firstTake = episode.takes.isEmpty ? null : episode.takes.first;
-    final episodeScript = _episodeScriptFor(_project!, episode.number);
+    if (_isChatBrief) return _buildCreationAssistant();
+    final project = _project!;
+    final episode = _episode;
+    if (episode == null) {
+      return const ColoredBox(
+        color: Color(0xFF14161A),
+        child: Center(
+          child: Text(
+            'Descreva a ideia no chat para gerar o esboço.',
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+    final episodeScript = _episodeScriptFor(project, episode.number);
     final hasDetailedScript = episodeScript.isNotEmpty;
-    final shotCount = episodeScript['shot_count'] as int? ?? 0;
+    final productionReady = episode.takes.isNotEmpty;
+    final characterCount = project.references
+        .where((item) => item.category.contains('CHARACTER'))
+        .length;
+    final nextEpisodeIndex = _episodeIndex + 1;
+    final hasNextEpisode = nextEpisodeIndex < project.episodes.length;
+    final previewText = episode.summary.trim().isNotEmpty
+        ? episode.summary
+        : _bibleText(project, 'logline', fallback: project.description);
     return ColoredBox(
-      color: const Color(0xFF181A1E),
+      color: const Color(0xFF14161A),
       child: Column(
         children: [
           Container(
             height: 70,
-            padding: const EdgeInsets.symmetric(horizontal: 22),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             alignment: Alignment.centerLeft,
             child: const Row(
               children: [
-                Icon(Icons.auto_awesome, color: AppColors.primaryLight),
+                Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
                 SizedBox(width: 12),
                 Text(
-                  'Assistente de roteiro',
+                  'Assistente de redação de AI',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                 ),
               ],
@@ -553,180 +591,93 @@ extension _AdminProductionEditorStudioExtension
           ),
           const Divider(height: 1),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(18),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: AppColors.surfaceLighter),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.description_outlined, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            firstTake != null
-                                ? 'Produção liberada (${episode.takes.length} prompts)'
-                                : hasDetailedScript
-                                ? 'Roteiro por cenas ($shotCount shots)'
-                                : 'Esboço geral do episódio',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'EP${episode.number} · ${episode.title}',
-                      style: const TextStyle(
-                        color: AppColors.primaryLight,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      episode.summary,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              children: [
+                if (_isAutomaticPreparationRunning || _activeAiAction != null)
+                  _assistantStatusCard(),
+                if (_assistantRequest != null) ...[
+                  _assistantUserBubble(_assistantRequest!),
+                  const SizedBox(height: 12),
+                ],
+                _assistantAiBubble(
+                  child: _assistantConversationBody(
+                    fallback: Text(
+                      previewText,
+                      maxLines: 12,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: AppColors.textSecondary,
-                        height: 1.6,
+                        height: 1.55,
+                        fontSize: 13,
                       ),
                     ),
-                    if (firstTake != null) ...[
-                      const SizedBox(height: 22),
-                      Text(
-                        'Cena ${firstTake.number} · ${firstTake.title}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        firstTake.visualPrompt,
-                        maxLines: 12,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          height: 1.55,
-                        ),
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 20),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(13),
-                        decoration: BoxDecoration(
-                          color: AppColors.background,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.surfaceLighter),
-                        ),
-                        child: Text(
-                          hasDetailedScript
-                              ? 'O roteiro completo está pronto para revisão. A produção de vídeo permanece bloqueada até a aprovação das cenas, falas, ações e durações.'
-                              : 'O esboço vem primeiro. O roteiro detalhado por cenas ainda não foi gerado para este episódio.',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: hasDetailedScript
-                              ? () => setState(
-                                  () => _showEpisodeScriptEditor = true,
-                                )
-                              : _generatingScriptEpisodeNumber == episode.number
-                              ? null
-                              : () => _generateEpisodeScript(_episodeIndex),
-                          icon:
-                              !hasDetailedScript &&
-                                  _generatingScriptEpisodeNumber ==
-                                      episode.number
-                              ? const SizedBox(
-                                  width: 17,
-                                  height: 17,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : Icon(
-                                  hasDetailedScript
-                                      ? Icons.fact_check_outlined
-                                      : Icons.description_outlined,
-                                ),
-                          label: Text(
-                            hasDetailedScript
-                                ? 'Revisar e aprovar roteiro'
-                                : _generatingScriptEpisodeNumber ==
-                                      episode.number
-                                ? 'Gerando roteiro...'
-                                : 'Gerar roteiro detalhado por cenas',
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.bolt,
-                            size: 18,
-                            color: AppColors.warning,
-                          ),
-                          const SizedBox(width: 9),
-                          Expanded(
-                            child: Text(
-                              episode.cliffhanger,
-                              style: const TextStyle(fontSize: 12, height: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_assistantRequest != null) ...[
-                      const SizedBox(height: 18),
-                      const Divider(),
-                      const SizedBox(height: 10),
-                      const Text(
-                        'ÚLTIMO PEDIDO',
-                        style: TextStyle(
-                          color: AppColors.textTertiary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .8,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _assistantRequest!,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                Text(
+                  productionReady
+                      ? 'O EP${episode.number} · ${episode.title} está pronto para produção de vídeo.'
+                      : hasDetailedScript
+                      ? 'O roteiro do EP${episode.number} · ${episode.title} está pronto. Como você quer seguir?'
+                      : 'O esboço do EP${episode.number} · ${episode.title} está na área de trabalho. Escolha o próximo passo.',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _assistantChoiceButton(
+                  label: characterCount == 0
+                      ? 'Gerar personagens/locações/props antes de continuar'
+                      : 'Revisar personagens, locações e props',
+                  onTap: _isAnyGenerationBusy
+                      ? null
+                      : () {
+                          if (characterCount == 0) {
+                            _showAutomaticPreparationDialog();
+                          } else {
+                            setState(() => _studioTabIndex = 2);
+                          }
+                        },
+                ),
+                const SizedBox(height: 8),
+                _assistantChoiceButton(
+                  label: hasNextEpisode
+                      ? 'Continuar direto para o roteiro do Episódio ${project.episodes[nextEpisodeIndex].number}'
+                      : productionReady
+                      ? 'Entrar na produção de vídeo deste episódio'
+                      : hasDetailedScript
+                      ? 'Aprovar e liberar a produção de vídeo'
+                      : 'Gerar o roteiro detalhado deste episódio',
+                  onTap: _isAnyGenerationBusy
+                      ? null
+                      : () {
+                          if (hasNextEpisode) {
+                            setState(() => _episodeIndex = nextEpisodeIndex);
+                            _generateEpisodeScript(nextEpisodeIndex);
+                          } else if (productionReady) {
+                            setState(() {
+                              _episodeProductionMode = true;
+                              _sectionIndex = 2;
+                            });
+                          } else if (hasDetailedScript) {
+                            setState(() => _showEpisodeScriptEditor = true);
+                          } else {
+                            _generateEpisodeScript(_episodeIndex);
+                          }
+                        },
+                ),
+                const SizedBox(height: 8),
+                _assistantChoiceButton(
+                  label: 'Quero revisar algo no Episódio ${episode.number}',
+                  onTap: () => setState(() {
+                    _studioTabIndex = 1;
+                    _showEpisodeScriptEditor = hasDetailedScript;
+                  }),
+                ),
+              ],
             ),
           ),
           _buildAssistantComposer(),
@@ -735,36 +686,728 @@ extension _AdminProductionEditorStudioExtension
     );
   }
 
-  Widget _buildAssistantComposer() => Container(
-    margin: const EdgeInsets.all(16),
-    padding: const EdgeInsets.fromLTRB(14, 6, 7, 6),
+  Widget _buildCreationAssistant() {
+    final project = _project!;
+    final bible = project.seriesBible;
+    final styleFamily =
+        bible['creation_style_family']?.toString() ?? 'live_action';
+    final visualStyle =
+        bible['visual_style']?.toString() ?? 'Microdrama moderno';
+    final genre = bible['genre']?.toString() ?? project.genre;
+    final background = bible['background']?.toString() ?? 'Cidade moderna';
+    final trope = bible['trope']?.toString() ?? 'Segunda chance';
+    final language = bible['language']?.toString() ?? 'Português (Brasil)';
+    final rating = bible['rating']?.toString() ?? '14 anos';
+    final episodeCount = project.targetEpisodeCount.clamp(1, 80);
+    final firstDuration =
+        (bible['first_episode_duration_seconds'] as num?)?.toInt() ?? 120;
+    final otherDuration =
+        (bible['episode_duration_seconds'] as num?)?.toInt() ?? 60;
+    final automaticPreparation =
+        bible['automatic_preparation_requested'] == true;
+    final styles = styleFamily == 'animation'
+        ? const ['Animação cinematográfica']
+        : styleFamily == 'custom'
+        ? MicroDramaThemeComposer.visualStyleOptions
+        : MicroDramaThemeComposer.liveActionStyles;
+    return ColoredBox(
+      color: const Color(0xFF14161A),
+      child: Column(
+        children: [
+          Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            alignment: Alignment.centerLeft,
+            child: const Row(
+              children: [
+                Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
+                SizedBox(width: 12),
+                Text(
+                  'Assistente de redação de AI',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              children: [
+                const Text(
+                  'Comece a criar seu drama curto',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                _creationFamilyTabs(styleFamily, visualStyle),
+                const SizedBox(height: 12),
+                _creationStyleGrid(visualStyle, styles),
+                const SizedBox(height: 18),
+                const Text(
+                  'Ajustes básicos',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                _creationEpisodeMode(episodeCount),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<int>(
+                  label: 'Número de episódios',
+                  value: episodeCount,
+                  values: episodeCount == 1
+                      ? const [1]
+                      : const [8, 12, 20, 50, 80],
+                  labelFor: (value) =>
+                      value == 1 ? 'Episódio único' : '$value episódios',
+                  onChanged: episodeCount == 1
+                      ? null
+                      : (value) =>
+                            unawaited(_patchChatBrief(episodeCount: value)),
+                ),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<int>(
+                  label: 'Duração do primeiro episódio',
+                  value: firstDuration,
+                  values: const [60, 90, 120],
+                  labelFor: (value) => '$value segundos',
+                  onChanged: (value) => unawaited(
+                    _patchChatBrief(firstEpisodeDurationSeconds: value),
+                  ),
+                ),
+                if (episodeCount > 1) ...[
+                  const SizedBox(height: 10),
+                  _creationSettingDropdown<int>(
+                    label: 'Duração dos demais',
+                    value: otherDuration,
+                    values: const [45, 60, 90],
+                    labelFor: (value) => '$value segundos',
+                    onChanged: (value) => unawaited(
+                      _patchChatBrief(episodeDurationSeconds: value),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                _creationSettingDropdown<String>(
+                  label: 'Idioma do vídeo',
+                  value: language,
+                  values: const [
+                    'Português (Brasil)',
+                    'Português (Portugal)',
+                    'English',
+                    'Español',
+                  ],
+                  labelFor: (value) => value,
+                  onChanged: (value) =>
+                      unawaited(_patchChatBrief(language: value)),
+                ),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<String>(
+                  label: 'Classificação',
+                  value: rating,
+                  values: const [
+                    'Livre',
+                    '10 anos',
+                    '12 anos',
+                    '14 anos',
+                    '16 anos',
+                  ],
+                  labelFor: (value) => value,
+                  onChanged: (value) =>
+                      unawaited(_patchChatBrief(rating: value)),
+                ),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<String>(
+                  label: 'Gênero',
+                  value: genre,
+                  values: MicroDramaThemeComposer.genreOptions,
+                  labelFor: (value) => value,
+                  onChanged: (value) =>
+                      unawaited(_patchChatBrief(genre: value)),
+                ),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<String>(
+                  label: 'Cenário',
+                  value: background,
+                  values: MicroDramaThemeComposer.backgroundOptions,
+                  labelFor: (value) => value,
+                  onChanged: (value) =>
+                      unawaited(_patchChatBrief(background: value)),
+                ),
+                const SizedBox(height: 10),
+                _creationSettingDropdown<String>(
+                  label: 'Tropo / tema',
+                  value: trope,
+                  values: MicroDramaThemeComposer.tropeOptions,
+                  labelFor: (value) => value,
+                  onChanged: (value) =>
+                      unawaited(_patchChatBrief(trope: value)),
+                ),
+                const SizedBox(height: 14),
+                _creationAutoGenerateTile(automaticPreparation),
+                if (_isAutomaticPreparationRunning || _activeAiAction != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: _assistantStatusCard(),
+                  ),
+                if (_assistantRequest != null) ...[
+                  const SizedBox(height: 14),
+                  _assistantUserBubble(_assistantRequest!),
+                ],
+                const SizedBox(height: 14),
+                _assistantAiBubble(
+                  child: _assistantConversationBody(
+                    fallback: const Text(
+                      'Descreva a ideia da sua história no bate-papo abaixo. O contrato da série — logline, protagonista, força oposta, pergunta central e risco — será pensado aqui, a partir do tema escolhido.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        height: 1.55,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                if (_pendingChatContract != null && !automaticPreparation) ...[
+                  const SizedBox(height: 10),
+                  _assistantChoiceButton(
+                    label: 'Criar esboço da série com este contrato',
+                    onTap: _isAnyGenerationBusy
+                        ? null
+                        : () => unawaited(_applyPendingChatContract()),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          _buildAssistantComposer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _creationFamilyTabs(String selected, String visualStyle) {
+    const tabs = [
+      ('live_action', 'Live Action'),
+      ('animation', 'Animação'),
+      ('custom', 'Personalizado'),
+    ];
+    return Row(
+      children: tabs
+          .map(
+            (tab) => Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: tab.$1 == 'custom' ? 0 : 8),
+                child: InkWell(
+                  onTap: () {
+                    String? nextStyle;
+                    if (tab.$1 == 'animation') {
+                      nextStyle = 'Animação cinematográfica';
+                    } else if (tab.$1 == 'live_action' &&
+                        visualStyle == 'Animação cinematográfica') {
+                      nextStyle = 'Microdrama moderno';
+                    }
+                    unawaited(
+                      _patchChatBrief(
+                        styleFamily: tab.$1,
+                        visualStyle: nextStyle,
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: selected == tab.$1
+                          ? Colors.white12
+                          : const Color(0xFF1A1C21),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected == tab.$1
+                            ? Colors.white38
+                            : const Color(0xFF3A3D45),
+                      ),
+                    ),
+                    child: Text(
+                      tab.$2,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: selected == tab.$1
+                            ? FontWeight.w800
+                            : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _creationStyleGrid(String selected, List<String> styles) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: styles.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        childAspectRatio: 1.45,
+      ),
+      itemBuilder: (context, index) {
+        final style = styles[index];
+        final active = style == selected;
+        return InkWell(
+          onTap: () => unawaited(_patchChatBrief(visualStyle: style)),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1E24),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: active
+                    ? const Color(0xFF9B8CFF)
+                    : const Color(0xFF3A3D45),
+                width: active ? 1.6 : 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      _creationStyleIcon(style),
+                      size: 18,
+                      color: const Color(0xFF9B8CFF),
+                    ),
+                    const Spacer(),
+                    if (active)
+                      const Icon(
+                        Icons.check_circle,
+                        size: 18,
+                        color: Color(0xFF9B8CFF),
+                      ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  style,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  IconData _creationStyleIcon(String style) => switch (style) {
+    'Cinema teatral realista' => Icons.theaters_outlined,
+    'K-drama moderno' => Icons.favorite_border,
+    'Noir urbano' => Icons.nights_stay_outlined,
+    'Animação cinematográfica' => Icons.animation,
+    _ => Icons.movie_outlined,
+  };
+
+  Widget _creationEpisodeMode(int episodeCount) {
+    final single = episodeCount <= 1;
+    return Row(
+      children: [
+        Expanded(
+          child: _creationModeChip(
+            label: 'Episódio único',
+            selected: single,
+            onTap: () => unawaited(_patchChatBrief(episodeCount: 1)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _creationModeChip(
+            label: 'Vários episódios',
+            selected: !single,
+            onTap: () => unawaited(_patchChatBrief(episodeCount: 8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _creationModeChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: selected
+            ? AppColors.primary.withAlpha(38)
+            : const Color(0xFF1A1C21),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: selected ? AppColors.primary : const Color(0xFF3A3D45),
+        ),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+        ),
+      ),
+    ),
+  );
+
+  Widget _creationSettingDropdown<T>({
+    required String label,
+    required T value,
+    required List<T> values,
+    required String Function(T value) labelFor,
+    required ValueChanged<T>? onChanged,
+  }) {
+    final effectiveValue = values.contains(value) ? value : values.first;
+    return DropdownButtonFormField<T>(
+      key: ValueKey('$label-${values.join('|')}'),
+      initialValue: effectiveValue,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: const Color(0xFF1C1E24),
+      ),
+      items: values
+          .map(
+            (item) => DropdownMenuItem<T>(
+              value: item,
+              child: Text(labelFor(item), overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: onChanged == null
+          ? null
+          : (next) {
+              if (next != null) onChanged(next);
+            },
+    );
+  }
+
+  Widget _creationAutoGenerateTile(bool value) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1E24),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.surfaceLighter),
+      ),
+      child: SwitchListTile(
+        value: value,
+        onChanged: (next) =>
+            unawaited(_patchChatBrief(automaticPreparation: next)),
+        title: const Text('Gerar tudo automaticamente'),
+        subtitle: const Text(
+          'Ao enviar a ideia no chat, a API de IA cria o título, o contrato, o esboço, personagens, ambientes e adereços.',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
+        secondary: const Icon(Icons.auto_awesome_motion_outlined),
+      ),
+    );
+  }
+
+  Widget _creationContractCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Contrato da série',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Gerado a partir do tema e da ideia. Revise no chat antes de avançar.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            height: 1.4,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _contractTitleController,
+          decoration: const InputDecoration(labelText: 'Título de trabalho'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _contractLoglineController,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Logline / premissa em uma frase',
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _contractProtagonistController,
+          decoration: const InputDecoration(labelText: 'Protagonista'),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _contractOpposingController,
+          decoration: const InputDecoration(
+            labelText: 'Força oposta / antagonista',
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _contractQuestionController,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Grande expectativa / pergunta central',
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _contractStakesController,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Risco e urgência',
+            alignLabelWithHint: true,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _assistantStatusCard() {
+    final preparing = _isAutomaticPreparationRunning;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: preparing
+            ? AppColors.success.withAlpha(18)
+            : AppColors.primary.withAlpha(20),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: preparing
+              ? AppColors.success.withAlpha(65)
+              : AppColors.primary.withAlpha(65),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  preparing
+                      ? (_automaticPreparationMessage ??
+                            'Preparando projeto...')
+                      : (_activeAiMessage ?? 'Gerando com IA...'),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: preparing
+                ? (_automaticPreparationTotal <= 0
+                      ? null
+                      : _automaticPreparationCompleted /
+                            _automaticPreparationTotal)
+                : (_activeAiProgress <= 0 ? null : _activeAiProgress / 100),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _assistantConversationBody({required Widget fallback}) {
+    final stream = _assistantStreamText?.trim() ?? '';
+    if (stream.isEmpty && _pendingChatContract != null) {
+      return _creationContractCard();
+    }
+    if (stream.isEmpty) return fallback;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          stream,
+          style: const TextStyle(
+            color: AppColors.textSecondary,
+            height: 1.55,
+            fontSize: 13,
+          ),
+        ),
+        if (_isAiBusy) ...[
+          const SizedBox(height: 10),
+          const Text(
+            'escrevendo...',
+            style: TextStyle(
+              color: AppColors.primaryLight,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _assistantUserBubble(String text) => Align(
+    alignment: Alignment.centerRight,
+    child: Container(
+      constraints: const BoxConstraints(maxWidth: 360),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D34),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(text, style: const TextStyle(height: 1.4, fontSize: 13)),
+    ),
+  );
+
+  Widget _assistantAiBubble({required Widget child}) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: AppColors.surface,
+      color: const Color(0xFF1C1E24),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.surfaceLighter),
+    ),
+    child: child,
+  );
+
+  Widget _assistantChoiceButton({
+    required String label,
+    required VoidCallback? onTap,
+  }) => SizedBox(
+    width: double.infinity,
+    child: OutlinedButton(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        foregroundColor: AppColors.textPrimary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        side: const BorderSide(color: Color(0xFF3A3D45)),
+        backgroundColor: const Color(0xFF1A1C21),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Text(label, style: const TextStyle(height: 1.35)),
+    ),
+  );
+
+  Widget _buildAssistantComposer() => Container(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1C1E24),
       borderRadius: BorderRadius.circular(18),
       border: Border.all(color: AppColors.surfaceLighter),
     ),
-    child: Row(
+    child: Column(
       children: [
-        const Icon(Icons.attach_file, color: AppColors.textTertiary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: _assistantController,
-            minLines: 1,
-            maxLines: 4,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => _submitAssistantRequest(),
-            decoration: const InputDecoration(
-              hintText: 'Peça um ajuste no roteiro...',
-              border: InputBorder.none,
-              filled: false,
+        Row(
+          children: [
+            IconButton(
+              tooltip: 'Anexar referência',
+              onPressed: () => setState(() => _studioTabIndex = 2),
+              icon: const Icon(
+                Icons.attach_file,
+                color: AppColors.textTertiary,
+              ),
             ),
-          ),
+            Expanded(
+              child: TextField(
+                controller: _assistantController,
+                enabled: !_isAnyGenerationBusy,
+                minLines: 1,
+                maxLines: 4,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _submitAssistantRequest(),
+                decoration: InputDecoration(
+                  hintText: _isChatBrief
+                      ? 'Converse sobre ideias...'
+                      : 'Peça um ajuste no roteiro...',
+                  border: InputBorder.none,
+                  filled: false,
+                ),
+              ),
+            ),
+          ],
         ),
-        IconButton.filled(
-          tooltip: 'Enviar',
-          onPressed: _submitAssistantRequest,
-          icon: const Icon(Icons.arrow_upward),
+        Row(
+          children: [
+            PopupMenuButton<String>(
+              initialValue: _assistantWriterMode,
+              onSelected: (value) =>
+                  setState(() => _assistantWriterMode = value),
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'Melhor roteirista',
+                  child: Text('Melhor roteirista'),
+                ),
+                PopupMenuItem(value: 'Rápido', child: Text('Rápido')),
+                PopupMenuItem(value: 'Revisor', child: Text('Revisor')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  children: [
+                    const Icon(Icons.auto_stories_outlined, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      _assistantWriterMode,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down, size: 18),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            IconButton.filled(
+              tooltip: 'Enviar',
+              onPressed: _isAnyGenerationBusy ? null : _submitAssistantRequest,
+              icon: _activeAiAction == 'REVISE_PROJECT'
+                  ? const SizedBox(
+                      width: 17,
+                      height: 17,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.arrow_upward),
+            ),
+          ],
         ),
       ],
     ),
@@ -772,12 +1415,16 @@ extension _AdminProductionEditorStudioExtension
 
   void _submitAssistantRequest() {
     final value = _assistantController.text.trim();
-    if (value.isEmpty) return;
+    if (value.isEmpty || _isAnyGenerationBusy) return;
     setState(() {
       _assistantRequest = value;
       _assistantController.clear();
     });
-    _showStudioMessage('Pedido anotado. Revise o roteiro antes de salvar.');
+    if (_isChatBrief) {
+      unawaited(_developSeriesFromChat(value));
+      return;
+    }
+    unawaited(_reviseProjectWithCodex('[$_assistantWriterMode] $value'));
   }
 
   void _showStudioMessage(String message) {

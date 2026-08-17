@@ -6,6 +6,14 @@ extension _AdminProductionEditorContentExtension
     final project = _project!;
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (_sectionIndex == 2) {
+          return Column(
+            children: [
+              _buildSectionBar(),
+              Expanded(child: _buildTakes()),
+            ],
+          );
+        }
         return Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
@@ -124,7 +132,12 @@ extension _AdminProductionEditorContentExtension
           );
         }),
         onChanged: (value) {
-          if (value != null) setState(() => _episodeIndex = value);
+          if (value != null) {
+            setState(() {
+              _episodeIndex = value;
+              _selectedTakeIndex = 0;
+            });
+          }
         },
       ),
     ],
@@ -259,7 +272,8 @@ extension _AdminProductionEditorContentExtension
 
   Widget _buildOverview() {
     final project = _project!;
-    final episode = _episode!;
+    final episode = _episode;
+    if (episode == null) return _buildChatBriefEmptyState();
     final bibleEntries = project.seriesBible.entries
         .where(
           (entry) =>
@@ -430,151 +444,246 @@ extension _AdminProductionEditorContentExtension
       0,
       (sum, episode) => sum + episode.durationSeconds,
     );
-    return ListView(
-      key: const PageStorageKey('production-script'),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+    final characterCount = project.references
+        .where((item) => item.category.contains('CHARACTER'))
+        .length;
+    final locationCount = project.references
+        .where(
+          (item) =>
+              item.category.contains('LOCATION') ||
+              item.category.contains('ENVIRONMENT'),
+        )
+        .length;
+    return ColoredBox(
+      color: const Color(0xFF121418),
+      child: ListView(
+        key: const PageStorageKey('production-script'),
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+        children: [
+          _buildOutlineToolbar(),
+          const SizedBox(height: 16),
+          if (project.episodes.isEmpty)
+            _buildChatBriefEmptyState()
+          else if (_showHookChain)
+            ..._buildHookChain(project)
+          else ...[
+            _buildProjectOverviewCard(
+              project,
+              totalSeconds: totalSeconds,
+              characterCount: characterCount,
+              locationCount: locationCount,
+            ),
+            const SizedBox(height: 16),
+            ...List.generate(
+              project.episodes.length,
+              (index) =>
+                  _buildOutlineEpisodeCard(project.episodes[index], index),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatBriefEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 72),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1C22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.surfaceLighter),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.auto_stories_outlined,
+            size: 52,
+            color: AppColors.textTertiary.withAlpha(160),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Ainda não há descrição do episódio',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Descreva a ideia da sua história no bate-papo à esquerda e a IA gerará o contrato e o esboço a partir do tema escolhido.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              height: 1.45,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 18),
+          OutlinedButton.icon(
+            onPressed: _addBlankEpisode,
+            icon: const Icon(Icons.add),
+            label: const Text('Criar episódio manualmente'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutlineToolbar() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        _panel(
-          title: 'Visao geral do projeto',
-          icon: Icons.auto_stories_outlined,
-          trailing: _pill(
-            _bibleText(project, 'package_status', fallback: 'DRAFT'),
-            AppColors.warning,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'LOGLINE',
-                style: TextStyle(
-                  color: AppColors.primaryLight,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                _bibleText(project, 'logline', fallback: project.description),
-                style: const TextStyle(height: 1.45),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'GRANDE EXPECTATIVA',
-                style: TextStyle(
-                  color: AppColors.primaryLight,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                _bibleText(
-                  project,
-                  'central_question',
-                  fallback: 'Defina a pergunta central da temporada.',
-                ),
-                style: const TextStyle(height: 1.45),
-              ),
-              const SizedBox(height: 15),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _pill('${project.episodes.length} episodios'),
-                  _pill(_longDuration(totalSeconds)),
-                  _pill('${project.references.length} assets'),
-                  _pill(project.genre),
-                  _pill('9:16'),
-                ],
-              ),
-            ],
-          ),
+        _outlineToolButton(
+          icon: Icons.add,
+          label: 'Adicionar episódio',
+          onTap: _addBlankEpisode,
         ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.surfaceLighter),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _scriptModeButton(
-                  label: 'Lista de episodios',
-                  icon: Icons.view_list_outlined,
-                  selected: !_showHookChain,
-                  onTap: () => setState(() => _showHookChain = false),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _scriptModeButton(
-                  label: 'Corrente de gancho',
-                  icon: Icons.account_tree_outlined,
-                  selected: _showHookChain,
-                  onTap: () => setState(() => _showHookChain = true),
-                ),
-              ),
-            ],
-          ),
+        _outlineToolButton(
+          icon: Icons.auto_awesome,
+          label: 'Esboço do AI Optimize',
+          onTap: _isAnyGenerationBusy || _isChatBrief
+              ? null
+              : _generateSeriesOutlineWithCodex,
         ),
-        const SizedBox(height: 12),
-        if (_showHookChain)
-          ..._buildHookChain(project)
-        else
-          ...List.generate(
-            project.episodes.length,
-            (index) => _buildOutlineEpisodeCard(project.episodes[index], index),
-          ),
+        _outlineToolButton(
+          icon: Icons.ios_share_outlined,
+          label: 'Exportar script e ativos',
+          onTap: _saveProject,
+        ),
+        _outlineToolButton(
+          icon: Icons.view_list_outlined,
+          label: 'Lista de cenas',
+          selected: !_showHookChain,
+          onTap: () => setState(() => _showHookChain = false),
+        ),
+        _outlineToolButton(
+          icon: Icons.account_tree_outlined,
+          label: 'Corrente de gancho',
+          selected: _showHookChain,
+          onTap: () => setState(() => _showHookChain = true),
+        ),
       ],
     );
   }
 
-  Widget _scriptModeButton({
-    required String label,
+  Widget _outlineToolButton({
     required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) => Material(
-    color: selected ? AppColors.primary.withAlpha(42) : Colors.transparent,
-    borderRadius: BorderRadius.circular(10),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: selected
-                  ? AppColors.primaryLight
-                  : AppColors.textSecondary,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: selected
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+    required String label,
+    required VoidCallback? onTap,
+    bool selected = false,
+  }) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: selected ? Colors.white : AppColors.textSecondary,
+        backgroundColor: selected ? Colors.white12 : Colors.transparent,
+        side: BorderSide(
+          color: selected ? Colors.white38 : AppColors.surfaceLighter,
         ),
       ),
-    ),
-  );
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+    );
+  }
+
+  Widget _buildProjectOverviewCard(
+    ProductionProject project, {
+    required int totalSeconds,
+    required int characterCount,
+    required int locationCount,
+  }) {
+    const purple = Color(0xFF8B7CFF);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1C22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: purple.withAlpha(160), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.auto_stories_outlined, color: purple, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'Visão geral do projeto',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'LINHA DE REGISTRO',
+            style: TextStyle(
+              color: purple,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            _bibleText(project, 'logline', fallback: project.description),
+            style: const TextStyle(height: 1.5, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'GRANDE EXPECTATIVA',
+            style: TextStyle(
+              color: purple,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            _bibleText(
+              project,
+              'central_question',
+              fallback: 'Defina a pergunta central da temporada.',
+            ),
+            style: const TextStyle(height: 1.5, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _pill('${project.episodes.length} episódios', purple),
+              _pill(_longDuration(totalSeconds)),
+              _pill('$characterCount personagens'),
+              _pill('$locationCount ambientes'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addBlankEpisode() {
+    final project = _project;
+    if (project == null) return;
+    final next = project.episodes.length + 1;
+    final episode = ProductionEpisodeItem(
+      number: next,
+      title: 'Episódio $next',
+      summary: '',
+      cliffhanger: '',
+      durationSeconds: 60,
+      takes: const [],
+    );
+    setState(() {
+      _project = project.copyWith(
+        episodes: [...project.episodes, episode],
+        targetEpisodeCount: next,
+      );
+      _episodeIndex = project.episodes.length;
+      _showHookChain = false;
+    });
+  }
 
   Widget _buildOutlineEpisodeCard(
     ProductionEpisodeItem episode,
@@ -590,16 +699,20 @@ extension _AdminProductionEditorContentExtension
     final valueShift = outlineCard['value_shift']?.toString().trim() ?? '';
     final hasDetailedScript = episodeScript.isNotEmpty && sceneCards.isNotEmpty;
     final productionReady = episode.takes.isNotEmpty;
-    final shotCount = episodeScript['shot_count'] as int? ?? 0;
     final generatingScript = _generatingScriptEpisodeNumber == episode.number;
     return Card(
-      color: AppColors.surface,
-      margin: const EdgeInsets.only(bottom: 10),
+      color: const Color(0xFF1A1C22),
+      margin: const EdgeInsets.only(bottom: 14),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         side: BorderSide(
-          color: selected ? AppColors.primary : AppColors.surfaceLighter,
+          color: hasDetailedScript
+              ? const Color(0xFF7DCE82)
+              : selected
+              ? AppColors.primary
+              : AppColors.surfaceLighter,
+          width: hasDetailedScript || selected ? 1.5 : 1,
         ),
       ),
       child: InkWell(
@@ -629,7 +742,13 @@ extension _AdminProductionEditorContentExtension
                       ),
                     ),
                   ),
-                  if (selected)
+                  if (episode.status == 'GENERATING')
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else if (selected)
                     const Icon(
                       Icons.check_circle,
                       size: 18,
@@ -655,7 +774,11 @@ extension _AdminProductionEditorContentExtension
                 const SizedBox(height: 8),
               ],
               Text(
-                episode.summary,
+                episode.summary.isNotEmpty
+                    ? episode.summary
+                    : episode.status == 'GENERATING'
+                    ? 'A IA está escrevendo este episódio...'
+                    : episode.summary,
                 maxLines: 5,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -707,60 +830,64 @@ extension _AdminProductionEditorContentExtension
                 children: [
                   _pill(_timecode(episode.durationSeconds)),
                   if (hasDetailedScript) ...[
-                    _pill('${sceneCards.length} cenas'),
-                    _pill('$shotCount shots'),
                     _pill(
-                      productionReady
-                          ? 'Produção liberada'
-                          : 'Roteiro em revisão',
-                      productionReady ? AppColors.success : AppColors.warning,
+                      'Script concluído (${sceneCards.length} batidas)',
+                      const Color(0xFF7DCE82),
+                    ),
+                    _pill(
+                      'Vídeo ${episode.takes.where((take) => take.status == 'COMPLETED').length}/${episode.takes.isEmpty ? sceneCards.length : episode.takes.length}',
                     ),
                   ] else
                     _pill('Roteiro não iniciado', AppColors.textTertiary),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: productionReady
-                    ? FilledButton.icon(
-                        onPressed: () => setState(() {
-                          _episodeIndex = episodeIndex;
-                          _episodeProductionMode = true;
-                          _sectionIndex = 2;
-                        }),
-                        icon: const Icon(Icons.movie_filter_outlined, size: 17),
-                        label: const Text('Entrar na produção de vídeo'),
-                      )
-                    : hasDetailedScript
-                    ? OutlinedButton.icon(
-                        onPressed: () => setState(() {
-                          _episodeIndex = episodeIndex;
-                          _showEpisodeScriptEditor = true;
-                        }),
-                        icon: const Icon(Icons.fact_check_outlined, size: 17),
-                        label: const Text('Ver / aprovar roteiro por cenas'),
-                      )
-                    : FilledButton.icon(
-                        onPressed: generatingScript
-                            ? null
-                            : () => _generateEpisodeScript(episodeIndex),
-                        icon: generatingScript
-                            ? const SizedBox(
-                                width: 17,
-                                height: 17,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.description_outlined, size: 17),
-                        label: Text(
-                          generatingScript
-                              ? 'Gerando roteiro detalhado...'
-                              : 'Gerar roteiro detalhado por cenas',
-                        ),
-                      ),
+                child: OutlinedButton(
+                  onPressed: generatingScript
+                      ? null
+                      : () {
+                          setState(() => _episodeIndex = episodeIndex);
+                          if (productionReady || hasDetailedScript) {
+                            setState(() => _showEpisodeScriptEditor = true);
+                          } else {
+                            _generateEpisodeScript(episodeIndex);
+                          }
+                        },
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Colors.white24),
+                    backgroundColor: Colors.white10,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    generatingScript
+                        ? 'Gerando roteiro...'
+                        : hasDetailedScript || productionReady
+                        ? 'Ver/Editar script'
+                        : 'Gerar script',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => setState(() {
+                    _episodeIndex = episodeIndex;
+                    _showEpisodeScriptEditor = false;
+                    _episodeProductionMode = true;
+                    _sectionIndex = 2;
+                  }),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  icon: const Icon(Icons.movie_filter_outlined, size: 18),
+                  label: const Text('Entre na produção de vídeo'),
+                ),
               ),
               if (selected && sceneCards.isNotEmpty) ...[
                 const Divider(height: 22),
@@ -825,103 +952,142 @@ extension _AdminProductionEditorContentExtension
   }
 
   List<Widget> _buildHookChain(ProductionProject project) {
-    final entries = _hookEntries(project);
-    return List.generate(project.episodes.length, (index) {
-      final episode = project.episodes[index];
-      final entry = entries.firstWhere(
-        (item) => item['episode'] == episode.number,
-        orElse: () => const <String, dynamic>{},
-      );
-      final opening =
-          entry['opening_pickup']?.toString() ??
-          (index == 0
-              ? 'Abrir na consequencia visivel da premissa.'
-              : 'Pagar imediatamente o gancho anterior.');
-      final unresolved =
-          (entry['unresolved_questions'] as List<dynamic>? ?? const <dynamic>[])
-              .map((item) => item.toString())
-              .where((item) => item.trim().isNotEmpty)
-              .toList();
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.surfaceLighter),
+    final episodes = project.episodes;
+    if (episodes.isEmpty) {
+      return const [
+        Text(
+          'Gere o esboço da temporada para ver a corrente de gancho.',
+          style: TextStyle(color: AppColors.textSecondary),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _hookBlock(
-              icon: Icons.bolt,
-              color: AppColors.warning,
-              eyebrow: index == project.episodes.length - 1
-                  ? 'GANCHO FINAL • FIM DA TEMPORADA'
-                  : 'GANCHO FINAL • LANCA PARA EP${episode.number + 1}',
-              title: 'EP${episode.number} • ${episode.title}',
-              body: episode.cliffhanger,
+      ];
+    }
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              'Corrente de gancho',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
             ),
-            Container(
-              height: 24,
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.arrow_downward,
-                size: 18,
-                color: AppColors.textTertiary,
+            SizedBox(height: 4),
+            Text(
+              'Veja as conexões entre episódios por gancho final → coleta de abertura → suspense não resolvido.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.4,
               ),
             ),
-            _hookBlock(
-              icon: Icons.play_circle_outline,
-              color: AppColors.success,
-              eyebrow: 'COLETA DE ABERTURA',
-              title: index == 0
-                  ? 'EP1 • Descoberta fria'
-                  : 'EP${episode.number} • Do gancho anterior',
-              body: opening,
-            ),
-            if (unresolved.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                child: Container(
-                  padding: const EdgeInsets.all(11),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(10),
+          ],
+        ),
+      ),
+      ...List.generate(episodes.length, (index) {
+        final episode = episodes[index];
+        final next = index + 1 < episodes.length ? episodes[index + 1] : null;
+        final endingEntry = _hookEntryFor(project, episode.number);
+        final nextEntry = next == null
+            ? const <String, dynamic>{}
+            : _hookEntryFor(project, next.number);
+        final endingHook =
+            endingEntry['final_hook']?.toString().trim().isNotEmpty == true
+            ? endingEntry['final_hook'].toString()
+            : episode.cliffhanger;
+        final openingPickup = nextEntry['opening_pickup']?.toString().trim();
+        final unresolved =
+            (endingEntry['unresolved_questions'] as List<dynamic>? ??
+                    const <dynamic>[])
+                .map((item) => item.toString())
+                .where((item) => item.trim().isNotEmpty)
+                .toList();
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.surfaceLighter),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _hookBlock(
+                icon: Icons.bolt,
+                color: AppColors.warning,
+                eyebrow: next == null
+                    ? 'GANCHO FINAL • FIM DA TEMPORADA'
+                    : 'GANCHO FINAL • LANÇA PARA EP${next.number}',
+                title: 'EP${episode.number} · ${episode.title}',
+                subtitle: next == null
+                    ? 'Corte da temporada'
+                    : 'Lança para o EP${next.number}',
+                body: endingHook,
+                questions: unresolved,
+              ),
+              if (next != null) ...[
+                const SizedBox(
+                  height: 24,
+                  child: Icon(
+                    Icons.arrow_downward,
+                    size: 18,
+                    color: AppColors.textTertiary,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'NAO RESOLVIDO',
-                        style: TextStyle(
-                          color: AppColors.textTertiary,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.8,
+                ),
+                _hookBlock(
+                  icon: Icons.play_circle_outline,
+                  color: AppColors.success,
+                  eyebrow: 'COLETA DE ABERTURA',
+                  title: 'EP${next.number} · ${next.title}',
+                  subtitle: 'Do gancho final do EP${episode.number}',
+                  body: (openingPickup == null || openingPickup.isEmpty)
+                      ? 'Pagar imediatamente o gancho anterior sem reiniciar a história.'
+                      : openingPickup,
+                ),
+              ],
+              if (unresolved.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  child: Container(
+                    padding: const EdgeInsets.all(11),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'NÃO RESOLVIDO',
+                          style: TextStyle(
+                            color: AppColors.textTertiary,
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 7),
-                      ...unresolved.map(
-                        (question) => Padding(
-                          padding: const EdgeInsets.only(bottom: 5),
-                          child: Text(
-                            '• $question',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 11,
-                              height: 1.35,
+                        const SizedBox(height: 7),
+                        ...unresolved.map(
+                          (question) => Padding(
+                            padding: const EdgeInsets.only(bottom: 5),
+                            child: Text(
+                              question,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                                height: 1.35,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      }),
+    ];
   }
 
   Widget _hookBlock({
@@ -930,6 +1096,8 @@ extension _AdminProductionEditorContentExtension
     required String eyebrow,
     required String title,
     required String body,
+    String? subtitle,
+    List<String> questions = const [],
   }) => Padding(
     padding: const EdgeInsets.all(14),
     child: Row(
@@ -960,6 +1128,17 @@ extension _AdminProductionEditorContentExtension
               ),
               const SizedBox(height: 4),
               Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              if (subtitle != null && subtitle.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: color.withAlpha(210),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
               const SizedBox(height: 6),
               Text(
                 body,
@@ -969,11 +1148,35 @@ extension _AdminProductionEditorContentExtension
                   height: 1.4,
                 ),
               ),
+              if (questions.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ...questions.map(
+                  (question) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      question,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ],
     ),
+  );
+
+  Map<String, dynamic> _hookEntryFor(
+    ProductionProject project,
+    int episodeNumber,
+  ) => _hookEntries(project).firstWhere(
+    (item) => (item['episode'] as num?)?.toInt() == episodeNumber,
+    orElse: () => const <String, dynamic>{},
   );
 
   List<Map<String, dynamic>> _hookEntries(ProductionProject project) =>

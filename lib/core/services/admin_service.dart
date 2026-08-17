@@ -1,7 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:dio/dio.dart';
 
 import '../network/api_client.dart';
 import '../constants/api_constants.dart';
+
+bool _readAdminBool(dynamic value, {required bool fallback}) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    switch (value.trim().toLowerCase()) {
+      case 'true':
+      case '1':
+      case 'yes':
+      case 'sim':
+        return true;
+      case 'false':
+      case '0':
+      case 'no':
+      case 'nao':
+        return false;
+    }
+  }
+  return fallback;
+}
 
 /// Admin Service for VERTIX
 /// Handles AI generation and admin operations
@@ -41,6 +64,48 @@ class AdminService {
         message: 'Erro ao iniciar geracao',
       );
     }
+  }
+
+  Future<Map<String, dynamic>> createSeries({
+    required String title,
+    String? description,
+    String? genre,
+    int totalEpisodes = 0,
+  }) async {
+    final response = await _client.post(
+      ApiConstants.adminCreateSeries,
+      data: {
+        'title': title,
+        if (description != null) 'description': description,
+        if (genre != null) 'genre': genre,
+        'totalEpisodes': totalEpisodes,
+        'status': 'DRAFT',
+        'isAiGenerated': true,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> saveSeriesProduction({
+    required int seriesId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final response = await _client.post(
+      '${ApiConstants.admin}/series/$seriesId/production',
+      data: payload,
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> ingestSeriesReference({
+    required int seriesId,
+    required Map<String, dynamic> payload,
+  }) async {
+    final response = await _client.post(
+      '${ApiConstants.admin}/series/$seriesId/references',
+      data: payload,
+    );
+    return Map<String, dynamic>.from(response.data as Map);
   }
 
   /// Get all series available to admins, including drafts.
@@ -90,9 +155,91 @@ class AdminService {
     try {
       final response = await _client.get('${ApiConstants.adminJobs}/$jobId');
       return JobResponse.fromJson(response.data);
-    } catch (e) {
-      return JobResponse(success: false, message: 'Erro ao buscar status');
+    } on DioException catch (error) {
+      return JobResponse(success: false, message: _apiErrorMessage(error));
+    } catch (error) {
+      return JobResponse(success: false, message: error.toString());
     }
+  }
+
+  /// Send an authenticated project action to the server-side Codex worker.
+  Future<GenerationJob> startCodexWorkflow({
+    required String action,
+    required Map<String, dynamic> project,
+    int? episodeNumber,
+    String? instruction,
+    String? codexThreadId,
+  }) async {
+    if (!await _client.isAuthenticated()) {
+      throw StateError('Faça login para usar a geração com Codex.');
+    }
+    try {
+      final response = await _client.post(
+        ApiConstants.adminCodexJobs,
+        data: {
+          'action': action,
+          'project': project,
+          if (episodeNumber != null) 'episodeNumber': episodeNumber,
+          if (instruction?.trim().isNotEmpty == true)
+            'instruction': instruction!.trim(),
+          if (codexThreadId?.trim().isNotEmpty == true)
+            'codexThreadId': codexThreadId!.trim(),
+        },
+      );
+      final payload = Map<String, dynamic>.from(response.data as Map);
+      if (payload['success'] != true || payload['data'] is! Map) {
+        throw StateError(
+          payload['message']?.toString() ?? 'A ação não foi aceita pelo Codex.',
+        );
+      }
+      return GenerationJob.fromJson(
+        Map<String, dynamic>.from(payload['data'] as Map),
+      );
+    } on DioException catch (error) {
+      throw StateError(_apiErrorMessage(error));
+    }
+  }
+
+  /// Poll a queued Codex job until it reaches a terminal state.
+  Future<GenerationJob> waitForGenerationJob(
+    int jobId, {
+    Duration timeout = const Duration(minutes: 20),
+    Duration pollInterval = const Duration(milliseconds: 1400),
+    void Function(GenerationJob job)? onProgress,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final response = await getJobStatus(jobId);
+      final job = response.data;
+      if (!response.success || job == null) {
+        throw StateError(
+          response.message ?? 'Não foi possível consultar o job.',
+        );
+      }
+      onProgress?.call(job);
+      if (job.isCompleted) return job;
+      if (job.isFailed) {
+        throw StateError(job.errorMessage ?? 'A geração falhou no servidor.');
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+    throw TimeoutException(
+      'A geração ainda não terminou. Consulte o job $jobId.',
+    );
+  }
+
+  String _apiErrorMessage(DioException error) {
+    final data = error.response?.data;
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    if (error.response?.statusCode == 401) {
+      return 'Sua sessão expirou. Faça login novamente.';
+    }
+    if (error.response?.statusCode == 403) {
+      return 'A geração com Codex exige uma conta administradora.';
+    }
+    return error.message ?? 'Falha de comunicação com o servidor.';
   }
 
   /// Get full production data for an admin series.
@@ -181,7 +328,7 @@ class AdminSeriesSummary {
       thumbnailUrl: json['thumbnailUrl'] as String?,
       genre: json['genre'] as String? ?? 'N/A',
       status: json['status'] as String? ?? 'DRAFT',
-      isAiGenerated: json['isAiGenerated'] as bool? ?? false,
+      isAiGenerated: _readAdminBool(json['isAiGenerated'], fallback: false),
       totalEpisodes: json['totalEpisodes'] as int? ?? 0,
       episodeCount: count['episodes'] as int? ?? 0,
       referenceCount: count['referenceAssets'] as int? ?? 0,
@@ -230,7 +377,7 @@ class AdminSeriesListResponse {
 
   factory AdminSeriesListResponse.fromJson(Map<String, dynamic> json) {
     return AdminSeriesListResponse(
-      success: json['success'] as bool? ?? false,
+      success: _readAdminBool(json['success'], fallback: false),
       data:
           (json['data'] as List<dynamic>?)
               ?.map(
@@ -255,7 +402,7 @@ class AdminSeriesProductionResponse {
 
   factory AdminSeriesProductionResponse.fromJson(Map<String, dynamic> json) {
     return AdminSeriesProductionResponse(
-      success: json['success'] as bool? ?? false,
+      success: _readAdminBool(json['success'], fallback: false),
       data: json['data'] != null
           ? AdminSeriesProductionPlan.fromJson(
               json['data'] as Map<String, dynamic>,
@@ -611,7 +758,7 @@ class GenerationResponse {
   factory GenerationResponse.fromJson(Map<String, dynamic> json) {
     final jobJson = json['job'] ?? json['data'];
     return GenerationResponse(
-      success: json['success'] as bool,
+      success: _readAdminBool(json['success'], fallback: false),
       job: jobJson is Map<String, dynamic> && jobJson.containsKey('id')
           ? GenerationJob.fromJson(jobJson)
           : null,
@@ -629,7 +776,7 @@ class JobListResponse {
 
   factory JobListResponse.fromJson(Map<String, dynamic> json) {
     return JobListResponse(
-      success: json['success'] as bool,
+      success: _readAdminBool(json['success'], fallback: false),
       data:
           (json['data'] as List<dynamic>?)
               ?.map((e) => GenerationJob.fromJson(e as Map<String, dynamic>))
@@ -649,7 +796,7 @@ class JobResponse {
 
   factory JobResponse.fromJson(Map<String, dynamic> json) {
     return JobResponse(
-      success: json['success'] as bool,
+      success: _readAdminBool(json['success'], fallback: false),
       data: json['data'] != null
           ? GenerationJob.fromJson(json['data'] as Map<String, dynamic>)
           : null,
@@ -678,7 +825,7 @@ class AnalyticsResponse {
 
   factory AnalyticsResponse.fromJson(Map<String, dynamic> json) {
     return AnalyticsResponse(
-      success: json['success'] as bool,
+      success: _readAdminBool(json['success'], fallback: false),
       totalSeries: json['totalSeries'] as int?,
       totalEpisodes: json['totalEpisodes'] as int?,
       totalUsers: json['totalUsers'] as int?,

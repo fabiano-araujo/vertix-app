@@ -232,6 +232,8 @@ class ProductionTakeItem {
       );
 
   ProductionTakeItem copyWith({
+    String? id,
+    int? number,
     String? title,
     int? durationSeconds,
     String? status,
@@ -248,8 +250,8 @@ class ProductionTakeItem {
     String? lastFrameLabel,
     String? notes,
   }) => ProductionTakeItem(
-    id: id,
-    number: number,
+    id: id ?? this.id,
+    number: number ?? this.number,
     title: title ?? this.title,
     durationSeconds: durationSeconds ?? this.durationSeconds,
     status: status ?? this.status,
@@ -545,6 +547,7 @@ class MicroDramaProjectConfig {
   final int episodeDurationSeconds;
   final int maxShotDurationSeconds;
   final bool automaticReview;
+  final bool automaticPreparation;
 
   const MicroDramaProjectConfig({
     required this.title,
@@ -564,10 +567,56 @@ class MicroDramaProjectConfig {
     required this.episodeDurationSeconds,
     this.maxShotDurationSeconds = 10,
     this.automaticReview = true,
+    this.automaticPreparation = false,
   });
 
   String get distributionProfile =>
       episodeCount >= 50 ? 'app_native' : 'validation_pilot';
+
+  bool get isSingleEpisode => episodeCount <= 1;
+
+  MicroDramaProjectConfig copyWith({
+    String? title,
+    String? logline,
+    String? centralQuestion,
+    String? protagonist,
+    String? opposingForce,
+    String? stakes,
+    String? genre,
+    String? background,
+    String? trope,
+    String? visualStyle,
+    String? language,
+    String? rating,
+    int? episodeCount,
+    int? firstEpisodeDurationSeconds,
+    int? episodeDurationSeconds,
+    int? maxShotDurationSeconds,
+    bool? automaticReview,
+    bool? automaticPreparation,
+  }) => MicroDramaProjectConfig(
+    title: title ?? this.title,
+    logline: logline ?? this.logline,
+    centralQuestion: centralQuestion ?? this.centralQuestion,
+    protagonist: protagonist ?? this.protagonist,
+    opposingForce: opposingForce ?? this.opposingForce,
+    stakes: stakes ?? this.stakes,
+    genre: genre ?? this.genre,
+    background: background ?? this.background,
+    trope: trope ?? this.trope,
+    visualStyle: visualStyle ?? this.visualStyle,
+    language: language ?? this.language,
+    rating: rating ?? this.rating,
+    episodeCount: episodeCount ?? this.episodeCount,
+    firstEpisodeDurationSeconds:
+        firstEpisodeDurationSeconds ?? this.firstEpisodeDurationSeconds,
+    episodeDurationSeconds:
+        episodeDurationSeconds ?? this.episodeDurationSeconds,
+    maxShotDurationSeconds:
+        maxShotDurationSeconds ?? this.maxShotDurationSeconds,
+    automaticReview: automaticReview ?? this.automaticReview,
+    automaticPreparation: automaticPreparation ?? this.automaticPreparation,
+  );
 }
 
 class _MicroDramaStylePreset {
@@ -1035,6 +1084,185 @@ class LocalProductionWorkspaceService {
     return project;
   }
 
+  Future<ProductionProject> createMicroDramaChatDraft() async {
+    final projects = (await getProjects()).toList();
+    final minId = projects.fold<int>(
+      -1000,
+      (value, item) => item.virtualId < value ? item.virtualId : value,
+    );
+    final now = DateTime.now();
+    final project = ProductionProject(
+      id: 'microdrama-chat-${now.millisecondsSinceEpoch}',
+      virtualId: minId - 1,
+      title: 'Novo microdrama',
+      description: 'Descreva a ideia no chat para gerar o contrato e o esboço.',
+      genre: 'Romance com reviravolta',
+      formatFamily: 'micro_drama_vertical',
+      status: 'DRAFT',
+      sourcePath: 'Workspace local / Microdrama / Novo microdrama',
+      targetEpisodeCount: 8,
+      isLocal: true,
+      updatedAt: now,
+      seriesBible: {
+        'creation_stage': 'chat_brief',
+        'creation_workflow': 'chat_first_v1',
+        'creation_style_family': 'live_action',
+        'package_status': 'AWAITING_CHAT_BRIEF',
+        'distribution_profile': 'validation_pilot',
+        'aspect_ratio': '9:16',
+        'language': 'Português (Brasil)',
+        'rating': '14 anos',
+        'visual_style': 'Microdrama moderno',
+        'style_preset_id': 'live_action_modern_microdrama_v1',
+        'style_preset_media_category': 'live_action',
+        'genre': 'Romance com reviravolta',
+        'background': 'Cidade moderna',
+        'trope': 'Segunda chance',
+        'max_shot_duration_seconds': 10,
+        'first_episode_duration_seconds': 120,
+        'episode_duration_seconds': 60,
+        'automatic_review': true,
+        'automatic_preparation_requested': false,
+        'automatic_preparation_status': 'MANUAL',
+        'workflow': {
+          'settings': 'DRAFT',
+          'series_contract': 'NOT_STARTED',
+          'outline': 'NOT_STARTED',
+          'characters': 'NOT_STARTED',
+          'environments': 'NOT_STARTED',
+          'props': 'NOT_STARTED',
+          'scripts': 'NOT_STARTED',
+          'production': 'BLOCKED_BY_SCRIPT',
+        },
+      },
+      episodes: const [],
+      references: const [],
+    );
+    projects.insert(0, project);
+    _cache = projects;
+    await _persistLocalProjects();
+    return project;
+  }
+
+  ProductionProject applyMicroDramaConfig(
+    ProductionProject project,
+    MicroDramaProjectConfig config, {
+    String? creationIdea,
+  }) {
+    final built = _buildMicroDramaProject(
+      config,
+      id: project.id,
+      virtualId: project.virtualId,
+      updatedAt: DateTime.now(),
+    );
+    return built.copyWith(
+      coverAssetPath: project.coverAssetPath,
+      coverUrl: project.coverUrl,
+      seriesBible: {
+        ...built.seriesBible,
+        'creation_stage': 'outline_ready',
+        if (creationIdea != null && creationIdea.trim().isNotEmpty)
+          'creation_idea': creationIdea.trim(),
+        if (project.seriesBible['codex_thread_id'] != null)
+          'codex_thread_id': project.seriesBible['codex_thread_id'],
+        'creation_style_family':
+            project.seriesBible['creation_style_family'] ??
+            (config.visualStyle == 'Animação cinematográfica'
+                ? 'animation'
+                : 'live_action'),
+      },
+    );
+  }
+
+  ProductionProject patchMicroDramaChatBrief(
+    ProductionProject project, {
+    String? title,
+    String? genre,
+    String? background,
+    String? trope,
+    String? visualStyle,
+    String? language,
+    String? rating,
+    String? styleFamily,
+    int? episodeCount,
+    int? firstEpisodeDurationSeconds,
+    int? episodeDurationSeconds,
+    int? maxShotDurationSeconds,
+    bool? automaticReview,
+    bool? automaticPreparation,
+  }) {
+    final bible = Map<String, dynamic>.from(project.seriesBible);
+    if (genre != null) bible['genre'] = genre;
+    if (background != null) bible['background'] = background;
+    if (trope != null) bible['trope'] = trope;
+    if (visualStyle != null) {
+      bible['visual_style'] = visualStyle;
+      bible['style_preset_id'] = _microDramaStylePreset(visualStyle).id;
+      bible['style_preset_media_category'] = _microDramaStylePreset(
+        visualStyle,
+      ).mediaCategory;
+    }
+    if (language != null) bible['language'] = language;
+    if (rating != null) bible['rating'] = rating;
+    if (styleFamily != null) bible['creation_style_family'] = styleFamily;
+    if (maxShotDurationSeconds != null) {
+      bible['max_shot_duration_seconds'] = maxShotDurationSeconds;
+    }
+    if (firstEpisodeDurationSeconds != null) {
+      bible['first_episode_duration_seconds'] = firstEpisodeDurationSeconds;
+    }
+    if (episodeDurationSeconds != null) {
+      bible['episode_duration_seconds'] = episodeDurationSeconds;
+    }
+    if (automaticReview != null) bible['automatic_review'] = automaticReview;
+    if (automaticPreparation != null) {
+      bible['automatic_preparation_requested'] = automaticPreparation;
+      bible['automatic_preparation_status'] = automaticPreparation
+          ? 'QUEUED'
+          : 'MANUAL';
+    }
+    return project.copyWith(
+      title: title ?? project.title,
+      genre: genre ?? project.genre,
+      targetEpisodeCount: episodeCount ?? project.targetEpisodeCount,
+      updatedAt: DateTime.now(),
+      seriesBible: bible,
+    );
+  }
+
+  static bool isMicroDramaChatBrief(ProductionProject project) {
+    if (project.formatFamily != 'micro_drama_vertical') return false;
+    final stage = project.seriesBible['creation_stage']?.toString();
+    return stage == 'chat_brief' || project.episodes.isEmpty;
+  }
+
+  @visibleForTesting
+  ProductionProject buildMicroDramaChatDraftForTesting() => ProductionProject(
+    id: 'microdrama-chat-test',
+    virtualId: -9002,
+    title: 'Novo microdrama',
+    description: 'Descreva a ideia no chat para gerar o contrato e o esboço.',
+    genre: 'Romance com reviravolta',
+    formatFamily: 'micro_drama_vertical',
+    status: 'DRAFT',
+    sourcePath: 'Workspace local / Microdrama / Novo microdrama',
+    targetEpisodeCount: 8,
+    isLocal: true,
+    updatedAt: DateTime(2026, 8, 17),
+    seriesBible: const {
+      'creation_stage': 'chat_brief',
+      'visual_style': 'Microdrama moderno',
+      'genre': 'Romance com reviravolta',
+      'background': 'Cidade moderna',
+      'trope': 'Segunda chance',
+      'language': 'Português (Brasil)',
+      'rating': '14 anos',
+      'automatic_preparation_requested': false,
+    },
+    episodes: const [],
+    references: const [],
+  );
+
   @visibleForTesting
   ProductionProject buildMicroDramaProjectForTesting(
     MicroDramaProjectConfig config,
@@ -1196,6 +1424,596 @@ class LocalProductionWorkspaceService {
         },
       },
     );
+  }
+
+  /// Applies the compact result returned by the server-side Codex outline job.
+  /// Existing locked/production-ready episodes and generated images are preserved.
+  ProductionProject applyCodexSeriesOutline(
+    ProductionProject project,
+    Map<String, dynamic> output, {
+    bool allowPartial = false,
+  }) {
+    final result = _codexResult(output);
+    final biblePatch = Map<String, dynamic>.from(
+      result['seriesBiblePatch'] as Map? ?? const {},
+    );
+    final generatedEpisodes = (result['episodes'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    if (generatedEpisodes.isEmpty && !allowPartial) {
+      throw StateError('O Codex não retornou o esboço dos episódios.');
+    }
+
+    final existingByNumber = {
+      for (final episode in project.episodes) episode.number: episode,
+    };
+    var episodes = generatedEpisodes
+        .where((item) => ((item['number'] as num?)?.toInt() ?? 0) > 0)
+        .map((item) {
+      final number = (item['number'] as num?)?.toInt() ?? 0;
+      if (number <= 0) throw StateError('Número de episódio inválido.');
+      final existing = existingByNumber[number];
+      if (existing != null &&
+          (existing.takes.isNotEmpty ||
+              existing.status.contains('PRODUCTION') ||
+              existing.status.contains('LOCKED'))) {
+        return existing;
+      }
+      return ProductionEpisodeItem(
+        number: number,
+        title: item['title']?.toString().trim().isNotEmpty == true
+            ? item['title'].toString().trim()
+            : existing?.title ?? 'Episódio $number',
+        summary: item['summary']?.toString() ?? existing?.summary ?? '',
+        cliffhanger:
+            item['cliffhanger']?.toString() ?? existing?.cliffhanger ?? '',
+        durationSeconds:
+            (item['durationSeconds'] as num?)?.toInt() ??
+            existing?.durationSeconds ??
+            60,
+        status: 'OUTLINE_REVIEW_REQUIRED',
+        takes: const [],
+        externalMusic: existing?.externalMusic ?? true,
+        musicProvider: existing?.musicProvider ?? 'API externa',
+        musicPrompt: existing?.musicPrompt ?? '',
+        musicStatus: existing?.musicStatus ?? 'DRAFT',
+        musicVolume: existing?.musicVolume ?? 0.36,
+        dialogueVolume: existing?.dialogueVolume ?? 0.9,
+        ambienceVolume: existing?.ambienceVolume ?? 0.48,
+      );
+    }).toList()..sort((a, b) => a.number.compareTo(b.number));
+
+    if (allowPartial) {
+      final firstDuration =
+          (project.seriesBible['first_episode_duration_seconds'] as num?)
+              ?.toInt() ??
+          120;
+      final otherDuration =
+          (project.seriesBible['episode_duration_seconds'] as num?)?.toInt() ??
+          60;
+      final byNumber = {for (final episode in episodes) episode.number: episode};
+      for (var number = 1; number <= project.targetEpisodeCount; number++) {
+        if (byNumber.containsKey(number)) continue;
+        final existing = existingByNumber[number];
+        if (existing != null &&
+            (existing.takes.isNotEmpty ||
+                existing.status.contains('PRODUCTION') ||
+                existing.status.contains('LOCKED'))) {
+          byNumber[number] = existing;
+          continue;
+        }
+        byNumber[number] = ProductionEpisodeItem(
+          number: number,
+          title: existing?.title ?? 'Gerando episódio $number...',
+          summary: existing?.summary ?? '',
+          cliffhanger: existing?.cliffhanger ?? '',
+          durationSeconds:
+              existing?.durationSeconds ??
+              (number == 1 ? firstDuration : otherDuration),
+          status: 'GENERATING',
+          takes: const [],
+          externalMusic: existing?.externalMusic ?? true,
+          musicProvider: existing?.musicProvider ?? 'API externa',
+          musicPrompt: existing?.musicPrompt ?? '',
+          musicStatus: existing?.musicStatus ?? 'DRAFT',
+          musicVolume: existing?.musicVolume ?? 0.36,
+          dialogueVolume: existing?.dialogueVolume ?? 0.9,
+          ambienceVolume: existing?.ambienceVolume ?? 0.48,
+        );
+      }
+      episodes = byNumber.values.toList()
+        ..sort((a, b) => a.number.compareTo(b.number));
+    } else if (episodes.length != project.targetEpisodeCount) {
+      throw StateError(
+        'O Codex retornou ${episodes.length} episódios; o projeto exige ${project.targetEpisodeCount}.',
+      );
+    }
+
+    final generatedReferences =
+        (result['references'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => ProductionReferenceItem.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
+            .where((item) => item.id.isNotEmpty)
+            .toList();
+    final referencesById = {
+      for (final reference in generatedReferences) reference.id: reference,
+    };
+    for (final existing in project.references) {
+      final generated = referencesById[existing.id];
+      if (generated == null) {
+        referencesById[existing.id] = existing;
+      } else if (existing.publicUrl?.isNotEmpty == true ||
+          existing.assetPath?.isNotEmpty == true) {
+        referencesById[existing.id] = ProductionReferenceItem(
+          id: existing.id,
+          label: generated.label,
+          category: generated.category,
+          assetPath: existing.assetPath,
+          publicUrl: existing.publicUrl,
+          description: generated.description,
+          canonical: existing.canonical || generated.canonical,
+          metadata: {...existing.metadata, ...generated.metadata},
+        );
+      }
+    }
+
+    final generatedHookChain =
+        (biblePatch['hook_chain'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final mergedBible = <String, dynamic>{
+      ...project.seriesBible,
+      ...biblePatch,
+      'creation_stage': 'outline_ready',
+      'creation_workflow': 'openrouter_outline_first_v1',
+      'workflow': {
+        ...Map<String, dynamic>.from(
+          project.seriesBible['workflow'] as Map? ?? const {},
+        ),
+        'outline': 'CODEX_DRAFT_REVIEW_REQUIRED',
+        'scripts': 'NOT_STARTED',
+        'production': 'BLOCKED_BY_SCRIPT_APPROVAL',
+      },
+      if (_codexThreadId(output) != null)
+        'codex_thread_id': _codexThreadId(output),
+      'codex_outline_summary': output['summary'],
+    };
+    mergedBible['hook_chain'] = _syncMicroDramaHookChain(
+      episodes: episodes,
+      generated: generatedHookChain,
+      logline: mergedBible['logline']?.toString() ?? project.description,
+      protagonist: mergedBible['protagonist']?.toString() ?? 'o protagonista',
+      opposingForce:
+          mergedBible['opposing_force']?.toString() ?? 'a força oposta',
+      centralQuestion: mergedBible['central_question']?.toString() ?? '',
+      language: mergedBible['language']?.toString() ?? 'Português (Brasil)',
+    );
+
+    final generatedTitle = [
+      result['title'],
+      biblePatch['title'],
+    ]
+        .map((value) => value?.toString().trim() ?? '')
+        .firstWhere((value) => value.isNotEmpty, orElse: () => '');
+    if (generatedTitle.isNotEmpty) {
+      mergedBible['title'] = generatedTitle;
+    }
+
+    return project.copyWith(
+      title: generatedTitle.isNotEmpty ? generatedTitle : project.title,
+      description: biblePatch['logline']?.toString() ?? project.description,
+      updatedAt: DateTime.now(),
+      episodes: episodes,
+      references: referencesById.values.toList(),
+      seriesBible: mergedBible,
+    );
+  }
+
+  /// Applies one detailed episode script returned by Codex after validating all
+  /// row, shot, and episode duration sums.
+  ProductionProject applyCodexEpisodeScript(
+    ProductionProject project,
+    Map<String, dynamic> output, {
+    required int episodeNumber,
+  }) {
+    final result = _codexResult(output);
+    final script = Map<String, dynamic>.from(
+      result['episodeScript'] as Map? ?? const {},
+    );
+    if (script.isEmpty ||
+        (script['episode'] as num?)?.toInt() != episodeNumber) {
+      throw StateError('O Codex não retornou o roteiro do EP$episodeNumber.');
+    }
+    _validateCodexEpisodeScript(project, script, episodeNumber);
+
+    final episodeIndex = project.episodes.indexWhere(
+      (episode) => episode.number == episodeNumber,
+    );
+    if (episodeIndex < 0) throw StateError('Episódio não encontrado.');
+    final episodePatch = Map<String, dynamic>.from(
+      result['episode'] as Map? ?? const {},
+    );
+    final currentEpisode = project.episodes[episodeIndex];
+    final episodes = project.episodes.toList();
+    episodes[episodeIndex] = currentEpisode.copyWith(
+      title: episodePatch['title']?.toString() ?? currentEpisode.title,
+      summary: episodePatch['summary']?.toString() ?? currentEpisode.summary,
+      cliffhanger:
+          episodePatch['cliffhanger']?.toString() ?? currentEpisode.cliffhanger,
+      status: 'SCRIPT_DRAFT_REVIEW_REQUIRED',
+      takes: const [],
+    );
+
+    final scripts =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) => (item['episode'] as num?)?.toInt() != episodeNumber,
+            )
+            .toList()
+          ..add(script);
+    scripts.sort(
+      (a, b) => ((a['episode'] as num?)?.toInt() ?? 0).compareTo(
+        (b['episode'] as num?)?.toInt() ?? 0,
+      ),
+    );
+    final scenes =
+        (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) => (item['episode'] as num?)?.toInt() != episodeNumber,
+            )
+            .toList()
+          ..addAll(
+            (script['scenes'] as List<dynamic>? ?? const [])
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item)),
+          );
+    final episodeCards =
+        (project.seriesBible['episode_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .map(
+              (item) => (item['episode'] as num?)?.toInt() == episodeNumber
+                  ? {
+                      ...item,
+                      'script_status': 'DRAFT_REVIEW_REQUIRED',
+                      'production_status': 'BLOCKED_BY_SCRIPT_APPROVAL',
+                    }
+                  : item,
+            )
+            .toList();
+
+    return project.copyWith(
+      updatedAt: DateTime.now(),
+      episodes: episodes,
+      seriesBible: {
+        ...project.seriesBible,
+        'episode_cards': episodeCards,
+        'episode_scripts': scripts,
+        'scene_cards': scenes,
+        'workflow': {
+          ...Map<String, dynamic>.from(
+            project.seriesBible['workflow'] as Map? ?? const {},
+          ),
+          'scripts': 'PARTIAL_CODEX_SCRIPT_DRAFTS_CREATED',
+          'production': 'BLOCKED_BY_SCRIPT_APPROVAL',
+        },
+        if (_codexThreadId(output) != null)
+          'codex_thread_id': _codexThreadId(output),
+        'codex_script_summary_ep$episodeNumber': output['summary'],
+      },
+    );
+  }
+
+  /// Locks the approved script using the existing deterministic workflow, then
+  /// replaces only the dynamic prompt cores with Codex output. Fixed style and
+  /// negative locks remain compiled by app code.
+  ProductionProject applyCodexProductionScenes(
+    ProductionProject project,
+    Map<String, dynamic> output, {
+    required int episodeNumber,
+  }) {
+    final locked = approveMicroDramaEpisodeScriptForProduction(
+      project,
+      episodeNumber: episodeNumber,
+    );
+    final result = _codexResult(output);
+    final generatedTakes = (result['takes'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final episodeIndex = locked.episodes.indexWhere(
+      (episode) => episode.number == episodeNumber,
+    );
+    final episode = locked.episodes[episodeIndex];
+    if (generatedTakes.length != episode.takes.length) {
+      throw StateError(
+        'O Codex retornou ${generatedTakes.length} takes; o roteiro bloqueado exige ${episode.takes.length}.',
+      );
+    }
+    final generatedByNumber = {
+      for (final item in generatedTakes)
+        (item['number'] as num?)?.toInt() ?? -1: item,
+    };
+    final config = _microDramaConfigFromProject(locked);
+    final fixedSuffix = _microDramaStylePreset(
+      config.visualStyle,
+    ).compiledSuffix;
+    final takes = episode.takes.map((base) {
+      final generated = generatedByNumber[base.number];
+      if (generated == null) {
+        throw StateError('Take ${base.number} ausente no retorno do Codex.');
+      }
+      final core = generated['aiShortCore']?.toString().trim() ?? '';
+      if (core.isEmpty) {
+        throw StateError('Take ${base.number} sem descrição de produção.');
+      }
+      return base.copyWith(
+        title: generated['title']?.toString() ?? base.title,
+        durationSeconds: base.durationSeconds,
+        aiShortCore: core,
+        visualPrompt: '$core\n\n$fixedSuffix',
+        audioPrompt: generated['audioPrompt']?.toString() ?? base.audioPrompt,
+        transitionMode:
+            generated['transitionMode']?.toString() ?? base.transitionMode,
+        usePreviousLastFrame: _readBool(
+          generated['usePreviousLastFrame'],
+          fallback: base.usePreviousLastFrame,
+        ),
+        generateSeedanceAudio: _readBool(
+          generated['generateSeedanceAudio'],
+          fallback: base.generateSeedanceAudio,
+        ),
+        referenceIds:
+            (generated['referenceIds'] as List<dynamic>? ?? base.referenceIds)
+                .map((item) => item.toString())
+                .toList(),
+        notes: generated['notes']?.toString() ?? base.notes,
+      );
+    }).toList();
+    final episodes = locked.episodes.toList();
+    episodes[episodeIndex] = episode.copyWith(takes: takes);
+
+    final packages =
+        (locked.seriesBible['production_prompt_packages'] as List<dynamic>? ??
+                const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .map(
+              (item) => (item['episode'] as num?)?.toInt() == episodeNumber
+                  ? {
+                      ...item,
+                      ...Map<String, dynamic>.from(
+                        result['productionPackage'] as Map? ?? const {},
+                      ),
+                      'episode': episodeNumber,
+                      'style_decoration': 'CODE_OWNED_FIXED_PRESET',
+                    }
+                  : item,
+            )
+            .toList();
+    return locked.copyWith(
+      updatedAt: DateTime.now(),
+      episodes: episodes,
+      seriesBible: {
+        ...locked.seriesBible,
+        'production_prompt_packages': packages,
+        if (_codexThreadId(output) != null)
+          'codex_thread_id': _codexThreadId(output),
+        'codex_production_summary_ep$episodeNumber': output['summary'],
+      },
+    );
+  }
+
+  ProductionProject applyGeneratedReferenceImage(
+    ProductionProject project,
+    Map<String, dynamic> output,
+  ) {
+    final result = _codexResult(output);
+    final raw = Map<String, dynamic>.from(
+      result['reference'] as Map? ?? const {},
+    );
+    if (raw['id'] == null || raw['publicUrl'] == null) {
+      throw StateError('O servidor não retornou a imagem gerada.');
+    }
+    final generated = ProductionReferenceItem.fromJson(raw);
+    final references = project.references.toList();
+    final index = references.indexWhere((item) => item.id == generated.id);
+    if (index >= 0) {
+      final existing = references[index];
+      references[index] = ProductionReferenceItem(
+        id: existing.id,
+        label: generated.label.isNotEmpty ? generated.label : existing.label,
+        category: generated.category.isNotEmpty
+            ? generated.category
+            : existing.category,
+        assetPath: existing.assetPath,
+        publicUrl: generated.publicUrl,
+        description: generated.description.isNotEmpty
+            ? generated.description
+            : existing.description,
+        canonical: generated.canonical || existing.canonical,
+        metadata: {...existing.metadata, ...generated.metadata},
+      );
+    } else {
+      references.add(generated);
+    }
+    return project.copyWith(
+      updatedAt: DateTime.now(),
+      references: references,
+      seriesBible: {
+        ...project.seriesBible,
+        'last_image_provider': 'gpt-image-2',
+      },
+    );
+  }
+
+  List<ProductionReferenceItem> automaticReferenceTargets(
+    ProductionProject project, {
+    bool regenerateExisting = false,
+  }) {
+    return project.references.where((reference) {
+      final category = reference.category.toUpperCase();
+      final isStoryMaster =
+          category.contains('CHARACTER') ||
+          category.contains('OPPOSING_FORCE') ||
+          category.contains('LOCATION') ||
+          category.contains('ENVIRONMENT') ||
+          category.contains('WORLD') ||
+          category.contains('PROP') ||
+          category.contains('OBJECT');
+      if (!reference.canonical || !isStoryMaster) return false;
+      if (regenerateExisting) return true;
+      final hasAsset = reference.assetPath?.trim().isNotEmpty == true;
+      final hasPublicImage = reference.publicUrl?.trim().isNotEmpty == true;
+      return !hasAsset && !hasPublicImage;
+    }).toList();
+  }
+
+  ProductionProject applyCodexProjectRevision(
+    ProductionProject project,
+    Map<String, dynamic> output,
+  ) {
+    final result = _codexResult(output);
+    final patch = Map<String, dynamic>.from(
+      result['projectPatch'] as Map? ?? const {},
+    );
+    final biblePatch = Map<String, dynamic>.from(
+      patch['seriesBiblePatch'] as Map? ?? const {},
+    );
+    final episodesByNumber = {
+      for (final episode in project.episodes) episode.number: episode,
+    };
+    for (final raw
+        in (patch['episodes'] as List<dynamic>? ?? const []).whereType<Map>()) {
+      final item = Map<String, dynamic>.from(raw);
+      final number = (item['number'] as num?)?.toInt();
+      final existing = number == null ? null : episodesByNumber[number];
+      if (existing == null ||
+          existing.takes.isNotEmpty ||
+          existing.status.contains('LOCKED')) {
+        continue;
+      }
+      episodesByNumber[number!] = existing.copyWith(
+        title: item['title']?.toString() ?? existing.title,
+        summary: item['summary']?.toString() ?? existing.summary,
+        cliffhanger: item['cliffhanger']?.toString() ?? existing.cliffhanger,
+      );
+    }
+    final referencesById = {
+      for (final reference in project.references) reference.id: reference,
+    };
+    for (final raw
+        in (patch['references'] as List<dynamic>? ?? const [])
+            .whereType<Map>()) {
+      final generated = ProductionReferenceItem.fromJson(
+        Map<String, dynamic>.from(raw),
+      );
+      if (generated.id.isEmpty) continue;
+      final existing = referencesById[generated.id];
+      referencesById[generated.id] = existing == null
+          ? generated
+          : ProductionReferenceItem(
+              id: existing.id,
+              label: generated.label,
+              category: generated.category,
+              assetPath: existing.assetPath,
+              publicUrl: existing.publicUrl,
+              description: generated.description,
+              canonical: existing.canonical || generated.canonical,
+              metadata: {...existing.metadata, ...generated.metadata},
+            );
+    }
+    final episodes = episodesByNumber.values.toList()
+      ..sort((a, b) => a.number.compareTo(b.number));
+    return project.copyWith(
+      description: patch['description']?.toString() ?? project.description,
+      updatedAt: DateTime.now(),
+      episodes: episodes,
+      references: referencesById.values.toList(),
+      seriesBible: {
+        ...project.seriesBible,
+        ...biblePatch,
+        if (_codexThreadId(output) != null)
+          'codex_thread_id': _codexThreadId(output),
+        'codex_revision_summary': output['summary'],
+      },
+    );
+  }
+
+  static Map<String, dynamic> _codexResult(Map<String, dynamic> output) {
+    final result = output['result'];
+    if (result is Map<String, dynamic>) return result;
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Resultado estruturado da IA ausente.');
+  }
+
+  static String? _codexThreadId(Map<String, dynamic> output) {
+    final value = output['codexThreadId']?.toString().trim();
+    return value?.isNotEmpty == true ? value : null;
+  }
+
+  static void _validateCodexEpisodeScript(
+    ProductionProject project,
+    Map<String, dynamic> script,
+    int episodeNumber,
+  ) {
+    final episode = project.episodes.firstWhere(
+      (item) => item.number == episodeNumber,
+    );
+    final maxDuration =
+        (script['max_shot_duration_seconds'] as num?)?.toInt() ??
+        (project.seriesBible['config'] as Map?)?['max_shot_duration_seconds']
+            as int? ??
+        10;
+    var total = 0;
+    var expectedShot = 1;
+    final scenes = (script['scenes'] as List<dynamic>? ?? const [])
+        .whereType<Map>();
+    if (scenes.isEmpty) throw StateError('O roteiro não contém cenas.');
+    for (final scene in scenes) {
+      for (final shot
+          in (scene['shots'] as List<dynamic>? ?? const []).whereType<Map>()) {
+        final number = (shot['number'] as num?)?.toInt() ?? -1;
+        final duration = (shot['duration_seconds'] as num?)?.toInt() ?? 0;
+        if (number != expectedShot) {
+          throw StateError('A numeração dos shots não é contínua.');
+        }
+        if (duration < 1 || duration > maxDuration) {
+          throw StateError(
+            'Shot $number possui ${duration}s; o limite é ${maxDuration}s.',
+          );
+        }
+        final rowTotal = (shot['rows'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .fold<int>(
+              0,
+              (sum, row) =>
+                  sum + ((row['duration_seconds'] as num?)?.toInt() ?? 0),
+            );
+        if (rowTotal != duration) {
+          throw StateError(
+            'As falas e ações do shot $number somam ${rowTotal}s, mas o shot tem ${duration}s.',
+          );
+        }
+        total += duration;
+        expectedShot += 1;
+      }
+    }
+    if (total != episode.durationSeconds) {
+      throw StateError(
+        'O roteiro soma ${total}s; o EP$episodeNumber exige ${episode.durationSeconds}s.',
+      );
+    }
   }
 
   @visibleForTesting
@@ -1366,7 +2184,6 @@ class LocalProductionWorkspaceService {
     final creativePackage = _buildMicroDramaCreativePackage(config, id);
     final episodes = <ProductionEpisodeItem>[];
     final episodeCards = <Map<String, dynamic>>[];
-    final hookChain = <Map<String, dynamic>>[];
     final pressureLedger = <Map<String, dynamic>>[];
     var previousHook =
         'Uma consequência visível torna a premissa impossível de ignorar.';
@@ -1377,9 +2194,12 @@ class LocalProductionWorkspaceService {
           ? config.firstEpisodeDurationSeconds
           : config.episodeDurationSeconds;
       final plan = _microDramaEpisodePlan(config, episodeNumber: episodeNumber);
-      final openingPickup = episodeNumber == 1
-          ? 'Abrir já na consequência concreta da premissa: ${config.logline}'
-          : 'Pagar imediatamente o gancho anterior sem reiniciar a história: $previousHook';
+      final openingPickup = _microDramaOpeningPickup(
+        language: config.language,
+        episodeNumber: episodeNumber,
+        logline: config.logline,
+        previousHook: previousHook,
+      );
       episodes.add(
         ProductionEpisodeItem(
           number: episodeNumber,
@@ -1395,11 +2215,15 @@ class LocalProductionWorkspaceService {
               '${config.genre}, ${config.trope}. Trilha contínua sem voz para o episódio $episodeNumber, crescendo até o corte no pico e sem competir com o áudio já presente nos vídeos.',
         ),
       );
-      final questions = [
-        config.centralQuestion,
-        'Qual será o custo imediato para ${config.protagonist}?',
-        'Como ${config.opposingForce} vai reagir à nova posição de poder?',
-      ];
+      final questions = _microDramaUnresolvedQuestions(
+        language: config.language,
+        episodeNumber: episodeNumber,
+        episodeCount: config.episodeCount,
+        protagonist: config.protagonist,
+        opposingForce: config.opposingForce,
+        centralQuestion: config.centralQuestion,
+        cliffhanger: plan.cliffhanger,
+      );
       episodeCards.add({
         'episode': episodeNumber,
         'title': plan.title,
@@ -1423,12 +2247,6 @@ class LocalProductionWorkspaceService {
         'status': 'OUTLINE_REVIEW_REQUIRED',
         'script_status': 'NOT_STARTED',
       });
-      hookChain.add({
-        'episode': episodeNumber,
-        'opening_pickup': openingPickup,
-        'final_hook': plan.cliffhanger,
-        'unresolved_questions': questions,
-      });
       pressureLedger.add({
         'episode': episodeNumber,
         'primary_pressure': plan.job,
@@ -1438,6 +2256,14 @@ class LocalProductionWorkspaceService {
       });
       previousHook = plan.cliffhanger;
     }
+    final hookChain = _syncMicroDramaHookChain(
+      episodes: episodes,
+      logline: config.logline,
+      protagonist: config.protagonist,
+      opposingForce: config.opposingForce,
+      centralQuestion: config.centralQuestion,
+      language: config.language,
+    );
 
     const sceneCards = <Map<String, dynamic>>[];
     final profileEvidence = config.episodeCount >= 50
@@ -1489,6 +2315,10 @@ class LocalProductionWorkspaceService {
         'audio_strategy':
             'Cada vídeo já contém diálogo, ambiente e efeitos; somente a música permanece em faixa separada.',
         'automatic_review': config.automaticReview,
+        'automatic_preparation_requested': config.automaticPreparation,
+        'automatic_preparation_status': config.automaticPreparation
+            ? 'QUEUED'
+            : 'MANUAL',
         'workflow': {
           'settings': 'COMPLETE',
           'series_contract': 'DRAFT',
@@ -1847,6 +2677,135 @@ class LocalProductionWorkspaceService {
     if (normalized.contains('english')) return const ['Maya', 'Theo', 'Morgan'];
     if (normalized.contains('español')) return const ['Lucía', 'Teo', 'Álex'];
     return const ['Lia', 'Theo', 'Alex'];
+  }
+
+  static String? _nonEmptyHookText(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static String _hookQuestionSeed(String cliffhanger) {
+    final trimmed = cliffhanger.trim();
+    if (trimmed.length <= 140) return trimmed;
+    return '${trimmed.substring(0, 137).trimRight()}...';
+  }
+
+  static String _microDramaOpeningPickup({
+    required String language,
+    required int episodeNumber,
+    required String logline,
+    required String previousHook,
+  }) {
+    final normalized = language.toLowerCase();
+    if (normalized.contains('english')) {
+      return episodeNumber == 1
+          ? 'Open already on the concrete consequence of the premise: $logline'
+          : 'Pay off the previous ending hook immediately without restarting the story: $previousHook';
+    }
+    if (normalized.contains('español')) {
+      return episodeNumber == 1
+          ? 'Abrir ya en la consecuencia concreta de la premisa: $logline'
+          : 'Pagar de inmediato el gancho anterior sin reiniciar la historia: $previousHook';
+    }
+    return episodeNumber == 1
+        ? 'Abrir já na consequência concreta da premissa: $logline'
+        : 'Pagar imediatamente o gancho anterior sem reiniciar a história: $previousHook';
+  }
+
+  static List<String> _microDramaUnresolvedQuestions({
+    required String language,
+    required int episodeNumber,
+    required int episodeCount,
+    required String protagonist,
+    required String opposingForce,
+    required String centralQuestion,
+    required String cliffhanger,
+  }) {
+    final normalized = language.toLowerCase();
+    final isLast = episodeNumber == episodeCount;
+    final seed = _hookQuestionSeed(cliffhanger);
+    if (normalized.contains('english')) {
+      return [
+        'Will $protagonist read the irreversible consequence of this cut in time?',
+        'How far will $opposingForce go to use this turn against $protagonist?',
+        isLast
+            ? 'Does the visible consequence of "$centralQuestion" stay in frame, or does the cut hide the future?'
+            : 'What stays unanswered for EP${episodeNumber + 1} after: $seed',
+      ];
+    }
+    if (normalized.contains('español')) {
+      return [
+        '¿$protagonist alcanzará a leer a tiempo la consecuencia irreversible de este corte?',
+        '¿Hasta dónde llegará $opposingForce para usar este giro contra $protagonist?',
+        isLast
+            ? '¿La consecuencia visible de "$centralQuestion" permanece en cuadro, o el corte esconde el futuro?'
+            : '¿Qué queda abierto para el EP${episodeNumber + 1} después de: $seed',
+      ];
+    }
+    return [
+      '$protagonist consegue ler a tempo o que este corte tornou irreversível?',
+      'Até onde $opposingForce vai para usar esta virada contra $protagonist?',
+      isLast
+          ? 'A consequência visível de "$centralQuestion" permanece no quadro, ou o corte esconde o futuro?'
+          : 'O que permanece em aberto para o EP${episodeNumber + 1} depois de: $seed',
+    ];
+  }
+
+  static List<Map<String, dynamic>> _syncMicroDramaHookChain({
+    required List<ProductionEpisodeItem> episodes,
+    List<Map<String, dynamic>> generated = const [],
+    String logline = '',
+    String protagonist = 'o protagonista',
+    String opposingForce = 'a força oposta',
+    String centralQuestion = '',
+    String language = 'Português (Brasil)',
+  }) {
+    final generatedByEpisode = <int, Map<String, dynamic>>{
+      for (final entry in generated)
+        if ((entry['episode'] as num?)?.toInt() != null)
+          (entry['episode'] as num).toInt(): entry,
+    };
+    var previousHook = logline;
+    final chain = <Map<String, dynamic>>[];
+    for (final episode in episodes) {
+      final generatedEntry =
+          generatedByEpisode[episode.number] ?? const <String, dynamic>{};
+      final finalHook =
+          _nonEmptyHookText(generatedEntry['final_hook']) ??
+          episode.cliffhanger;
+      final openingPickup =
+          _nonEmptyHookText(generatedEntry['opening_pickup']) ??
+          _microDramaOpeningPickup(
+            language: language,
+            episodeNumber: episode.number,
+            logline: logline,
+            previousHook: previousHook,
+          );
+      final generatedQuestions =
+          (generatedEntry['unresolved_questions'] as List<dynamic>? ??
+                  const <dynamic>[])
+              .map((item) => item.toString())
+              .where((item) => item.trim().isNotEmpty)
+              .toList();
+      chain.add({
+        'episode': episode.number,
+        'opening_pickup': openingPickup,
+        'final_hook': finalHook,
+        'unresolved_questions': generatedQuestions.length >= 2
+            ? generatedQuestions
+            : _microDramaUnresolvedQuestions(
+                language: language,
+                episodeNumber: episode.number,
+                episodeCount: episodes.length,
+                protagonist: protagonist,
+                opposingForce: opposingForce,
+                centralQuestion: centralQuestion,
+                cliffhanger: finalHook,
+              ),
+      });
+      previousHook = finalHook;
+    }
+    return chain;
   }
 
   static List<String> _microDramaPropNames(String trope) => switch (trope) {
@@ -2277,8 +3236,6 @@ class LocalProductionWorkspaceService {
         );
         final providerPrompt = _compileMicroDramaProviderPrompt(
           config,
-          scene: scene,
-          shot: shot,
           rows: rows,
           referenceIds: referenceIds,
           voiceLocks: voiceLocks,
@@ -2626,14 +3583,69 @@ class LocalProductionWorkspaceService {
     return buffer.toString().trim();
   }
 
-  static String _compileMicroDramaProviderPrompt(
-    MicroDramaProjectConfig config, {
+  static String _buildMicroDramaAiShortCore({
     required Map<String, dynamic> scene,
     required Map<String, dynamic> shot,
+    required List<Map<String, dynamic>> rows,
+    required _MicroDramaCreativePackage creativePackage,
+  }) {
+    Map<String, dynamic> findReference(
+      List<Map<String, dynamic>> values,
+      String referenceId,
+    ) => values.firstWhere(
+      (item) => item['reference_id'] == referenceId,
+      orElse: () => const <String, dynamic>{},
+    );
+
+    final chronologicalBeats = <String>[];
+    var cursor = 0;
+    for (final row in rows) {
+      final duration = row['duration_seconds'] as int? ?? 1;
+      final end = cursor + duration;
+      if (row['type'] == 'dialogue') {
+        final performance =
+            row['provider_performance']?.toString() ??
+            'natural restrained dramatic delivery';
+        chronologicalBeats.add(
+          'From $cursor to $end seconds, ${row['speaker']}, $performance, says: "${row['text']}" The listener gives an immediate readable reaction without interrupting.',
+        );
+      } else {
+        chronologicalBeats.add(
+          'From $cursor to $end seconds, ${row['provider_text'] ?? row['text']}',
+        );
+      }
+      cursor = end;
+    }
+
+    final cast = (scene['cast'] as List<dynamic>? ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final environment = findReference(
+      creativePackage.environments,
+      scene['location_id']?.toString() ?? '',
+    );
+    final providerFinalState = rows.isNotEmpty
+        ? rows.last['provider_text']?.toString() ??
+              shot['final_state']?.toString() ??
+              'the dramatic consequence remains visible at the cut'
+        : shot['final_state']?.toString() ??
+              'the dramatic consequence remains visible at the cut';
+    final duration = shot['duration_seconds'] as int? ?? 10;
+    return <String>[
+      '${_microDramaEnvironmentProviderDescription(environment)} ${cast.join(' and ')} are already physically present in ${scene['location']} at frame 1, wearing their canonical wardrobe, with the immediate pressure and story-critical prop state already readable.',
+      chronologicalBeats.join(' '),
+      _microDramaCameraCoverage(duration, cast, providerFinalState),
+      '${_microDramaLightingProviderDescription(environment)} Exposure, white balance and practical-source direction remain stable while faces, hands and the active prop stay readable.',
+    ].join('\n\n');
+  }
+
+  static String _compileMicroDramaProviderPrompt(
+    MicroDramaProjectConfig config, {
     required List<Map<String, dynamic>> rows,
     required List<String> referenceIds,
     required Map<String, dynamic> voiceLocks,
     required _MicroDramaCreativePackage creativePackage,
+    required String aiShortCore,
   }) {
     Map<String, dynamic> findReference(
       List<Map<String, dynamic>> values,
@@ -2667,39 +3679,6 @@ class LocalProductionWorkspaceService {
       }
     }
 
-    final timedBeats = <String>[];
-    final dialogueLines = <String>[];
-    final performances = <String>[];
-    var cursor = 0;
-    for (final row in rows) {
-      final duration = row['duration_seconds'] as int? ?? 1;
-      final end = cursor + duration;
-      if (row['type'] == 'dialogue') {
-        final performance =
-            row['provider_performance']?.toString() ??
-            'natural restrained dramatic delivery';
-        timedBeats.add(
-          '[$cursor-${end}s] ${row['speaker']} speaks while $performance; the other character gives an immediate readable reaction.',
-        );
-        dialogueLines.add(
-          '[$cursor-${end}s] ${row['speaker']}: "${row['text']}"',
-        );
-        performances.add('${row['speaker']}: $performance');
-      } else {
-        timedBeats.add(
-          '[$cursor-${end}s] ${row['provider_text'] ?? row['text']}',
-        );
-      }
-      cursor = end;
-    }
-
-    final cast = (scene['cast'] as List<dynamic>? ?? const [])
-        .map((item) => item.toString())
-        .toList();
-    final environment = findReference(
-      creativePackage.environments,
-      scene['location_id']?.toString() ?? '',
-    );
     final activeSpeakers = rows
         .where((row) => row['type'] == 'dialogue')
         .map((row) => row['speaker'].toString())
@@ -2711,39 +3690,28 @@ class LocalProductionWorkspaceService {
               'VOICE IDENTITY LOCK — ${speaker.toUpperCase()} — COPY VERBATIM\n${voiceLocks[speaker]}',
         )
         .join('\n\n');
-    final providerFinalState = rows.isNotEmpty
-        ? rows.last['provider_text']?.toString() ??
-              shot['final_state']?.toString() ??
-              'the dramatic consequence remains visible at the cut'
-        : shot['final_state']?.toString() ??
-              'the dramatic consequence remains visible at the cut';
-    final duration = shot['duration_seconds'] as int? ?? 10;
-    final animation = config.visualStyle.toLowerCase().contains('anima');
-    final blocks = <String>[
+    final performances = rows
+        .where((row) => row['type'] == 'dialogue')
+        .map(
+          (row) =>
+              '${row['speaker']}: ${row['provider_performance'] ?? 'natural restrained dramatic delivery'}',
+        )
+        .toSet();
+    final hasDialogue = activeSpeakers.isNotEmpty;
+    final preset = _microDramaStylePreset(config.visualStyle);
+
+    return <String>[
       if (referenceLines.isNotEmpty)
         'REFERENCE INDEX CONTRACT — DO NOT REORDER\n${referenceLines.join('\n')}',
-      'CAPTURE PROFILE: ${animation ? 'premium stylized narrative animation with coherent materials and restrained motion' : 'naturalistic live-action television drama with a premium vertical short-drama finish'}',
-      'SCENE: ${_microDramaEnvironmentProviderDescription(environment)} ${cast.join(' and ')} are already physically present in the established space at frame 1, wearing their canonical wardrobe. Preserve the 180-degree axis, body scale, eyelines and practical geometry. The story-critical prop remains a stable continuity object and must not duplicate or change condition unless a timed beat explicitly causes it.',
-      'ACTION AND TIMED BEATS:\n${timedBeats.join('\n')}',
-      'CAMERA AND OPTICS: ${_microDramaCameraCoverage(duration, cast, providerFinalState)}',
-      'LIGHT AND COLOR: ${_microDramaLightingProviderDescription(environment)} Keep exposure, white balance and practical-source direction stable; restrained contrast, natural highlight roll-off and readable faces.',
+      aiShortCore,
       if (voiceBlocks.isNotEmpty) voiceBlocks,
       if (performances.isNotEmpty)
-        'PERFORMANCE THIS TAKE: ${performances.toSet().join('; ')}. Natural pauses, breathing and reactions; no theatrical overstatement.',
-      if (dialogueLines.isNotEmpty)
-        'DIALOGUE — all spoken audio is native ${config.language}\n${dialogueLines.join('\n')}',
-      if (dialogueLines.isNotEmpty)
-        'SPOKEN LANGUAGE LOCK — ${config.language}\nSpeak only the exact quoted lines above, in order and with their assigned speaker. Never translate, paraphrase, improvise or add speech.',
-      'SOUND AND RECORDING CHARACTER: Native production dialogue at the apparent camera distance. Do not add background music or ambient sound effects. No narration, announcer voice or extra speech.',
-      'CONTINUITY: Treat this as one causal segment of the approved episode. Preserve character appearance, wardrobe, location geometry, light direction and prop condition. Do not replay a completed action, invert screen sides or reset the emotional state. END STATE: $providerFinalState',
-      'VISUAL STYLE: ${_microDramaVisualStyleProviderDescription(config.visualStyle)}',
-      'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video. Avoid shaky footage, floating camera motion, distorted limbs, malformed hands, deformed facial features, character drift, duplicated people or props, temporal flicker, texture pulsing and impossible reflections.',
-      if (animation)
-        'ANIMATION PROFILE: preserve the selected stylized medium, stable character proportions, coherent surface treatment, weighted motion and consistent frame-to-frame design; no drift into live-action, photorealism or another animation medium.'
-      else
-        'REALISTIC FILM PROFILE: naturalistic live-action narrative film; physical camera behavior with restrained motivated movement; moderate depth of field with gradual detail falloff; natural motion blur; motivated practical or environmental light; real skin, worn fabric and tactile material response; weighted motion with inertia, contact and recovery; restrained saturation with soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
-    ];
-    return blocks.join('\n\n');
+        'PERFORMANCE THIS TAKE: ${performances.join('; ')}. Natural pauses, breathing and reactions; no theatrical overstatement.',
+      if (hasDialogue)
+        'SPOKEN LANGUAGE LOCK — ${config.language}\nAll intelligible speech is limited to the exact quoted lines in the scene direction above, in order and with the assigned speaker. Never translate, paraphrase, improvise or add speech.',
+      'CONTINUITY CONTRACT: This is one causal segment of the approved episode. Preserve character appearance, wardrobe, established location geometry, light direction, prop condition and the 180-degree axis. Do not replay a completed action, invert screen sides or reset the emotional state.',
+      preset.compiledSuffix,
+    ].join('\n\n');
   }
 
   static String _compileMicroDramaAudioPrompt(
@@ -2803,30 +3771,109 @@ class LocalProductionWorkspaceService {
     final counter = cast.length > 1 ? cast.last : primary;
     if (duration <= 5) {
       final cut = (duration / 2).round().clamp(1, duration - 1);
-      return 'Coverage 1 [0-$cut s]: readable medium shot on $primary with a restrained push that preserves the location anchor. End state: the pressure is physically legible; Coverage 2 [$cut-$duration s]: clean same-axis cut to $counter and the visible consequence, settling on the dramatic button. End state: $finalState';
+      return 'The camera opens in a readable medium shot on $primary and makes one restrained push that preserves the location anchor. At $cut seconds, a clean same-axis cut finds $counter and the visible consequence, settling on the dramatic button: $finalState';
     }
     final firstCut = (duration * .3).round().clamp(2, duration - 4);
     final secondCut = (duration * .65).round().clamp(
       firstCut + 2,
       duration - 2,
     );
-    return 'Coverage 1 [0-$firstCut s]: medium-wide spatial anchor with a restrained push toward the active pressure; keep both positions and the practical geometry readable. End state: the conflict axis is established; Coverage 2 [$firstCut-$secondCut s]: clean same-axis medium close on the speaker applying pressure, one motivated movement only. End state: the line lands and the listener reacts; Coverage 3 [$secondCut-$duration s]: clean reverse or decisive close on the response and physical consequence, then settle without dead tail. End state: $finalState';
+    return 'Coverage opens in a medium-wide spatial anchor with a restrained push toward the active pressure, keeping both positions and the practical geometry readable. At $firstCut seconds, cut on the same axis to a medium close on the speaker applying pressure so the line and the listener’s reaction remain legible. At $secondCut seconds, move to a clean reverse or decisive close on the response and physical consequence, then settle without a dead tail on this final visible state: $finalState';
   }
 
-  static String _microDramaVisualStyleProviderDescription(
+  static _MicroDramaStylePreset _microDramaStylePreset(
     String style,
   ) => switch (style) {
-    'Cinema teatral realista' =>
-      'Naturalistic live-action narrative film, premium theatrical television composition, controlled blocking and restrained color.',
-    'K-drama moderno' =>
-      'Premium contemporary live-action television drama, elegant motivated coverage, clean production design and restrained emotional close-ups.',
-    'Noir urbano' =>
-      'Naturalistic live-action urban noir with motivated practical contrast, controlled shadows, wet tactile surfaces and restrained color.',
-    'Animação cinematográfica' =>
-      'Premium stylized cinematic animation with coherent materials, stable proportions, restrained acting and physically weighted motion.',
-    _ =>
-      'Live-action television drama style, premium vertical short-drama aesthetic, masterful readable composition and fast but motivated shot variation.',
+    'Cinema teatral realista' => const _MicroDramaStylePreset(
+      id: 'live_action_theatrical_cinema_v1',
+      label: 'Cinema teatral realista',
+      mediaCategory: 'live_action',
+      cinematographyLock:
+          'Master-level theatrical cinematography and composition, controlled blocking, deliberate shot variation and restrained dramatic pacing.',
+      audioLock:
+          'Do not add any background music or ambient sound effects. Use only the scripted dialogue; no narration, announcer voice or extra speech.',
+      visualStyleLock:
+          'Naturalistic live-action narrative film, premium theatrical television composition, tactile production design and restrained color.',
+      textLock:
+          'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video.',
+      negativeLock:
+          'Avoid shaky footage, floating camera motion, distorted limbs, malformed hands, deformed facial features, character identity drift, duplicated people or props, temporal flicker, texture pulsing and impossible reflections.',
+      mediumLock:
+          'Realistic film profile: physical camera behavior with restrained motivated movement; moderate depth of field with gradual detail falloff; natural motion blur; motivated practical light; real skin, worn fabric and tactile material response; weighted motion with inertia, contact and recovery; soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
+    ),
+    'K-drama moderno' => const _MicroDramaStylePreset(
+      id: 'live_action_modern_k_drama_v1',
+      label: 'K-drama moderno',
+      mediaCategory: 'live_action',
+      cinematographyLock:
+          'Master-level contemporary K-drama cinematography and composition, elegant motivated coverage, precise reaction close-ups and controlled shot variation.',
+      audioLock:
+          'Do not add any background music or ambient sound effects. Use only the scripted dialogue; no narration, announcer voice or extra speech.',
+      visualStyleLock:
+          'Premium contemporary live-action television drama, polished urban production design, clean emotional close-ups and restrained romantic color.',
+      textLock:
+          'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video.',
+      negativeLock:
+          'Avoid shaky footage, floating camera motion, distorted limbs, malformed hands, deformed facial features, character identity drift, duplicated people or props, temporal flicker, texture pulsing, overexposed beauty lighting and impossible reflections.',
+      mediumLock:
+          'Realistic film profile: physical camera behavior with smooth motivated movement; moderate depth of field; natural motion blur; soft motivated practical light; real skin and fabric response; restrained contrast and saturation with soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
+    ),
+    'Noir urbano' => const _MicroDramaStylePreset(
+      id: 'live_action_urban_noir_v1',
+      label: 'Noir urbano',
+      mediaCategory: 'live_action',
+      cinematographyLock:
+          'Master-level urban-noir cinematography and composition, tense motivated camera coverage, graphic shadow geometry and decisive shot variation.',
+      audioLock:
+          'Do not add any background music or ambient sound effects. Use only the scripted dialogue; no narration, announcer voice or extra speech.',
+      visualStyleLock:
+          'Naturalistic live-action urban noir, motivated practical contrast, controlled shadows, wet tactile surfaces and restrained color.',
+      textLock:
+          'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video.',
+      negativeLock:
+          'Avoid shaky footage, floating camera motion, crushed unreadable faces, unmotivated neon, distorted limbs, malformed hands, deformed facial features, character identity drift, duplicated people or props, temporal flicker, texture pulsing and impossible reflections.',
+      mediumLock:
+          'Realistic film profile: physical camera behavior with restrained motivated movement; moderate depth of field; natural motion blur; practical low-key light with preserved shadow detail; real skin, wet surfaces and worn fabric; weighted motion and soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
+    ),
+    'Animação cinematográfica' => const _MicroDramaStylePreset(
+      id: 'cinematic_animation_v1',
+      label: 'Animação cinematográfica',
+      mediaCategory: 'animation_cartoon',
+      cinematographyLock:
+          'Master-level animated cinematography and composition, readable silhouettes, one motivated camera operation per shot and controlled shot variation.',
+      audioLock:
+          'Do not add any background music or ambient sound effects. Use only the scripted dialogue; no narration, announcer voice or extra speech.',
+      visualStyleLock:
+          'Premium stylized cinematic animation, coherent modeled materials, stable character proportions, restrained acting and physically weighted motion.',
+      textLock:
+          'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video.',
+      negativeLock:
+          'Avoid character-design drift, changing proportions, morphing surfaces, unstable line or material treatment, duplicated people or props, temporal flicker, texture pulsing, broken silhouettes and impossible contact physics.',
+      mediumLock:
+          'Animation profile: preserve the selected stylized medium, coherent surfaces, stable proportions, decisive poses and weighted motion; no drift into live-action, photorealism or another animation medium.',
+    ),
+    _ => const _MicroDramaStylePreset(
+      id: 'live_action_modern_microdrama_v1',
+      label: 'Microdrama moderno',
+      mediaCategory: 'live_action',
+      cinematographyLock:
+          'Master-level cinematography and composition, fast-paced shot variation.',
+      audioLock:
+          'Do not add any background music or ambient sound effects. Use only the scripted dialogue; no narration, announcer voice or extra speech.',
+      visualStyleLock:
+          'Live-action TV drama style, premium short drama aesthetic, masterful composition.',
+      textLock:
+          'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video.',
+      negativeLock:
+          'Avoid shaky footage, floating camera motion, distorted limbs, malformed hands, deformed facial features, character identity drift, duplicated people or props, temporal flicker, texture pulsing and impossible reflections.',
+      mediumLock:
+          'Realistic film profile: naturalistic live-action narrative film; physical camera behavior with restrained motivated movement; moderate depth of field with gradual detail falloff; natural motion blur; motivated practical or environmental light; real skin, worn fabric and tactile material response; weighted motion with inertia, contact and recovery; restrained saturation with soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
+    ),
   };
+
+  @visibleForTesting
+  String microDramaStyleSuffixForTesting(String style) =>
+      _microDramaStylePreset(style).compiledSuffix;
 
   static String _slugify(String value) => value
       .toLowerCase()
@@ -2880,15 +3927,19 @@ class LocalProductionWorkspaceService {
       episodeCount: episodeCount,
       firstEpisodeDurationSeconds: project.episodes.isNotEmpty
           ? project.episodes.first.durationSeconds
-          : 120,
+          : ((bible['first_episode_duration_seconds'] as num?)?.toInt() ?? 120),
       episodeDurationSeconds: project.episodes.length > 1
           ? project.episodes[1].durationSeconds
-          : 60,
+          : ((bible['episode_duration_seconds'] as num?)?.toInt() ?? 60),
       maxShotDurationSeconds:
           ((bible['max_shot_duration_seconds'] as num?)?.toInt() ?? 10)
               .clamp(5, 10)
               .toInt(),
       automaticReview: _readBool(bible['automatic_review'], fallback: true),
+      automaticPreparation: _readBool(
+        bible['automatic_preparation_requested'],
+        fallback: false,
+      ),
     );
   }
 

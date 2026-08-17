@@ -31,6 +31,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
   int _episodeDuration = 60;
   int _maxShotDuration = 10;
   bool _automaticReview = true;
+  bool _automaticPreparation = false;
   String? _error;
 
   static const _stepLabels = [
@@ -289,6 +290,24 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             secondary: const Icon(Icons.fact_check_outlined),
           ),
         ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.surfaceLighter),
+          ),
+          child: SwitchListTile(
+            value: _automaticPreparation,
+            onChanged: (value) => setState(() => _automaticPreparation = value),
+            title: const Text('Preparar tudo automaticamente'),
+            subtitle: const Text(
+              'Após criar o projeto, gera o esboço completo, objetivos dos episódios, personagens, ambientes, adereços e todas as referências visuais que estiverem faltando.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+            secondary: const Icon(Icons.auto_awesome_motion_outlined),
+          ),
+        ),
       ],
     );
   }
@@ -365,6 +384,15 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
           ],
           _visualStyle,
           (value) => setState(() => _visualStyle = value),
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'O estilo escolhido aplica por código o mesmo pacote de cinematografia, áudio, proibição de texto e travas negativas em todas as cenas. A IA gera somente a direção específica de cada cena.',
+          style: TextStyle(
+            color: AppColors.textTertiary,
+            fontSize: 11,
+            height: 1.4,
+          ),
         ),
       ],
     );
@@ -508,7 +536,14 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         _reviewRow(
           Icons.people_outline,
           'Personagens, ambientes e adereços',
-          'Fichas detalhadas de aparência, personalidade, função, geografia, luz, estado e continuidade.',
+          _automaticPreparation
+              ? 'O app gerará as fichas canônicas automaticamente após criar o projeto; imagens ficam para anexar depois.'
+              : 'Fichas detalhadas de aparência, personalidade, função, geografia, luz, estado e continuidade.',
+        ),
+        _reviewRow(
+          Icons.style_outlined,
+          'Preset visual aplicado pelo código',
+          '$_visualStyle fixa cinematografia, política de áudio, proibição de texto e travas negativas para todos os prompts de produção.',
         ),
         _reviewRow(
           Icons.movie_filter_outlined,
@@ -559,7 +594,9 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             ),
             label: Text(
               _step == _stepLabels.length - 1
-                  ? 'Criar esboço da série'
+                  ? _automaticPreparation
+                        ? 'Criar e preparar automaticamente'
+                        : 'Criar esboço da série'
                   : 'Continuar',
             ),
           ),
@@ -611,6 +648,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         episodeDurationSeconds: _episodeDuration,
         maxShotDurationSeconds: _maxShotDuration,
         automaticReview: _automaticReview,
+        automaticPreparation: _automaticPreparation,
       ),
     );
   }

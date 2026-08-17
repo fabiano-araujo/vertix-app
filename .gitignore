@@ -71,6 +71,7 @@ node_modules/
 /series_bibles/
 /seedance_notion_prompts/
 /server/public/openrouter-video-runs/
+/.codex-runtime/
 /*.mp4
 /dorama_*.md
 /notion_snapshot.md
