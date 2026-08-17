@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/models/series_model.dart';
+import '../../../../core/utils/responsive.dart';
 
 /// Featured Banner at the top of Home page
-/// Shows a featured series with large cover
+/// Mobile keeps a compact poster hero; desktop uses a Netflix-style billboard.
 class FeaturedBanner extends StatelessWidget {
   final SeriesModel? series;
   final VoidCallback? onPlay;
@@ -14,28 +15,32 @@ class FeaturedBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final size = MediaQuery.sizeOf(context);
+    final isDesktop = Responsive.isDesktop(context);
     final imageUrl = series?.heroImageUrl.isNotEmpty == true
         ? series!.heroImageUrl
         : 'https://picsum.photos/800/1200?random=featured';
+    final height = isDesktop
+        ? (size.height * 0.88).clamp(520.0, 860.0)
+        : size.height * 0.55;
+    final padding = Responsive.horizontalPadding(context);
 
     return SizedBox(
-      height: size.height * 0.55,
+      height: height,
+      width: double.infinity,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Image
           CachedNetworkImage(
             imageUrl: imageUrl,
             fit: BoxFit.cover,
+            alignment: isDesktop ? const Alignment(0.35, 0) : Alignment.center,
             placeholder: (context, url) => Container(color: AppColors.surface),
             errorWidget: (context, url, error) => Container(
               color: AppColors.surface,
               child: const Icon(Icons.error),
             ),
           ),
-
-          // Gradient Overlay
           Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -43,97 +48,170 @@ class FeaturedBanner extends StatelessWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  AppColors.background.withAlpha(80),
-                  AppColors.background.withAlpha(200),
+                  AppColors.background.withAlpha(isDesktop ? 20 : 80),
+                  AppColors.background.withAlpha(isDesktop ? 160 : 200),
                   AppColors.background,
                 ],
-                stops: const [0.0, 0.5, 0.75, 1.0],
+                stops: isDesktop
+                    ? const [0.0, 0.45, 0.78, 1.0]
+                    : const [0.0, 0.5, 0.75, 1.0],
               ),
             ),
           ),
-
-          // Content
+          if (isDesktop)
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    AppColors.background.withValues(alpha: 0.88),
+                    AppColors.background.withValues(alpha: 0.45),
+                    Colors.transparent,
+                  ],
+                  stops: const [0.0, 0.38, 0.72],
+                ),
+              ),
+            ),
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Genre Tags
-                Row(
-                  children: [
-                    _buildTag(series?.genre ?? 'Drama'),
-                    if (series?.isAiGenerated == true) ...[
-                      const SizedBox(width: 8),
-                      _buildTag('IA', highlighted: true),
+            left: padding,
+            right: isDesktop ? size.width * 0.38 : padding,
+            bottom: isDesktop ? 96 : 24,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: isDesktop ? 640 : double.infinity,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isDesktop) ...[
+                    Text(
+                      series?.title ?? 'Destaque Vertix',
+                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 56,
+                        height: 1.05,
+                        letterSpacing: -0.5,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildTag(series?.genre ?? 'Drama'),
+                      if (series?.isAiGenerated == true)
+                        _buildTag('IA', highlighted: true),
+                      _buildTag('${series?.totalEpisodesCount ?? 0} eps'),
                     ],
-                    const SizedBox(width: 8),
-                    _buildTag('${series?.totalEpisodesCount ?? 0} eps'),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Description
-                Text(
-                  series?.description ??
-                      'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    // Play Button
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: onPlay,
-                        icon: const Icon(Icons.play_arrow),
-                        label: const Text('Assistir'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.textPrimary,
-                          foregroundColor: AppColors.background,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
+                  const SizedBox(height: 16),
+                  Text(
+                    series?.description ??
+                        'Uma historia envolvente que vai te prender do inicio ao fim. Assista agora!',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                      height: 1.45,
+                      fontSize: isDesktop ? 18 : 14,
                     ),
-                    const SizedBox(width: 12),
-
-                    // Add to List Button
-                    IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.add),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.surfaceLight,
-                        foregroundColor: AppColors.textPrimary,
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-
-                    // Info Button
-                    IconButton(
-                      onPressed: onInfo ?? onPlay,
-                      icon: const Icon(Icons.info_outline),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.surfaceLight,
-                        foregroundColor: AppColors.textPrimary,
-                        padding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    maxLines: isDesktop ? 3 : 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 22),
+                  _buildActions(isDesktop),
+                ],
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildActions(bool isDesktop) {
+    final playButton = ElevatedButton.icon(
+      onPressed: onPlay,
+      icon: const Icon(Icons.play_arrow, size: 28),
+      label: const Text('Assistir'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.textPrimary,
+        foregroundColor: AppColors.background,
+        padding: EdgeInsets.symmetric(
+          horizontal: isDesktop ? 28 : 16,
+          vertical: isDesktop ? 16 : 14,
+        ),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+    );
+
+    final infoButton = isDesktop
+        ? OutlinedButton.icon(
+            onPressed: onInfo ?? onPlay,
+            icon: const Icon(Icons.info_outline),
+            label: const Text('Mais informações'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.textPrimary,
+              backgroundColor: Colors.white.withValues(alpha: 0.18),
+              side: BorderSide.none,
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+        : IconButton(
+            onPressed: onInfo ?? onPlay,
+            icon: const Icon(Icons.info_outline),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.surfaceLight,
+              foregroundColor: AppColors.textPrimary,
+              padding: const EdgeInsets.all(12),
+            ),
+          );
+
+    if (isDesktop) {
+      return Row(
+        children: [
+          playButton,
+          const SizedBox(width: 12),
+          infoButton,
+          const SizedBox(width: 12),
+          IconButton(
+            onPressed: () {},
+            tooltip: 'Minha lista',
+            icon: const Icon(Icons.add),
+            style: IconButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: 0.45),
+              foregroundColor: AppColors.textPrimary,
+              side: const BorderSide(color: AppColors.textSecondary),
+              padding: const EdgeInsets.all(12),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(child: playButton),
+        const SizedBox(width: 12),
+        IconButton(
+          onPressed: () {},
+          icon: const Icon(Icons.add),
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.surfaceLight,
+            foregroundColor: AppColors.textPrimary,
+            padding: const EdgeInsets.all(12),
+          ),
+        ),
+        const SizedBox(width: 8),
+        infoButton,
+      ],
     );
   }
 

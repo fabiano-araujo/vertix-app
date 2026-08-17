@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/feed_service.dart';
 import '../../../../core/services/episode_service.dart';
 import '../../../../core/models/episode_model.dart';
@@ -141,41 +142,57 @@ class _ForYouPageState extends State<ForYouPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Para Voce',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => context.push('/search'),
-          ),
-        ],
-      ),
+      extendBodyBehindAppBar: !isDesktop,
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: const Text(
+                'Para Voce',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => context.push('/search'),
+                ),
+              ],
+            ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             )
           : _episodes.isEmpty
               ? _buildEmptyState()
-              : PageView.builder(
-                  controller: _pageController,
-                  scrollDirection: Axis.vertical,
-                  onPageChanged: _onPageChanged,
-                  itemCount: _episodes.length,
-                  itemBuilder: (context, index) {
-                    return _buildVideoItem(_episodes[index], index);
-                  },
+              : Padding(
+                  padding: EdgeInsets.only(
+                    top: isDesktop ? Responsive.topNavHeight : 0,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: isDesktop ? 460 : double.infinity,
+                      ),
+                      child: PageView.builder(
+                        controller: _pageController,
+                        scrollDirection: Axis.vertical,
+                        onPageChanged: _onPageChanged,
+                        itemCount: _episodes.length,
+                        itemBuilder: (context, index) {
+                          return _buildVideoItem(_episodes[index], index);
+                        },
+                      ),
+                    ),
+                  ),
                 ),
     );
   }
@@ -273,7 +290,7 @@ class _ForYouPageState extends State<ForYouPage> {
         Positioned(
           left: 16,
           right: 80,
-          bottom: 100,
+          bottom: Responsive.isDesktop(context) ? 24 : 100,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -333,7 +350,7 @@ class _ForYouPageState extends State<ForYouPage> {
         // Right Action Buttons
         Positioned(
           right: 12,
-          bottom: 120,
+          bottom: Responsive.isDesktop(context) ? 48 : 120,
           child: Column(
             children: [
               // Like

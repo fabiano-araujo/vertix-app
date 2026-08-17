@@ -2,13 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/responsive.dart';
+import '../widgets/web_top_nav.dart';
 
-/// Main Shell with Bottom Navigation
-/// Contains the 4 main tabs: Home, Para Voce, Minha Vertix, Buscar
-class MainShell extends StatelessWidget {
+/// Main Shell with responsive navigation.
+/// Mobile keeps the bottom bar; desktop uses a Netflix-style top nav.
+class MainShell extends StatefulWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  bool _isScrolled = false;
 
   bool get _showAdminTab => AuthService().currentUser?.isAdmin == true;
 
@@ -17,7 +26,7 @@ class MainShell extends StatelessWidget {
     if (location.startsWith('/for-you')) return 1;
     if (location.startsWith('/my-vertix')) return 2;
     if (_showAdminTab && location.startsWith('/admin-production')) return 3;
-    return 0; // Home
+    return 0;
   }
 
   void _onItemTapped(BuildContext context, int index) {
@@ -37,9 +46,21 @@ class MainShell extends StatelessWidget {
     }
   }
 
+  bool _onScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final scrolled = notification.metrics.pixels > 40;
+    if (scrolled != _isScrolled) {
+      setState(() => _isScrolled = scrolled);
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedIndex = _calculateSelectedIndex(context);
+    final isDesktop = Responsive.isDesktop(context);
+    final location = GoRouterState.of(context).uri.path;
+    final overlayHero = location == '/';
     final destinations = [
       const NavigationDestination(
         icon: Icon(Icons.home_outlined),
@@ -65,26 +86,48 @@ class MainShell extends StatelessWidget {
     ];
 
     return Scaffold(
-      body: child,
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          border: Border(
-            top: BorderSide(color: AppColors.surfaceLighter, width: 0.5),
-          ),
-        ),
-        child: SafeArea(
-          child: NavigationBar(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) => _onItemTapped(context, index),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            height: 65,
-            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-            destinations: destinations,
-          ),
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: Stack(
+          children: [
+            widget.child,
+            if (isDesktop)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: WebTopNav(
+                  selectedIndex: selectedIndex,
+                  onItemTapped: (index) => _onItemTapped(context, index),
+                  showAdminTab: _showAdminTab,
+                  isScrolled: _isScrolled || !overlayHero,
+                ),
+              ),
+          ],
         ),
       ),
+      bottomNavigationBar: isDesktop
+          ? null
+          : Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                border: Border(
+                  top: BorderSide(color: AppColors.surfaceLighter, width: 0.5),
+                ),
+              ),
+              child: SafeArea(
+                child: NavigationBar(
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: (index) =>
+                      _onItemTapped(context, index),
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  height: 65,
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                  destinations: destinations,
+                ),
+              ),
+            ),
     );
   }
 }

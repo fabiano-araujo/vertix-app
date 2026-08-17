@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/search_service.dart';
 import '../../../../core/services/series_service.dart';
 import '../../../../core/services/episode_service.dart';
@@ -128,62 +129,82 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        title: const Text('Buscar'),
-      ),
-      body: Column(
-        children: [
-          // Search Field
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _focusNode,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'Busque series, filmes...',
-                hintStyle: TextStyle(color: AppColors.textSecondary),
-                prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                suffixIcon: _isSearching
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: AppColors.textSecondary),
-                        onPressed: () {
-                          _searchController.clear();
-                          _focusNode.unfocus();
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: AppColors.surfaceLight,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.background,
+              title: const Text('Buscar'),
+            ),
+      body: Padding(
+        padding: EdgeInsets.only(top: isDesktop ? Responsive.topNavHeight : 0),
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                Responsive.horizontalPadding(context),
+                isDesktop ? 20 : 16,
+                Responsive.horizontalPadding(context),
+                16,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: TextField(
+                  controller: _searchController,
+                  focusNode: _focusNode,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Busque series, filmes...',
+                    hintStyle: TextStyle(color: AppColors.textSecondary),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppColors.textSecondary,
+                    ),
+                    suffixIcon: _isSearching
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.clear,
+                              color: AppColors.textSecondary,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              _focusNode.unfocus();
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppColors.surfaceLight,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-
-          // Content
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  )
-                : _isSearching
-                    ? _buildSearchResults()
-                    : _buildRecommendations(),
-          ),
-        ],
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : _isSearching
+                      ? _buildSearchResults()
+                      : _buildRecommendations(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildRecommendations() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.horizontalPadding(context),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -291,7 +312,9 @@ class _SearchPageState extends State<SearchPage> {
     // Show suggestions if available and no results yet
     if (_suggestions.isNotEmpty && _searchResults.isEmpty && !_isLoading) {
       return ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.horizontalPadding(context),
+        ),
         itemCount: _suggestions.length,
         itemBuilder: (context, index) {
           final suggestion = _suggestions[index];
@@ -330,7 +353,10 @@ class _SearchPageState extends State<SearchPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.horizontalPadding(context),
+            vertical: 8,
+          ),
           child: Text(
             '${_searchResults.length} resultados',
             style: TextStyle(
@@ -341,9 +367,11 @@ class _SearchPageState extends State<SearchPage> {
         ),
         Expanded(
           child: GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.horizontalPadding(context),
+            ),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: Responsive.isDesktop(context) ? 6 : 3,
               childAspectRatio: 0.65,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/feed_service.dart';
 import '../../../../core/services/series_service.dart';
 import '../../../../core/services/episode_service.dart';
@@ -143,36 +144,43 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: _showAppBarBackground
-            ? AppColors.background.withAlpha(240)
-            : Colors.transparent,
-        title: Row(
-          children: [
-            Text(
-              'VERTIX',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              backgroundColor: _showAppBarBackground
+                  ? AppColors.background.withAlpha(240)
+                  : Colors.transparent,
+              title: Row(
+                children: [
+                  Text(
+                    'VERTIX',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => context.push('/search'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.cast_outlined),
+                  onPressed: () {},
+                ),
+                IconButton(
+                  icon: const Icon(Icons.notifications_outlined),
+                  onPressed: () {},
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => context.push('/search'),
-          ),
-          IconButton(icon: const Icon(Icons.cast_outlined), onPressed: () {}),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         onRefresh: _loadData,
         color: AppColors.primary,
@@ -196,95 +204,81 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
 
-                  // Quick Filters
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _buildFilterChip('Series', true),
-                            _buildFilterChip('Filmes', false),
-                            _buildFilterChip('Categorias', false),
-                          ],
+                  if (!isDesktop)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildFilterChip('Series', true),
+                              _buildFilterChip('Filmes', false),
+                              _buildFilterChip('Categorias', false),
+                            ],
+                          ),
                         ),
                       ),
                     ),
+
+                  SliverToBoxAdapter(
+                    child: Transform.translate(
+                      offset: Offset(0, isDesktop ? -72 : 0),
+                      child: Column(
+                        children: [
+                          if (_trending.isNotEmpty)
+                            SeriesCarousel(
+                              title: 'Em Alta',
+                              icon: Icons.local_fire_department,
+                              iconColor: AppColors.primary,
+                              items: _seriesToMaps(_trending),
+                              onItemTap: _openFirstEpisode,
+                            ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.1),
+                          if (_newReleases.isNotEmpty)
+                            SeriesCarousel(
+                                  title: 'Novidades',
+                                  icon: Icons.new_releases_outlined,
+                                  items: _seriesToMaps(_newReleases),
+                                  onItemTap: _openFirstEpisode,
+                                )
+                                .animate()
+                                .fadeIn(duration: 300.ms, delay: 100.ms)
+                                .slideX(begin: 0.1),
+                          if (_recommendations.isNotEmpty)
+                            SeriesCarousel(
+                                  title: 'Recomendado para voce',
+                                  icon: Icons.thumb_up_outlined,
+                                  items: _seriesToMaps(_recommendations),
+                                  onItemTap: _openFirstEpisode,
+                                )
+                                .animate()
+                                .fadeIn(duration: 300.ms, delay: 200.ms)
+                                .slideX(begin: 0.1),
+                          if (_action.isNotEmpty)
+                            SeriesCarousel(
+                                  title: 'Acao',
+                                  items: _seriesToMaps(_action),
+                                  onItemTap: _openFirstEpisode,
+                                )
+                                .animate()
+                                .fadeIn(duration: 300.ms, delay: 300.ms)
+                                .slideX(begin: 0.1),
+                          if (_romance.isNotEmpty)
+                            SeriesCarousel(
+                                  title: 'Romance',
+                                  items: _seriesToMaps(_romance),
+                                  onItemTap: _openFirstEpisode,
+                                )
+                                .animate()
+                                .fadeIn(duration: 300.ms, delay: 400.ms)
+                                .slideX(begin: 0.1),
+                        ],
+                      ),
+                    ),
                   ),
-
-                  // Em Alta (Trending)
-                  if (_trending.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child: SeriesCarousel(
-                        title: 'Em Alta',
-                        icon: Icons.local_fire_department,
-                        iconColor: AppColors.primary,
-                        items: _seriesToMaps(_trending),
-                        onItemTap: _openFirstEpisode,
-                      ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.1),
-                    ),
-
-                  // Novidades (New Releases)
-                  if (_newReleases.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child:
-                          SeriesCarousel(
-                                title: 'Novidades',
-                                icon: Icons.new_releases_outlined,
-                                items: _seriesToMaps(_newReleases),
-                                onItemTap: _openFirstEpisode,
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: 100.ms)
-                              .slideX(begin: 0.1),
-                    ),
-
-                  // Recomendado para voce
-                  if (_recommendations.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child:
-                          SeriesCarousel(
-                                title: 'Recomendado para voce',
-                                icon: Icons.thumb_up_outlined,
-                                items: _seriesToMaps(_recommendations),
-                                onItemTap: _openFirstEpisode,
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: 200.ms)
-                              .slideX(begin: 0.1),
-                    ),
-
-                  // Acao
-                  if (_action.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child:
-                          SeriesCarousel(
-                                title: 'Acao',
-                                items: _seriesToMaps(_action),
-                                onItemTap: _openFirstEpisode,
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: 300.ms)
-                              .slideX(begin: 0.1),
-                    ),
-
-                  // Romance
-                  if (_romance.isNotEmpty)
-                    SliverToBoxAdapter(
-                      child:
-                          SeriesCarousel(
-                                title: 'Romance',
-                                items: _seriesToMaps(_romance),
-                                onItemTap: _openFirstEpisode,
-                              )
-                              .animate()
-                              .fadeIn(duration: 300.ms, delay: 400.ms)
-                              .slideX(begin: 0.1),
-                    ),
 
                   // Empty state fallback
                   if (_trending.isEmpty && _newReleases.isEmpty)
@@ -312,8 +306,9 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
 
-                  // Bottom padding
-                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                  SliverToBoxAdapter(
+                    child: SizedBox(height: isDesktop ? 96 : 100),
+                  ),
                 ],
               ),
       ),

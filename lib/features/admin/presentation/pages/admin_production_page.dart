@@ -6,6 +6,7 @@ import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../widgets/micro_drama_creation_dialog.dart';
 
 class AdminProductionPage extends StatefulWidget {
@@ -103,27 +104,34 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        title: const Text('Producoes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_stories_outlined),
-            onPressed: _showCreateProjectDialog,
-            tooltip: 'Criar microdrama',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadSeries,
-            tooltip: 'Atualizar',
-          ),
-        ],
-      ),
+      appBar: Responsive.isDesktop(context)
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.background,
+              title: const Text('Producoes'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.auto_stories_outlined),
+                  onPressed: _showCreateProjectDialog,
+                  tooltip: 'Criar microdrama',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _loadSeries,
+                  tooltip: 'Atualizar',
+                ),
+              ],
+            ),
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: _loadSeries,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+          padding: EdgeInsets.fromLTRB(
+            Responsive.horizontalPadding(context),
+            Responsive.isDesktop(context) ? Responsive.topNavHeight + 16 : 8,
+            Responsive.horizontalPadding(context),
+            96,
+          ),
           children: [
             _buildHeader(),
             if (_remoteUnavailable) ...[
@@ -227,6 +235,18 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
               ],
             ),
           ),
+          if (Responsive.isDesktop(context)) ...[
+            IconButton(
+              icon: const Icon(Icons.auto_stories_outlined),
+              onPressed: _showCreateProjectDialog,
+              tooltip: 'Criar microdrama',
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadSeries,
+              tooltip: 'Atualizar',
+            ),
+          ],
         ],
       ),
     );

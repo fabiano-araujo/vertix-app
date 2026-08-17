@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/feed_service.dart';
 import '../../../../core/models/user_model.dart';
@@ -120,35 +121,39 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        title: const Text('Minha Vertix'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => context.push('/search'),
-          ),
-          if (_isLoggedIn && _user?.isAdmin == true)
-            IconButton(
-              icon: const Icon(Icons.admin_panel_settings),
-              onPressed: () {
-                Logger.i('MY_VERTIX', '=== ADMIN BUTTON PRESSED ===');
-                Logger.i('MY_VERTIX', 'User: ${_user?.name}');
-                Logger.i('MY_VERTIX', 'Role: ${_user?.role}');
-                Logger.i('MY_VERTIX', 'isAdmin: ${_user?.isAdmin}');
-                Logger.i('MY_VERTIX', 'Navigating to /admin...');
-                context.push('/admin');
-              },
-              tooltip: 'Admin',
+      appBar: isDesktop
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              title: const Text('Minha Vertix'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => context.push('/search'),
+                ),
+                if (_isLoggedIn && _user?.isAdmin == true)
+                  IconButton(
+                    icon: const Icon(Icons.admin_panel_settings),
+                    onPressed: () {
+                      Logger.i('MY_VERTIX', '=== ADMIN BUTTON PRESSED ===');
+                      Logger.i('MY_VERTIX', 'User: ${_user?.name}');
+                      Logger.i('MY_VERTIX', 'Role: ${_user?.role}');
+                      Logger.i('MY_VERTIX', 'isAdmin: ${_user?.isAdmin}');
+                      Logger.i('MY_VERTIX', 'Navigating to /admin...');
+                      context.push('/admin');
+                    },
+                    tooltip: 'Admin',
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () {},
+                ),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {},
-          ),
-        ],
-      ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary),
@@ -158,6 +163,9 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
               color: AppColors.primary,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(
+                  top: isDesktop ? Responsive.topNavHeight : 0,
+                ),
                 child: Column(
                   children: [
                     // Profile Section
@@ -205,7 +213,7 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
                       ],
                     ],
 
-                    const SizedBox(height: 100),
+                    const SizedBox(height: 48),
                   ],
                 ),
               ),
@@ -214,85 +222,143 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
   }
 
   Widget _buildProfileSection(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
+    final avatar = GestureDetector(
+      onTap: _isLoggedIn ? null : _goToLogin,
+      child: Container(
+        width: isDesktop ? 72 : 100,
+        height: isDesktop ? 72 : 100,
+        decoration: BoxDecoration(
+          color: _isLoggedIn ? AppColors.primary : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(isDesktop ? 8 : 16),
+        ),
+        child: _user?.photo != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(isDesktop ? 8 : 16),
+                child: CachedNetworkImage(
+                  imageUrl: _user!.photo!,
+                  fit: BoxFit.cover,
+                ),
+              )
+            : Center(
+                child: _isLoggedIn
+                    ? Text(
+                        _user?.initials ?? 'U',
+                        style: TextStyle(
+                          fontSize: isDesktop ? 26 : 40,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person,
+                        size: 48,
+                        color: AppColors.textSecondary,
+                      ),
+              ),
+      ),
+    );
+
+    final nameRow = Row(
+      mainAxisSize: isDesktop ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (isDesktop)
+          Expanded(
+            child: Text(
+              _isLoggedIn ? (_user?.displayName ?? 'Usuario') : 'Visitante',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          )
+        else
+          Text(
+            _isLoggedIn ? (_user?.displayName ?? 'Usuario') : 'Visitante',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        if (_isLoggedIn)
+          IconButton(
+            icon: const Icon(Icons.logout, size: 20),
+            onPressed: _logout,
+            tooltip: 'Sair',
+          ),
+      ],
+    );
+
+    final badge = _isLoggedIn && _user?.isCreator == true
+        ? Container(
+            margin: EdgeInsets.only(top: isDesktop ? 6 : 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withAlpha(50),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withAlpha(100)),
+            ),
+            child: Text(
+              _user?.isAdmin == true ? 'Administrador' : 'Criador',
+              style: const TextStyle(
+                color: AppColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          )
+        : const SizedBox.shrink();
+
+    if (isDesktop) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(
+          Responsive.horizontalPadding(context),
+          28,
+          Responsive.horizontalPadding(context),
+          8,
+        ),
+        child: Row(
+          children: [
+            avatar,
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Minha Vertix',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  nameRow,
+                  badge,
+                ],
+              ),
+            ),
+            if (_isLoggedIn && _user?.isAdmin == true)
+              IconButton(
+                icon: const Icon(Icons.admin_panel_settings),
+                onPressed: () => context.push('/admin'),
+                tooltip: 'Admin',
+              ),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () {},
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          // Avatar
-          GestureDetector(
-            onTap: _isLoggedIn ? null : _goToLogin,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: _isLoggedIn ? AppColors.primary : AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: _user?.photo != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: CachedNetworkImage(
-                        imageUrl: _user!.photo!,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : Center(
-                      child: _isLoggedIn
-                          ? Text(
-                              _user?.initials ?? 'U',
-                              style: const TextStyle(
-                                fontSize: 40,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            )
-                          : const Icon(
-                              Icons.person,
-                              size: 48,
-                              color: AppColors.textSecondary,
-                            ),
-                    ),
-            ),
-          ),
+          avatar,
           const SizedBox(height: 16),
-
-          // Name
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                _isLoggedIn ? (_user?.displayName ?? 'Usuario') : 'Visitante',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-              if (_isLoggedIn)
-                IconButton(
-                  icon: const Icon(Icons.logout, size: 20),
-                  onPressed: _logout,
-                  tooltip: 'Sair',
-                ),
-            ],
-          ),
-
-          if (_isLoggedIn && _user?.isCreator == true)
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withAlpha(50),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withAlpha(100)),
-              ),
-              child: Text(
-                _user?.isAdmin == true ? 'Administrador' : 'Criador',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
+          nameRow,
+          badge,
         ],
       ),
     );
@@ -311,42 +377,95 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
   }
 
   Widget _buildLoginPrompt(BuildContext context) {
+    final isDesktop = Responsive.isDesktop(context);
     return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          Text(
-            'Faca login para acessar suas curtidas, historico e muito mais!',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _goToLogin,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text('Entrar'),
+      padding: EdgeInsets.symmetric(
+        horizontal: Responsive.horizontalPadding(context),
+        vertical: 24,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: isDesktop ? 420 : double.infinity),
+        child: Column(
+          crossAxisAlignment: isDesktop
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Faca login para acessar suas curtidas, historico e muito mais!',
+              textAlign: isDesktop ? TextAlign.left : TextAlign.center,
+              style: TextStyle(color: AppColors.textSecondary),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _goToRegister,
-            child: const Text('Criar conta'),
-          ),
-        ],
+            const SizedBox(height: 24),
+            SizedBox(
+              width: isDesktop ? 220 : double.infinity,
+              child: ElevatedButton(
+                onPressed: _goToLogin,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Entrar'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _goToRegister,
+              child: const Text('Criar conta'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildMenuSection(BuildContext context) {
+    final items = [
+      (
+        icon: Icons.notifications_outlined,
+        title: 'Notificacoes',
+        subtitle: 'Ver todos os avisos da sua conta.',
+        trailing: 'Ver todos',
+      ),
+      (
+        icon: Icons.download_outlined,
+        title: 'Downloads',
+        subtitle: 'Os filmes e series baixados ficam aqui.',
+        trailing: null,
+      ),
+      (
+        icon: Icons.history,
+        title: 'Historico completo',
+        subtitle: 'Retome o que voce ja assistiu.',
+        trailing: null,
+      ),
+    ];
+
+    if (Responsive.isDesktop(context)) {
+      return Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: Responsive.horizontalPadding(context),
+        ),
+        child: Row(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(width: 12),
+              Expanded(
+                child: _buildDesktopMenuCard(
+                  icon: items[i].icon,
+                  title: items[i].title,
+                  subtitle: items[i].subtitle,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: [
         _buildMenuItem(
@@ -370,6 +489,58 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
           onTap: () {},
         ),
       ],
+    );
+  }
+
+  Widget _buildDesktopMenuCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return InkWell(
+      onTap: () {},
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.surfaceLighter),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AppColors.textPrimary),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -432,7 +603,9 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(
+            horizontal: Responsive.horizontalPadding(context),
+          ),
           child: Row(
             children: [
               Icon(icon, size: 20, color: AppColors.primary),
@@ -459,7 +632,9 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
           height: 160,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: EdgeInsets.symmetric(
+              horizontal: Responsive.horizontalPadding(context) - 4,
+            ),
             itemCount: episodes.length,
             itemBuilder: (context, index) =>
                 _buildContentCard(context, episodes[index]),
