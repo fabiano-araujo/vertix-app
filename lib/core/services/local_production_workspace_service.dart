@@ -124,6 +124,7 @@ class ProductionReferenceItem {
   final String? publicUrl;
   final String description;
   final bool canonical;
+  final Map<String, dynamic> metadata;
 
   const ProductionReferenceItem({
     required this.id,
@@ -133,6 +134,7 @@ class ProductionReferenceItem {
     this.publicUrl,
     this.description = '',
     this.canonical = false,
+    this.metadata = const {},
   });
 
   factory ProductionReferenceItem.fromJson(Map<String, dynamic> json) =>
@@ -144,6 +146,9 @@ class ProductionReferenceItem {
         publicUrl: json['publicUrl'] as String?,
         description: json['description'] as String? ?? '',
         canonical: _readBool(json['canonical'], fallback: false),
+        metadata: Map<String, dynamic>.from(
+          json['metadata'] as Map? ?? const {},
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -154,6 +159,7 @@ class ProductionReferenceItem {
     'publicUrl': publicUrl,
     'description': description,
     'canonical': canonical,
+    'metadata': metadata,
   };
 }
 
@@ -164,8 +170,10 @@ class ProductionTakeItem {
   final int durationSeconds;
   final String status;
   final double progress;
+  final String aiShortCore;
   final String visualPrompt;
   final String audioPrompt;
+  final String stylePresetId;
   final String transitionMode;
   final bool usePreviousLastFrame;
   final bool generateSeedanceAudio;
@@ -181,8 +189,10 @@ class ProductionTakeItem {
     required this.durationSeconds,
     this.status = 'READY',
     this.progress = 0,
+    this.aiShortCore = '',
     this.visualPrompt = '',
     this.audioPrompt = '',
+    this.stylePresetId = '',
     this.transitionMode = 'MATCH_ON_ACTION',
     this.usePreviousLastFrame = false,
     this.generateSeedanceAudio = false,
@@ -200,8 +210,10 @@ class ProductionTakeItem {
         durationSeconds: json['durationSeconds'] as int? ?? 10,
         status: json['status'] as String? ?? 'READY',
         progress: (json['progress'] as num?)?.toDouble() ?? 0,
+        aiShortCore: json['aiShortCore'] as String? ?? '',
         visualPrompt: json['visualPrompt'] as String? ?? '',
         audioPrompt: json['audioPrompt'] as String? ?? '',
+        stylePresetId: json['stylePresetId'] as String? ?? '',
         transitionMode: json['transitionMode'] as String? ?? 'MATCH_ON_ACTION',
         usePreviousLastFrame: _readBool(
           json['usePreviousLastFrame'],
@@ -224,8 +236,10 @@ class ProductionTakeItem {
     int? durationSeconds,
     String? status,
     double? progress,
+    String? aiShortCore,
     String? visualPrompt,
     String? audioPrompt,
+    String? stylePresetId,
     String? transitionMode,
     bool? usePreviousLastFrame,
     bool? generateSeedanceAudio,
@@ -240,8 +254,10 @@ class ProductionTakeItem {
     durationSeconds: durationSeconds ?? this.durationSeconds,
     status: status ?? this.status,
     progress: progress ?? this.progress,
+    aiShortCore: aiShortCore ?? this.aiShortCore,
     visualPrompt: visualPrompt ?? this.visualPrompt,
     audioPrompt: audioPrompt ?? this.audioPrompt,
+    stylePresetId: stylePresetId ?? this.stylePresetId,
     transitionMode: transitionMode ?? this.transitionMode,
     usePreviousLastFrame: usePreviousLastFrame ?? this.usePreviousLastFrame,
     generateSeedanceAudio: generateSeedanceAudio ?? this.generateSeedanceAudio,
@@ -258,8 +274,10 @@ class ProductionTakeItem {
     'durationSeconds': durationSeconds,
     'status': status,
     'progress': progress,
+    'aiShortCore': aiShortCore,
     'visualPrompt': visualPrompt,
     'audioPrompt': audioPrompt,
+    'stylePresetId': stylePresetId,
     'transitionMode': transitionMode,
     'usePreviousLastFrame': usePreviousLastFrame,
     'generateSeedanceAudio': generateSeedanceAudio,
@@ -525,6 +543,7 @@ class MicroDramaProjectConfig {
   final int episodeCount;
   final int firstEpisodeDurationSeconds;
   final int episodeDurationSeconds;
+  final int maxShotDurationSeconds;
   final bool automaticReview;
 
   const MicroDramaProjectConfig({
@@ -543,6 +562,7 @@ class MicroDramaProjectConfig {
     required this.episodeCount,
     required this.firstEpisodeDurationSeconds,
     required this.episodeDurationSeconds,
+    this.maxShotDurationSeconds = 10,
     this.automaticReview = true,
   });
 
@@ -550,11 +570,44 @@ class MicroDramaProjectConfig {
       episodeCount >= 50 ? 'app_native' : 'validation_pilot';
 }
 
+class _MicroDramaStylePreset {
+  final String id;
+  final String label;
+  final String mediaCategory;
+  final String cinematographyLock;
+  final String audioLock;
+  final String visualStyleLock;
+  final String textLock;
+  final String negativeLock;
+  final String mediumLock;
+
+  const _MicroDramaStylePreset({
+    required this.id,
+    required this.label,
+    required this.mediaCategory,
+    required this.cinematographyLock,
+    required this.audioLock,
+    required this.visualStyleLock,
+    required this.textLock,
+    required this.negativeLock,
+    required this.mediumLock,
+  });
+
+  String get compiledSuffix => <String>[
+    '$cinematographyLock $audioLock',
+    'Visual style: $visualStyleLock',
+    textLock,
+    negativeLock,
+    mediumLock,
+  ].join('\n\n');
+}
+
 class _MicroDramaEpisodePlan {
   final String title;
   final String job;
   final String coldOpen;
   final String goal;
+  final String emotionalBeat;
   final String protagonistStep;
   final String countermove;
   final String valueChange;
@@ -566,11 +619,26 @@ class _MicroDramaEpisodePlan {
     required this.job,
     required this.coldOpen,
     required this.goal,
+    required this.emotionalBeat,
     required this.protagonistStep,
     required this.countermove,
     required this.valueChange,
     required this.summary,
     required this.cliffhanger,
+  });
+}
+
+class _MicroDramaCreativePackage {
+  final List<Map<String, dynamic>> characters;
+  final List<Map<String, dynamic>> environments;
+  final List<Map<String, dynamic>> props;
+  final List<ProductionReferenceItem> references;
+
+  const _MicroDramaCreativePackage({
+    required this.characters,
+    required this.environments,
+    required this.props,
+    required this.references,
   });
 }
 
@@ -619,7 +687,7 @@ class LocalProductionWorkspaceService {
           projects.add(seed);
         }
       }
-      _cache = projects;
+      _cache = projects.map(_ensureMicroDramaCreativePackage).toList();
       await _persistLocalProjects();
     }
     final overlaid = await _applyGeneratedProductionOverlays(_cache!);
@@ -977,17 +1045,325 @@ class LocalProductionWorkspaceService {
     updatedAt: DateTime(2026, 8, 16),
   );
 
+  @visibleForTesting
+  ProductionProject ensureMicroDramaCreativePackageForTesting(
+    ProductionProject project,
+  ) => _ensureMicroDramaCreativePackage(project);
+
+  ProductionProject generateMicroDramaEpisodeScript(
+    ProductionProject project, {
+    required int episodeNumber,
+  }) {
+    if (project.formatFamily != 'micro_drama_vertical') {
+      throw ArgumentError('O projeto não é um microdrama vertical.');
+    }
+    final episodeIndex = project.episodes.indexWhere(
+      (episode) => episode.number == episodeNumber,
+    );
+    if (episodeIndex < 0) {
+      throw ArgumentError('Episódio $episodeNumber não encontrado.');
+    }
+
+    final config = _microDramaConfigFromProject(project);
+    final creativePackage = _buildMicroDramaCreativePackage(config, project.id);
+    final episodeCards =
+        (project.seriesBible['episode_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final existingCardIndex = episodeCards.indexWhere(
+      (card) => card['episode'] == episodeNumber,
+    );
+    final plan = _microDramaEpisodePlan(config, episodeNumber: episodeNumber);
+    final card = existingCardIndex >= 0
+        ? episodeCards[existingCardIndex]
+        : <String, dynamic>{
+            'episode': episodeNumber,
+            'title': plan.title,
+            'duration_seconds': project.episodes[episodeIndex].durationSeconds,
+            'episode_job': plan.job,
+            'stage_goal': plan.goal,
+            'emotional_beat': plan.emotionalBeat,
+            'treatment': plan.summary,
+            'value_shift': plan.valueChange,
+            'cold_open': plan.coldOpen,
+            'immediate_goal': plan.goal,
+            'antagonist_countermove': plan.countermove,
+            'peak_action': plan.cliffhanger,
+            'status': 'OUTLINE_REVIEW_REQUIRED',
+            'script_status': 'NOT_STARTED',
+          };
+    if (existingCardIndex < 0) episodeCards.add(card);
+
+    final episode = project.episodes[episodeIndex];
+    final script = _buildMicroDramaEpisodeScript(
+      config,
+      projectId: project.id,
+      episode: episode,
+      card: card,
+      creativePackage: creativePackage,
+    );
+    final episodes = project.episodes.toList();
+    episodes[episodeIndex] = episode.copyWith(
+      status: 'SCRIPT_DRAFT_REVIEW_REQUIRED',
+      takes: const [],
+    );
+
+    card['script_status'] = 'DRAFT_REVIEW_REQUIRED';
+    card['production_status'] = 'BLOCKED_BY_SCRIPT_APPROVAL';
+    final episodeScripts =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where((item) => item['episode'] != episodeNumber)
+            .toList()
+          ..add(script);
+    episodeScripts.sort(
+      (a, b) =>
+          (a['episode'] as num? ?? 0).compareTo(b['episode'] as num? ?? 0),
+    );
+    final existingScenes =
+        (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where((scene) => scene['episode'] != episodeNumber)
+            .toList();
+    final generatedScenes = (script['scenes'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final sceneCards = [...existingScenes, ...generatedScenes]
+      ..sort((a, b) {
+        final episodeOrder = (a['episode'] as num? ?? 0).compareTo(
+          b['episode'] as num? ?? 0,
+        );
+        if (episodeOrder != 0) return episodeOrder;
+        return (a['scene'] as num? ?? 0).compareTo(b['scene'] as num? ?? 0);
+      });
+    final scriptedEpisodes = episodeScripts.length;
+    final allScriptsCreated = scriptedEpisodes == episodes.length;
+    final productionReadyEpisodes = episodes
+        .where((item) => item.takes.isNotEmpty)
+        .length;
+    final shotCount = episodeScripts.fold<int>(0, (total, item) {
+      final scenes = item['scenes'] as List<dynamic>? ?? const [];
+      return total +
+          scenes.whereType<Map>().fold<int>(
+            0,
+            (sceneTotal, scene) =>
+                sceneTotal +
+                (scene['shots'] as List<dynamic>? ?? const []).length,
+          );
+    });
+    final workflow = Map<String, dynamic>.from(
+      project.seriesBible['workflow'] as Map? ?? const {},
+    );
+
+    return project.copyWith(
+      episodes: episodes,
+      seriesBible: {
+        ...project.seriesBible,
+        'creation_workflow': 'guided_microdrama_v3_outline_first',
+        'workflow': {
+          ...workflow,
+          'scripts': allScriptsCreated
+              ? 'ALL_EPISODE_SCRIPT_DRAFTS_CREATED'
+              : 'PARTIAL_EPISODE_SCRIPT_DRAFTS_CREATED',
+          'production': productionReadyEpisodes == 0
+              ? 'BLOCKED_BY_SCRIPT_APPROVAL'
+              : 'PARTIAL_EPISODES_READY',
+        },
+        'episode_cards': episodeCards,
+        'episode_scripts': episodeScripts,
+        'scene_cards': sceneCards,
+        'script_package': {
+          'status': 'HUMAN_REVIEW_REQUIRED',
+          'episodes': scriptedEpisodes,
+          'scenes': sceneCards.length,
+          'shots': shotCount,
+          'duration_mode': 'VARIABLE_UP_TO_LIMIT',
+          'max_shot_duration_seconds': config.maxShotDurationSeconds,
+          'production_ready_episodes': productionReadyEpisodes,
+          'generation_order': [
+            'season_outline',
+            'characters',
+            'environments',
+            'props',
+            'episode_script_draft_on_demand',
+            'human_script_approval',
+            'production_prompt_compilation',
+          ],
+        },
+      },
+    );
+  }
+
+  @visibleForTesting
+  ProductionProject generateMicroDramaEpisodeScriptForTesting(
+    ProductionProject project, {
+    required int episodeNumber,
+  }) => generateMicroDramaEpisodeScript(project, episodeNumber: episodeNumber);
+
+  ProductionProject approveMicroDramaEpisodeScriptForProduction(
+    ProductionProject project, {
+    required int episodeNumber,
+  }) {
+    if (project.formatFamily != 'micro_drama_vertical') {
+      throw ArgumentError('O projeto não é um microdrama vertical.');
+    }
+    final episodeIndex = project.episodes.indexWhere(
+      (episode) => episode.number == episodeNumber,
+    );
+    if (episodeIndex < 0) {
+      throw ArgumentError('Episódio $episodeNumber não encontrado.');
+    }
+    final episodeScripts =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final scriptIndex = episodeScripts.indexWhere(
+      (script) => script['episode'] == episodeNumber,
+    );
+    if (scriptIndex < 0) {
+      throw StateError('Gere o roteiro detalhado antes da produção.');
+    }
+
+    final script = Map<String, dynamic>.from(episodeScripts[scriptIndex]);
+    final qualityGate = Map<String, dynamic>.from(
+      script['quality_gate'] as Map? ?? const {},
+    );
+    if (qualityGate['decision'] == 'BLOCK') {
+      throw StateError('O roteiro possui bloqueios críticos de qualidade.');
+    }
+    final dialogueMaster = Map<String, dynamic>.from(
+      script['episode_dialogue_master'] as Map? ?? const {},
+    );
+    final lockedDialogueMaster = {...dialogueMaster, 'status': 'LOCKED'};
+    final lockedScript = {
+      ...script,
+      'status': 'LOCKED_FOR_PRODUCTION',
+      'approved_by_user': true,
+      'approved_at': DateTime.now().toIso8601String(),
+      'episode_dialogue_master': lockedDialogueMaster,
+    };
+    episodeScripts[scriptIndex] = lockedScript;
+
+    final config = _microDramaConfigFromProject(project);
+    final creativePackage = _buildMicroDramaCreativePackage(config, project.id);
+    final takes = _productionTakesFromEpisodeScript(
+      config,
+      projectId: project.id,
+      script: lockedScript,
+      creativePackage: creativePackage,
+    );
+    final stylePreset = _microDramaStylePreset(config.visualStyle);
+    final episodes = project.episodes.toList();
+    episodes[episodeIndex] = episodes[episodeIndex].copyWith(
+      status: 'PRODUCTION_READY',
+      takes: takes,
+    );
+
+    final episodeCards =
+        (project.seriesBible['episode_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final cardIndex = episodeCards.indexWhere(
+      (card) => card['episode'] == episodeNumber,
+    );
+    if (cardIndex >= 0) {
+      episodeCards[cardIndex] = {
+        ...episodeCards[cardIndex],
+        'script_status': 'LOCKED_FOR_PRODUCTION',
+        'production_status': 'PROMPTS_READY_FOR_REVIEW',
+      };
+    }
+    final productionPackages =
+        (project.seriesBible['production_prompt_packages'] as List<dynamic>? ??
+                const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where((item) => item['episode'] != episodeNumber)
+            .toList()
+          ..add({
+            'episode': episodeNumber,
+            'status': 'PROMPTS_READY_FOR_REVIEW',
+            'source_script_status': 'LOCKED_FOR_PRODUCTION',
+            'delivery_mode': 'episode_segment',
+            'take_count': takes.length,
+            'duration_mode': 'VARIABLE_UP_TO_LIMIT',
+            'max_take_duration_seconds': config.maxShotDurationSeconds,
+            'prompt_contract': 'ai_short_core_plus_code_style_preset_v1',
+            'ai_short_core': 'SCENE_SPECIFIC_DYNAMIC_PROSE',
+            'style_decoration': 'CODE_OWNED_FIXED_PRESET',
+            'style_preset_id': stylePreset.id,
+            'style_preset_label': stylePreset.label,
+            'media_category': stylePreset.mediaCategory,
+          });
+    productionPackages.sort(
+      (a, b) =>
+          (a['episode'] as num? ?? 0).compareTo(b['episode'] as num? ?? 0),
+    );
+    final workflow = Map<String, dynamic>.from(
+      project.seriesBible['workflow'] as Map? ?? const {},
+    );
+    final lockedCount = episodeScripts
+        .where((item) => item['status'] == 'LOCKED_FOR_PRODUCTION')
+        .length;
+
+    return project.copyWith(
+      episodes: episodes,
+      seriesBible: {
+        ...project.seriesBible,
+        'workflow': {
+          ...workflow,
+          'scripts': lockedCount == episodes.length
+              ? 'ALL_EPISODE_SCRIPTS_LOCKED'
+              : 'PARTIAL_EPISODE_SCRIPTS_LOCKED',
+          'production': lockedCount == episodes.length
+              ? 'ALL_EPISODES_READY'
+              : 'PARTIAL_EPISODES_READY',
+        },
+        'episode_cards': episodeCards,
+        'episode_scripts': episodeScripts,
+        'production_prompt_packages': productionPackages,
+        'locked_script_package': {
+          'package_version': 'microdrama-script-v1',
+          'status': lockedCount == episodes.length ? 'LOCKED' : 'PARTIAL_LOCK',
+          'approved_episode_count': lockedCount,
+          'locked_scripts': episodeScripts
+              .where((item) => item['status'] == 'LOCKED_FOR_PRODUCTION')
+              .toList(),
+          'production_handoff': {
+            'target': 'seedance-series-pipeline',
+            'preserve_exact_dialogue': true,
+            'preserve_scene_and_shot_order': true,
+            'preserve_cliffhanger_cut': true,
+            'provider_duration_mode': 'VARIABLE_UP_TO_LIMIT',
+            'provider_duration_limit_seconds': config.maxShotDurationSeconds,
+          },
+        },
+      },
+    );
+  }
+
+  @visibleForTesting
+  ProductionProject approveMicroDramaEpisodeScriptForProductionForTesting(
+    ProductionProject project, {
+    required int episodeNumber,
+  }) => approveMicroDramaEpisodeScriptForProduction(
+    project,
+    episodeNumber: episodeNumber,
+  );
+
   static ProductionProject _buildMicroDramaProject(
     MicroDramaProjectConfig config, {
     required String id,
     required int virtualId,
     required DateTime updatedAt,
   }) {
-    final protagonistId = '$id-character-protagonist';
-    final opposingForceId = '$id-character-opposing-force';
-    final locationId = '$id-location-master';
-    final propId = '$id-prop-master';
-    final referenceIds = [protagonistId, opposingForceId, locationId, propId];
+    final creativePackage = _buildMicroDramaCreativePackage(config, id);
     final episodes = <ProductionEpisodeItem>[];
     final episodeCards = <Map<String, dynamic>>[];
     final hookChain = <Map<String, dynamic>>[];
@@ -1004,15 +1380,6 @@ class LocalProductionWorkspaceService {
       final openingPickup = episodeNumber == 1
           ? 'Abrir já na consequência concreta da premissa: ${config.logline}'
           : 'Pagar imediatamente o gancho anterior sem reiniciar a história: $previousHook';
-      final takes = _microDramaTakes(
-        config,
-        projectId: id,
-        episodeNumber: episodeNumber,
-        durationSeconds: duration,
-        episodeSummary: plan.summary,
-        cliffhanger: plan.cliffhanger,
-        referenceIds: referenceIds,
-      );
       episodes.add(
         ProductionEpisodeItem(
           number: episodeNumber,
@@ -1020,8 +1387,8 @@ class LocalProductionWorkspaceService {
           summary: plan.summary,
           cliffhanger: plan.cliffhanger,
           durationSeconds: duration,
-          status: 'DRAFT',
-          takes: takes,
+          status: 'OUTLINE_REVIEW_REQUIRED',
+          takes: const [],
           externalMusic: true,
           musicProvider: 'API externa',
           musicPrompt:
@@ -1035,7 +1402,13 @@ class LocalProductionWorkspaceService {
       ];
       episodeCards.add({
         'episode': episodeNumber,
+        'title': plan.title,
+        'duration_seconds': duration,
         'episode_job': plan.job,
+        'stage_goal': plan.goal,
+        'emotional_beat': plan.emotionalBeat,
+        'treatment': plan.summary,
+        'value_shift': plan.valueChange,
         'previous_promise_payoff': openingPickup,
         'cold_open': plan.coldOpen,
         'dominant_question': config.centralQuestion,
@@ -1047,7 +1420,8 @@ class LocalProductionWorkspaceService {
         'peak_action': plan.cliffhanger,
         'exact_cut_point': 'Cortar no pico, antes da reação ou explicação.',
         'next_episode_question': questions.first,
-        'status': 'DRAFT_REVIEW_REQUIRED',
+        'status': 'OUTLINE_REVIEW_REQUIRED',
+        'script_status': 'NOT_STARTED',
       });
       hookChain.add({
         'episode': episodeNumber,
@@ -1065,9 +1439,11 @@ class LocalProductionWorkspaceService {
       previousHook = plan.cliffhanger;
     }
 
+    const sceneCards = <Map<String, dynamic>>[];
     final profileEvidence = config.episodeCount >= 50
         ? 'platform_default'
         : 'hypothesis';
+    final stylePreset = _microDramaStylePreset(config.visualStyle);
     return ProductionProject(
       id: id,
       virtualId: virtualId,
@@ -1081,7 +1457,7 @@ class LocalProductionWorkspaceService {
       isLocal: true,
       updatedAt: updatedAt,
       seriesBible: {
-        'creation_workflow': 'guided_microdrama_v1',
+        'creation_workflow': 'guided_microdrama_v3_outline_first',
         'package_status': 'DRAFT_REVIEW_REQUIRED',
         'distribution_profile': config.distributionProfile,
         'evidence_status': profileEvidence,
@@ -1089,6 +1465,11 @@ class LocalProductionWorkspaceService {
         'language': config.language,
         'rating': config.rating,
         'visual_style': config.visualStyle,
+        'style_preset_id': stylePreset.id,
+        'style_preset_media_category': stylePreset.mediaCategory,
+        'style_decoration_source': 'CODE_OWNED_FIXED_PRESET',
+        'max_shot_duration_seconds': config.maxShotDurationSeconds,
+        'provider_duration_seconds': config.maxShotDurationSeconds,
         'genre': config.genre,
         'background': config.background,
         'trope': config.trope,
@@ -1111,10 +1492,21 @@ class LocalProductionWorkspaceService {
         'workflow': {
           'settings': 'COMPLETE',
           'series_contract': 'DRAFT',
-          'outline': 'DRAFT_REVIEW_REQUIRED',
-          'characters_locations_props': 'PLACEHOLDERS_CREATED',
-          'scripts': 'BEAT_SHEETS_CREATED',
-          'production': 'NOT_STARTED',
+          'outline': 'GENERATED_REVIEW_REQUIRED',
+          'characters': 'GENERATED_REVIEW_REQUIRED',
+          'environments': 'GENERATED_REVIEW_REQUIRED',
+          'props': 'GENERATED_REVIEW_REQUIRED',
+          'characters_locations_props': 'GENERATED_REVIEW_REQUIRED',
+          'scripts': 'NOT_STARTED',
+          'production': 'BLOCKED_BY_SCRIPT',
+        },
+        'season_outline': {
+          'title': config.title,
+          'logline': config.logline,
+          'central_question': config.centralQuestion,
+          'stakes': config.stakes,
+          'episode_count': config.episodeCount,
+          'status': 'DRAFT_REVIEW_REQUIRED',
         },
         'promise_ledger': [
           {
@@ -1130,44 +1522,371 @@ class LocalProductionWorkspaceService {
         'episode_cards': episodeCards,
         'hook_chain': hookChain,
         'pressure_ledger': pressureLedger,
+        'characters': creativePackage.characters,
+        'character_bible': creativePackage.characters,
+        'environments': creativePackage.environments,
+        'location_bible': creativePackage.environments,
+        'props': creativePackage.props,
+        'object_bible': creativePackage.props,
+        'scene_cards': sceneCards,
+        'script_package': {
+          'status': 'NOT_STARTED',
+          'episodes': 0,
+          'scenes': 0,
+          'shots': 0,
+          'max_shot_duration_seconds': config.maxShotDurationSeconds,
+          'generation_order': [
+            'season_outline',
+            'characters',
+            'environments',
+            'props',
+            'episode_script_on_demand',
+          ],
+        },
       },
       episodes: episodes,
-      references: [
-        ProductionReferenceItem(
-          id: protagonistId,
-          label: config.protagonist,
-          category: 'CHARACTER_MASTER',
-          description:
-              'Protagonista. Definir aparência canônica, personalidade, desejo, ferida, necessidade e figurinos antes da geração.',
-          canonical: true,
-        ),
-        ProductionReferenceItem(
-          id: opposingForceId,
-          label: config.opposingForce,
-          category: 'OPPOSING_FORCE_MASTER',
-          description:
-              'Força oposta. Definir aparência, objetivo concorrente, recurso de poder e padrão de contrajogada.',
-          canonical: true,
-        ),
-        ProductionReferenceItem(
-          id: locationId,
-          label: config.background,
-          category: 'LOCATION_MASTER',
-          description:
-              'Ambiente mestre do microdrama. Fixar geografia, luz, objetos permanentes e limites de produção.',
-          canonical: true,
-        ),
-        ProductionReferenceItem(
-          id: propId,
-          label: 'Objeto narrativo principal',
-          category: 'PROP_MASTER',
-          description:
-              'Escolher um objeto que seja introduzido, transferido, alterado e pago ao longo da temporada.',
-          canonical: true,
-        ),
-      ],
+      references: creativePackage.references,
     );
   }
+
+  static _MicroDramaCreativePackage _buildMicroDramaCreativePackage(
+    MicroDramaProjectConfig config,
+    String projectId,
+  ) {
+    final protagonistId = '$projectId-character-protagonist';
+    final opposingForceId = '$projectId-character-opposing-force';
+    final supportingNames = _microDramaSupportingNames(config.language);
+    final characters = <Map<String, dynamic>>[
+      {
+        'reference_id': protagonistId,
+        'name': config.protagonist,
+        'role': 'Protagonista',
+        'appearance':
+            'Presença central imediatamente reconhecível, silhueta limpa e expressiva em 9:16. Visual-base em ${config.visualStyle}, com figurino funcional ligado a ${config.background}; rosto, cabelo, proporções, acessórios e paleta devem permanecer constantes entre episódios.',
+        'personality': [
+          'determinado sob pressão',
+          'afetivamente contraditório',
+          'observador',
+          'capaz de decisões irreversíveis',
+        ],
+        'dramatic_function':
+            'Conduz a ação e responde progressivamente à pergunta central.',
+        'desire': config.centralQuestion,
+        'fear': config.stakes,
+        'arc':
+            'Parte tentando preservar controle e termina obrigado a escolher diante do custo máximo.',
+        'looks': ['Aparência padrão', 'Estado íntimo', 'Confronto final'],
+      },
+      {
+        'reference_id': opposingForceId,
+        'name': config.opposingForce,
+        'role': 'Força oposta',
+        'appearance':
+            'Visual de contraste com ${config.protagonist}: linhas, postura e paleta comunicam poder antes do diálogo. Aparência coerente com ${config.visualStyle}, incluindo um acessório-assinatura preservado em todos os episódios.',
+        'personality': [
+          'estratégico',
+          'controlador',
+          'persuasivo',
+          'perigoso quando perde vantagem',
+        ],
+        'dramatic_function':
+            'Age por objetivo próprio, aprende com cada avanço e remove uma opção segura.',
+        'desire': 'Manter o controle do conflito central.',
+        'fear': 'Perder poder, reputação ou o vínculo que usa como alavanca.',
+        'arc':
+            'Começa dominando as regras e termina exposto pela consequência das próprias contrajogadas.',
+        'looks': ['Aparência padrão', 'Imagem pública', 'Estado de ruptura'],
+      },
+      {
+        'reference_id': '$projectId-character-confidant',
+        'name': supportingNames[0],
+        'role': 'Confidente',
+        'appearance':
+            'Coadjuvante de leitura calorosa e prática, com paleta complementar à de ${config.protagonist}. Figurino cotidiano, um detalhe visual memorável e expressão corporal direta.',
+        'personality': [
+          'leal',
+          'prático',
+          'franco',
+          'corajoso no momento crítico',
+        ],
+        'dramatic_function':
+            'Força ${config.protagonist} a verbalizar escolhas sem substituir sua agência.',
+        'desire': 'Proteger o protagonista sem encobrir seus erros.',
+        'fear': 'Ser usado como álibi para mais uma fuga.',
+        'arc': 'De apoio discreto a testemunha ativa da verdade.',
+        'looks': ['Aparência padrão', 'Variação de crise'],
+      },
+      {
+        'reference_id': '$projectId-character-catalyst',
+        'name': supportingNames[1],
+        'role': 'Catalisador',
+        'appearance':
+            'Figura ligada ao segredo de ${config.trope}, visual simples e emocionalmente legível em close. Um elemento de figurino conecta esta pessoa ao objeto narrativo principal.',
+        'personality': ['curioso', 'espontâneo', 'perceptivo', 'imprevisível'],
+        'dramatic_function':
+            'Torna a premissa visível e dispara revelações sem depender de exposição verbal.',
+        'desire': 'Entender o vínculo que os adultos tentam esconder.',
+        'fear': 'Ser abandonado quando a verdade vier à tona.',
+        'arc': 'De peça protegida do segredo a agente que exige uma resposta.',
+        'looks': ['Aparência padrão'],
+      },
+      {
+        'reference_id': '$projectId-character-wildcard',
+        'name': supportingNames[2],
+        'role': 'Aliado ambíguo',
+        'appearance':
+            'Presença institucional ou social associada a ${config.background}; composição visual sóbria, adereço funcional e postura capaz de mudar de lado sem perder coerência.',
+        'personality': [
+          'cauteloso',
+          'bem informado',
+          'ambíguo',
+          'sensível a provas',
+        ],
+        'dramatic_function':
+            'Valida consequências externas e impede que o clímax dependa apenas da palavra dos protagonistas.',
+        'desire': 'Sair do conflito com posição e consciência preservadas.',
+        'fear': 'Ser responsabilizado pela decisão errada.',
+        'arc': 'Da neutralidade conveniente a uma tomada de posição pública.',
+        'looks': ['Aparência padrão', 'Variação formal'],
+      },
+    ];
+
+    final environments = <Map<String, dynamic>>[
+      {
+        'reference_id': '$projectId-location-master',
+        'name': '${config.background} — ambiente principal',
+        'role': 'Palco recorrente',
+        'description':
+            'Espaço recorrente que concentra trabalho, encontros e interrupções. Deve oferecer primeiro plano, profundidade e entradas visíveis para encenar confrontos verticais sem perder orientação.',
+        'visual_contract':
+            '${config.visualStyle}; geografia fixa, paleta reconhecível, materiais táteis e três marcos permanentes enquadráveis em 9:16.',
+        'lighting':
+            'Base motivada e repetível, com versões de dia, noite e crise.',
+        'permanent_elements': [
+          'entrada principal visível',
+          'superfície de ação',
+          'marco vertical de profundidade',
+        ],
+        'continuity':
+            'Não inverter portas, eixos ou posição dos marcos entre takes.',
+      },
+      {
+        'reference_id': '$projectId-location-private',
+        'name': 'Espaço íntimo de ${config.protagonist}',
+        'role': 'Refúgio e vulnerabilidade',
+        'description':
+            'Ambiente privado onde o custo emocional aparece em objetos, silêncio e rotina. Mais compacto e quente que o ambiente principal.',
+        'visual_contract':
+            'Paleta pessoal derivada do protagonista, sinais de uso real e composição que permita close, reflexo e revelação de objeto.',
+        'lighting':
+            'Luz lateral suave com contraste reservado para cenas de segredo.',
+        'permanent_elements': [
+          'fotografia ou memória',
+          'assento recorrente',
+          'fonte de luz prática',
+        ],
+        'continuity':
+            'Objetos pessoais mantêm posição e estado narrativo por episódio.',
+      },
+      {
+        'reference_id': '$projectId-location-opposition',
+        'name': 'Território de ${config.opposingForce}',
+        'role': 'Centro de poder',
+        'description':
+            'Espaço organizado para favorecer a força oposta: linhas rígidas, distância controlada e sinais concretos de autoridade.',
+        'visual_contract':
+            'Contraste cromático com o mundo de ${config.protagonist}, superfícies controladas e enquadramentos simétricos que possam se romper no clímax.',
+        'lighting':
+            'Luz precisa, fria ou recortada, sem áreas visualmente acidentais.',
+        'permanent_elements': [
+          'mesa ou barreira de poder',
+          'símbolo de status',
+          'saída controlada',
+        ],
+        'continuity':
+            'A perda de controle deve ser mostrada alterando um elemento antes impecável.',
+      },
+      {
+        'reference_id': '$projectId-location-threshold',
+        'name': 'Limiar de encontro e fuga',
+        'role': 'Transição recorrente',
+        'description':
+            'Corredor, entrada, portão ou passagem onde chegadas interrompem decisões e personagens podem ouvir sem serem vistos.',
+        'visual_contract':
+            'Perspectiva profunda, uma porta dominante, textura sonora própria e espaço suficiente para entradas em match-on-action.',
+        'lighting':
+            'Contraluz ou recorte que diferencie os dois lados do limiar.',
+        'permanent_elements': [
+          'porta dominante',
+          'marco de espera',
+          'rota de fuga',
+        ],
+        'continuity': 'Preservar direção de entrada, saída e lado da tela.',
+      },
+      {
+        'reference_id': '$projectId-location-climax',
+        'name': 'Arena pública do clímax',
+        'role': 'Exposição e consequência',
+        'description':
+            'Versão pública e ampliada do conflito, com testemunhas, rota de entrada da ameaça e ponto visual para a prova final.',
+        'visual_contract':
+            'Espaço legível em plano geral vertical, fundo com público controlável e eixo claro entre ${config.protagonist} e ${config.opposingForce}.',
+        'lighting':
+            'Luz mais aberta, permitindo que a verdade seja vista sem esconderijos.',
+        'permanent_elements': [
+          'área de testemunhas',
+          'ponto de confronto',
+          'saída final',
+        ],
+        'continuity':
+            'Reservar este ambiente para a escalada final e não banalizá-lo antes.',
+      },
+    ];
+
+    final propNames = _microDramaPropNames(config.trope);
+    final props = <Map<String, dynamic>>[
+      {
+        'reference_id': '$projectId-prop-master',
+        'name': propNames[0],
+        'role': 'Prova do segredo',
+        'type': 'Símbolo',
+        'description':
+            'Objeto pequeno, reconhecível em close e ligado diretamente a ${config.trope}. Possui marca única, desgaste coerente e informação visual que muda a leitura da história.',
+        'story_function':
+            'Introduzir a dúvida, circular entre personagens e pagar a revelação central.',
+        'continuity':
+            'Registrar lado, orientação, danos, inscrições e quem o possui ao fim de cada cena.',
+        'introduced_episode': 1,
+        'payoff_episode': (config.episodeCount * .75).ceil(),
+      },
+      {
+        'reference_id': '$projectId-prop-bond',
+        'name': propNames[1],
+        'role': 'Símbolo do vínculo',
+        'type': 'Símbolo',
+        'description':
+            'Peça afetiva de material e cor opostos à prova do segredo. Deve funcionar em mão, bolso e detalhe de cenário.',
+        'story_function':
+            'Materializar a relação quando os personagens não conseguem verbalizá-la.',
+        'continuity': 'Toda transferência de posse precisa aparecer em cena.',
+        'introduced_episode': 2,
+        'payoff_episode': config.episodeCount,
+      },
+      {
+        'reference_id': '$projectId-prop-power',
+        'name': propNames[2],
+        'role': 'Instrumento de poder',
+        'type': 'Outro',
+        'description':
+            'Documento, dispositivo ou chave visualmente associado a ${config.opposingForce}; design formal, detalhe verificável e versão íntegra e alterada.',
+        'story_function':
+            'Converter ameaça abstrata em prazo, condição ou perda concreta.',
+        'continuity':
+            'Manter versão, assinatura, tela ou dano sincronizados com o episódio.',
+        'introduced_episode': 1,
+        'payoff_episode': (config.episodeCount * .65).ceil(),
+      },
+      {
+        'reference_id': '$projectId-prop-climax',
+        'name': propNames[3],
+        'role': 'Objeto do clímax',
+        'type': 'Símbolo',
+        'description':
+            'Objeto visualmente simples que reúne memória, escolha e consequência. A versão final deve mostrar uma transformação concreta em relação à primeira aparição.',
+        'story_function':
+            'Fechar a promessa emocional no quadro, sem depender de epílogo explicativo.',
+        'continuity':
+            'Preparar a transformação em pelo menos dois episódios antes do clímax.',
+        'introduced_episode': (config.episodeCount * .4).ceil(),
+        'payoff_episode': config.episodeCount,
+      },
+    ];
+
+    final references = <ProductionReferenceItem>[
+      ...characters.map(
+        (item) => ProductionReferenceItem(
+          id: item['reference_id'] as String,
+          label: item['name'] as String,
+          category: 'CHARACTER_MASTER',
+          description: item['appearance'] as String,
+          canonical: true,
+          metadata: item,
+        ),
+      ),
+      ...environments.map(
+        (item) => ProductionReferenceItem(
+          id: item['reference_id'] as String,
+          label: item['name'] as String,
+          category: 'LOCATION_MASTER',
+          description: item['description'] as String,
+          canonical: true,
+          metadata: item,
+        ),
+      ),
+      ...props.map(
+        (item) => ProductionReferenceItem(
+          id: item['reference_id'] as String,
+          label: item['name'] as String,
+          category: 'PROP_MASTER',
+          description: item['description'] as String,
+          canonical: true,
+          metadata: item,
+        ),
+      ),
+    ];
+    return _MicroDramaCreativePackage(
+      characters: characters,
+      environments: environments,
+      props: props,
+      references: references,
+    );
+  }
+
+  static List<String> _microDramaSupportingNames(String language) {
+    final normalized = language.toLowerCase();
+    if (normalized.contains('english')) return const ['Maya', 'Theo', 'Morgan'];
+    if (normalized.contains('español')) return const ['Lucía', 'Teo', 'Álex'];
+    return const ['Lia', 'Theo', 'Alex'];
+  }
+
+  static List<String> _microDramaPropNames(String trope) => switch (trope) {
+    'Segunda chance' => const [
+      'Mensagem nunca entregue',
+      'Lembrança do primeiro vínculo',
+      'Documento que encerra o prazo',
+      'Promessa restaurada',
+    ],
+    'Casamento por contrato' => const [
+      'Contrato com cláusula oculta',
+      'Aliança provisória',
+      'Pasta jurídica da família',
+      'Contrato rasgado e refeito',
+    ],
+    'Bebê secreto' => const [
+      'Prova de origem escondida',
+      'Desenho de família',
+      'Documento de custódia',
+      'Presente de aniversário',
+    ],
+    'Identidade oculta' => const [
+      'Fotografia reveladora',
+      'Objeto da vida verdadeira',
+      'Crachá ou chave de acesso',
+      'Símbolo da identidade assumida',
+    ],
+    'Retorno vingativo' => const [
+      'Prova arquivada do passado',
+      'Lembrança da perda',
+      'Dossiê de exposição',
+      'Objeto poupado da vingança',
+    ],
+    _ => const [
+      'Prova do segredo',
+      'Símbolo do vínculo',
+      'Instrumento de poder',
+      'Objeto da escolha final',
+    ],
+  };
 
   static _MicroDramaEpisodePlan _microDramaEpisodePlan(
     MicroDramaProjectConfig config, {
@@ -1176,47 +1895,73 @@ class LocalProductionWorkspaceService {
     final progress = episodeNumber / config.episodeCount;
     late final String stage;
     late final String job;
+    late final String goal;
+    late final String emotionalBeat;
     late final String action;
     late final String valueChange;
     if (episodeNumber == 1) {
       stage = 'O impacto';
       job = 'Provar a premissa e tornar o conflito inevitável.';
+      goal =
+          '${config.protagonist} precisa sobreviver ao impacto inicial e escolher uma reação que torne o conflito inevitável.';
+      emotionalBeat = 'choque / urgência';
       action = 'transforma a consequência inicial em uma escolha pública';
       valueChange = 'segurança para risco';
     } else if (progress <= 0.25) {
       stage = 'A negação';
       job = 'Pagar o choque e mostrar por que a solução simples não funciona.';
+      goal =
+          '${config.protagonist} tenta recuperar o controle antes que a consequência anterior se torne pública.';
+      emotionalBeat = 'resistência / ameaça crescente';
       action = 'tenta preservar o controle e perde uma vantagem concreta';
       valueChange = 'controle para exposição';
     } else if (progress <= 0.42) {
       stage = 'A proposta';
       job = 'Criar proximidade forçada e um custo emocional verificável.';
+      goal =
+          '${config.protagonist} aceita uma condição perigosa para proteger o que ainda pode salvar.';
+      emotionalBeat = 'proximidade forçada / vulnerabilidade';
       action = 'aceita uma condição que aproxima o perigo';
       valueChange = 'distância para intimidade perigosa';
     } else if (progress <= 0.58) {
       stage = 'A prova';
       job = 'Ativar uma pista ou objeto que mude a estratégia.';
+      goal =
+          '${config.protagonist} busca uma prova física capaz de mudar a estratégia do conflito.';
+      emotionalBeat = 'suspeita / validação perigosa';
       action = 'usa uma prova física e força a força oposta a reagir';
       valueChange = 'suspeita para evidência';
     } else if (progress <= 0.72) {
       stage = 'O preço';
       job = 'Cobrar a decisão anterior e retirar uma rota de fuga.';
+      goal =
+          '${config.protagonist} tenta proteger o vínculo central sem perder a última vantagem disponível.';
+      emotionalBeat = 'esperança / perda';
       action = 'protege o que mais importa e sacrifica uma vantagem';
       valueChange = 'esperança para perda';
     } else if (progress <= 0.86) {
       stage = 'A contrajogada';
       job = 'Dar à força oposta uma vitória real que reorganize o poder.';
+      goal =
+          '${config.protagonist} precisa responder à vitória de ${config.opposingForce} antes que a derrota se torne permanente.';
+      emotionalBeat = 'confiança rompida / desvantagem';
       action = 'responde à contrajogada com uma decisão irreversível';
       valueChange = 'equilíbrio para desvantagem';
     } else if (episodeNumber < config.episodeCount) {
       stage = 'Sem saída';
       job = 'Preparar o clímax com agência, perdas e promessas convergentes.';
+      goal =
+          '${config.protagonist} abandona a solução fácil e prepara o confronto que decidirá a temporada.';
+      emotionalBeat = 'desespero / determinação';
       action = 'recusa a solução fácil e escolhe o confronto final';
       valueChange = 'reação para agência';
     } else {
       stage = 'A escolha final';
       job =
           'Pagar a pergunta central por uma escolha causada pelo protagonista.';
+      goal =
+          '${config.protagonist} faz a escolha irreversível que responde à grande expectativa da temporada.';
+      emotionalBeat = 'medo / catarse';
       action = 'faz a escolha que responde à promessa da temporada';
       valueChange = 'promessa aberta para consequência';
     }
@@ -1237,7 +1982,8 @@ class LocalProductionWorkspaceService {
       title: '$stage$suffix',
       job: job,
       coldOpen: coldOpen,
-      goal: 'Avançar uma resposta para: ${config.centralQuestion}',
+      goal: goal,
+      emotionalBeat: emotionalBeat,
       protagonistStep: action,
       countermove:
           '${config.opposingForce} observa a mudança e retira uma opção segura.',
@@ -1247,65 +1993,1076 @@ class LocalProductionWorkspaceService {
     );
   }
 
-  static List<ProductionTakeItem> _microDramaTakes(
+  static Map<String, dynamic> _buildMicroDramaEpisodeScript(
     MicroDramaProjectConfig config, {
     required String projectId,
-    required int episodeNumber,
-    required int durationSeconds,
-    required String episodeSummary,
-    required String cliffhanger,
-    required List<String> referenceIds,
+    required ProductionEpisodeItem episode,
+    required Map<String, dynamic> card,
+    required _MicroDramaCreativePackage creativePackage,
   }) {
-    const beatTitles = [
-      'Gancho visível',
-      'Objetivo e risco',
-      'Pressão causal',
-      'Escolha do protagonista',
-      'Contrajogada',
-      'Reversão',
-      'Custo irreversível',
-      'Cliffhanger',
-    ];
-    const takeLimit = 15;
-    final takeCount = (durationSeconds / takeLimit).ceil();
-    var remaining = durationSeconds;
-    return List.generate(takeCount, (index) {
-      final number = index + 1;
-      final duration = remaining > takeLimit ? takeLimit : remaining;
-      remaining -= duration;
-      final beatIndex = takeCount == 1
-          ? beatTitles.length - 1
-          : ((index * (beatTitles.length - 1)) / (takeCount - 1)).round();
-      final beat = beatTitles[beatIndex];
-      final isLast = index == takeCount - 1;
-      return ProductionTakeItem(
-        id: '$projectId-ep$episodeNumber-take$number',
-        number: number,
-        title: beat,
-        durationSeconds: duration,
-        status: 'DRAFT',
-        visualPrompt:
-            '${config.visualStyle}, ${config.genre}, vertical 9:16, exatamente ${duration}s. '
-            'Episódio $episodeNumber: $episodeSummary Função deste take: $beat. '
-            '${isLast ? 'Encerrar exatamente em: $cliffhanger' : 'Terminar em ação incompleta que cause o próximo take.'}',
-        audioPrompt:
-            'Áudio integrado ao vídeo: diálogo natural em ${config.language}, ambiente e efeitos sincronizados com a ação. '
-            'Sem música dentro do vídeo; a trilha será adicionada separadamente. Sem repetir contexto na borda do take.',
-        transitionMode: number == 1 ? 'EPISODE_START' : 'MATCH_ON_ACTION',
-        usePreviousLastFrame: false,
-        generateSeedanceAudio: true,
-        referenceIds: referenceIds,
-        notes: isLast
-            ? 'Cortar no pico antes da reação, resposta ou explicação.'
-            : 'Preservar estado de saída para a entrada do próximo take.',
-      );
-    });
+    final shotLimit = config.maxShotDurationSeconds.clamp(5, 10).toInt();
+    final shotDurations = _microDramaShotDurations(
+      episode.durationSeconds,
+      shotLimit,
+    );
+    final shotCount = shotDurations.length;
+    final sceneCount = shotCount.clamp(1, 3).toInt();
+    final shotsPerScene = List<int>.filled(sceneCount, shotCount ~/ sceneCount);
+    for (var index = 0; index < shotCount % sceneCount; index++) {
+      shotsPerScene[index] += 1;
+    }
+
+    final episodePosition = episode.number - 1;
+    final environments = creativePackage.environments;
+    final characters = creativePackage.characters;
+    final protagonistId = characters.first['reference_id'] as String;
+    final opposingId = characters[1]['reference_id'] as String;
+    final supportingId = characters[2]['reference_id'] as String;
+    final sceneTitles = _localizedScriptSceneTitles(config.language);
+    final scenes = <Map<String, dynamic>>[];
+    final dialogueLines = <Map<String, dynamic>>[];
+    var shotNumber = 1;
+
+    for (var sceneIndex = 0; sceneIndex < sceneCount; sceneIndex++) {
+      final environment =
+          environments[(episodePosition + sceneIndex) % environments.length];
+      final usesSupporting = sceneIndex == 1;
+      final counterName = usesSupporting
+          ? characters[2]['name'] as String
+          : config.opposingForce;
+      final counterId = usesSupporting ? supportingId : opposingId;
+      final cast = [config.protagonist, counterName];
+      final castIds = [protagonistId, counterId];
+      final shots = <Map<String, dynamic>>[];
+
+      for (
+        var localIndex = 0;
+        localIndex < shotsPerScene[sceneIndex];
+        localIndex++
+      ) {
+        final duration = shotDurations[shotNumber - 1];
+        final dialogue = _microDramaDialogueSet(
+          config,
+          shotNumber: shotNumber,
+          counterName: counterName,
+        );
+        final actions = _microDramaShotActions(
+          config,
+          episode: episode,
+          card: card,
+          shotNumber: shotNumber,
+          shotCount: shotCount,
+          location: environment['name'] as String,
+          counterName: counterName,
+        );
+        final linePrefix = 'ep${episode.number.toString().padLeft(2, '0')}-l';
+        final firstLineId =
+            '$linePrefix${(dialogueLines.length + 1).toString().padLeft(3, '0')}';
+        final secondLineId =
+            '$linePrefix${(dialogueLines.length + 2).toString().padLeft(3, '0')}';
+        late final List<Map<String, dynamic>> rows;
+        if (duration <= 5) {
+          final rowDurations = _microDramaRowDurations(duration, rowCount: 3);
+          final protagonistOwnsLine = shotNumber.isOdd;
+          rows = [
+            {
+              'type': 'action',
+              'text': actions.$1,
+              'provider_text': actions.$3,
+              'duration_seconds': rowDurations[0],
+            },
+            {
+              'type': 'dialogue',
+              'line_id': firstLineId,
+              'speaker': protagonistOwnsLine ? config.protagonist : counterName,
+              'performance': protagonistOwnsLine ? dialogue.$1 : dialogue.$3,
+              'provider_performance': protagonistOwnsLine
+                  ? 'holding pressure behind a controlled breath'
+                  : 'closing the distance without raising the voice',
+              'text': protagonistOwnsLine ? dialogue.$2 : dialogue.$4,
+              'duration_seconds': rowDurations[1],
+            },
+            {
+              'type': 'action',
+              'text': actions.$2,
+              'provider_text': actions.$4,
+              'duration_seconds': rowDurations[2],
+            },
+          ];
+        } else {
+          final rowDurations = _microDramaRowDurations(duration, rowCount: 4);
+          final counterOpens = shotNumber.isEven;
+          rows = [
+            {
+              'type': 'action',
+              'text': actions.$1,
+              'provider_text': actions.$3,
+              'duration_seconds': rowDurations[0],
+            },
+            {
+              'type': 'dialogue',
+              'line_id': firstLineId,
+              'speaker': counterOpens ? counterName : config.protagonist,
+              'performance': counterOpens ? dialogue.$3 : dialogue.$1,
+              'provider_performance': counterOpens
+                  ? 'closing the distance without raising the voice'
+                  : 'holding pressure behind a controlled breath',
+              'text': counterOpens ? dialogue.$4 : dialogue.$2,
+              'duration_seconds': rowDurations[1],
+            },
+            {
+              'type': 'dialogue',
+              'line_id': secondLineId,
+              'speaker': counterOpens ? config.protagonist : counterName,
+              'performance': counterOpens ? dialogue.$5 : dialogue.$3,
+              'provider_performance': counterOpens
+                  ? 'meeting the challenge and committing to the choice'
+                  : 'answering with restrained authority',
+              'text': counterOpens ? dialogue.$6 : dialogue.$4,
+              'duration_seconds': rowDurations[2],
+            },
+            {
+              'type': 'action',
+              'text': actions.$2,
+              'provider_text': actions.$4,
+              'duration_seconds': rowDurations[3],
+            },
+          ];
+        }
+        final shotDialogueRows = rows
+            .where((item) => item['type'] == 'dialogue')
+            .toList();
+        for (var rowIndex = 0; rowIndex < shotDialogueRows.length; rowIndex++) {
+          final row = shotDialogueRows[rowIndex];
+          dialogueLines.add({
+            'line_id': row['line_id'],
+            'speaker': row['speaker'],
+            'text': row['text'],
+            'purpose': row['speaker'] == config.protagonist
+                ? 'choice_or_resistance'
+                : 'pressure_or_counterplay',
+            'responds_to': dialogueLines.isEmpty
+                ? 'visible opening pressure'
+                : dialogueLines.last['line_id'],
+            'causes': rowIndex == shotDialogueRows.length - 1
+                ? 'visible end-state change'
+                : 'the next dialogue or action beat',
+          });
+        }
+        shots.add({
+          'number': shotNumber,
+          'title': _localizedShotTitle(config.language, shotNumber),
+          'duration_seconds': duration,
+          'rows': rows,
+          'final_state': actions.$2,
+          'status': 'DRAFT_REVIEW_REQUIRED',
+        });
+        shotNumber += 1;
+      }
+
+      scenes.add({
+        'episode': episode.number,
+        'scene': sceneIndex + 1,
+        'title':
+            sceneTitles[sceneIndex.clamp(0, sceneTitles.length - 1).toInt()],
+        'location_id': environment['reference_id'],
+        'location': environment['name'],
+        'time_of_day': 'NIGHT',
+        'interior_exterior': 'INT',
+        'dramatic_beat':
+            sceneTitles[sceneIndex.clamp(0, sceneTitles.length - 1).toInt()],
+        'cast_ids': castIds,
+        'cast': cast,
+        'story': sceneIndex == 0
+            ? '${card['cold_open']} ${card['stage_goal']}'
+            : sceneIndex == sceneCount - 1
+            ? '${card['peak_action']} ${episode.cliffhanger}'
+            : episode.summary,
+        'shots': shots,
+        'status': 'DRAFT_REVIEW_REQUIRED',
+      });
+    }
+
+    final displayScript = _renderMicroDramaEpisodeScript(
+      episode: episode,
+      scenes: scenes,
+    );
+    return {
+      'episode': episode.number,
+      'title': episode.title,
+      'version': 1,
+      'status': 'DRAFT_REVIEW_REQUIRED',
+      'approved_by_user': false,
+      'duration_seconds': episode.durationSeconds,
+      'max_shot_duration_seconds': shotLimit,
+      'scene_count': scenes.length,
+      'shot_count': shotCount,
+      'display_script': displayScript,
+      'scenes': scenes,
+      'episode_dialogue_master': {
+        'status': 'DRAFT_REVIEW_REQUIRED',
+        'language': config.language,
+        'lines': dialogueLines,
+        'voices': {
+          for (final speaker
+              in dialogueLines
+                  .map((line) => line['speaker'].toString())
+                  .toSet())
+            speaker: _microDramaVoiceIdentityLock(
+              config,
+              speaker: speaker,
+              protagonist: speaker == config.protagonist,
+            ),
+        },
+      },
+      'quality_gate': {
+        'decision': 'PASS_HUMAN_REVIEW_REQUIRED',
+        'duration_sums': 'PASS',
+        'dialogue_ownership': 'PASS',
+        'scene_and_shot_order': 'PASS',
+        'cliffhanger_cut': 'PASS',
+        'human_approval': 'REQUIRED',
+      },
+      'production_status': 'BLOCKED_BY_SCRIPT_APPROVAL',
+      'source_project_id': projectId,
+    };
   }
+
+  static List<ProductionTakeItem> _productionTakesFromEpisodeScript(
+    MicroDramaProjectConfig config, {
+    required String projectId,
+    required Map<String, dynamic> script,
+    required _MicroDramaCreativePackage creativePackage,
+  }) {
+    final episodeNumber = script['episode'] as int? ?? 1;
+    final scenes = (script['scenes'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final dialogueMaster = Map<String, dynamic>.from(
+      script['episode_dialogue_master'] as Map? ?? const {},
+    );
+    final voiceLocks = Map<String, dynamic>.from(
+      dialogueMaster['voices'] as Map? ?? const {},
+    );
+    final takes = <ProductionTakeItem>[];
+    final propId = creativePackage.props.first['reference_id'] as String;
+    var globalTakeNumber = 1;
+
+    for (final scene in scenes) {
+      final shots = (scene['shots'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      for (final shot in shots) {
+        final rows = (shot['rows'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+        final dialogueRows = rows
+            .where((row) => row['type'] == 'dialogue')
+            .toList();
+        final referenceIds = <String>{
+          ...(scene['cast_ids'] as List<dynamic>? ?? const []).map(
+            (item) => item.toString(),
+          ),
+          if (scene['location_id'] != null) scene['location_id'].toString(),
+          propId,
+        }.toList();
+        final aiShortCore = _buildMicroDramaAiShortCore(
+          scene: scene,
+          shot: shot,
+          rows: rows,
+          creativePackage: creativePackage,
+        );
+        final providerPrompt = _compileMicroDramaProviderPrompt(
+          config,
+          scene: scene,
+          shot: shot,
+          rows: rows,
+          referenceIds: referenceIds,
+          voiceLocks: voiceLocks,
+          creativePackage: creativePackage,
+          aiShortCore: aiShortCore,
+        );
+        final audioPrompt = _compileMicroDramaAudioPrompt(
+          config,
+          dialogueRows: dialogueRows,
+          voiceLocks: voiceLocks,
+        );
+        final isLast = globalTakeNumber == (script['shot_count'] as int? ?? 0);
+        takes.add(
+          ProductionTakeItem(
+            id: '$projectId-ep$episodeNumber-take$globalTakeNumber',
+            number: globalTakeNumber,
+            title:
+                'Cena ${scene['scene']} · Shot ${shot['number']} · ${scene['title']}',
+            durationSeconds:
+                shot['duration_seconds'] as int? ??
+                config.maxShotDurationSeconds,
+            status: 'READY',
+            aiShortCore: aiShortCore,
+            visualPrompt: providerPrompt,
+            audioPrompt: audioPrompt,
+            stylePresetId: _microDramaStylePreset(config.visualStyle).id,
+            transitionMode: globalTakeNumber == 1
+                ? 'EPISODE_START'
+                : 'MATCH_ON_ACTION',
+            usePreviousLastFrame: false,
+            generateSeedanceAudio: true,
+            referenceIds: referenceIds,
+            notes: isLast
+                ? 'Fonte bloqueada: roteiro aprovado. Cortar no cliffhanger sem cauda de reação.'
+                : 'Fonte bloqueada: preservar ordem, falas e estado final para o próximo take.',
+          ),
+        );
+        globalTakeNumber += 1;
+      }
+    }
+    return takes;
+  }
+
+  static List<int> _microDramaShotDurations(int total, int maximum) {
+    final minimum = switch (maximum) {
+      >= 10 => 6,
+      >= 8 => 5,
+      _ => 3,
+    };
+    final targetAverage = (minimum + maximum) / 2;
+    final minimumCount = (total / maximum).ceil();
+    final maximumCount = (total / minimum).floor().clamp(1, total).toInt();
+    final shotCount = (total / targetAverage)
+        .round()
+        .clamp(minimumCount, maximumCount)
+        .toInt();
+    final pattern = switch (maximum) {
+      >= 10 => const [8, 10, 7, 9, 6],
+      >= 8 => const [6, 8, 5, 7, 6],
+      _ => const [4, 5, 3, 4, 5],
+    };
+    final durations = List<int>.generate(
+      shotCount,
+      (index) =>
+          pattern[index % pattern.length].clamp(minimum, maximum).toInt(),
+    );
+    var difference = total - durations.fold<int>(0, (sum, item) => sum + item);
+    var cursor = 0;
+    while (difference != 0) {
+      final index = cursor % durations.length;
+      if (difference > 0 && durations[index] < maximum) {
+        durations[index] += 1;
+        difference -= 1;
+      } else if (difference < 0 && durations[index] > minimum) {
+        durations[index] -= 1;
+        difference += 1;
+      }
+      cursor += 1;
+    }
+    if (durations.length > 1) {
+      final longestIndex = durations.indexOf(
+        durations.reduce((a, b) => a > b ? a : b),
+      );
+      final lastIndex = durations.length - 1;
+      final lastDuration = durations[lastIndex];
+      durations[lastIndex] = durations[longestIndex];
+      durations[longestIndex] = lastDuration;
+    }
+    return durations;
+  }
+
+  static List<int> _microDramaRowDurations(int total, {required int rowCount}) {
+    final weights = switch (rowCount) {
+      3 => const [1, 3, 1],
+      4 => const [2, 3, 3, 2],
+      _ => List<int>.filled(rowCount, 1),
+    };
+    final weightTotal = weights.fold<int>(0, (sum, item) => sum + item);
+    final durations = weights
+        .map(
+          (weight) =>
+              ((total * weight) / weightTotal).floor().clamp(1, total).toInt(),
+        )
+        .toList();
+    var difference = total - durations.fold<int>(0, (sum, item) => sum + item);
+    final adjustmentOrder = rowCount == 4
+        ? const [1, 2, 0, 3]
+        : const [1, 0, 2];
+    var cursor = 0;
+    while (difference != 0) {
+      final index = adjustmentOrder[cursor % adjustmentOrder.length];
+      if (difference > 0) {
+        durations[index] += 1;
+        difference -= 1;
+      } else if (durations[index] > 1) {
+        durations[index] -= 1;
+        difference += 1;
+      }
+      cursor += 1;
+    }
+    return durations;
+  }
+
+  static String _microDramaVoiceIdentityLock(
+    MicroDramaProjectConfig config, {
+    required String speaker,
+    required bool protagonist,
+  }) {
+    final traits = protagonist
+        ? 'adult lower-mid register; warm lightly textured timbre; grounded resonance; measured conversational cadence; clear articulation with restrained phrase endings'
+        : 'adult mid-low register; clean controlled timbre; firm resonance; deliberate cadence; precise articulation with contained phrase endings';
+    return '$speaker always has the same original fictional voice: native ${config.language}; $traits. Keep vocal age, register, timbre, resonance, accent, pronunciation habits and habitual cadence unchanged.';
+  }
+
+  static List<String> _localizedScriptSceneTitles(String language) {
+    if (language.toLowerCase().startsWith('english')) {
+      return const [
+        'Hook and consequence',
+        'Pressure and choice',
+        'Reversal and peak cut',
+      ];
+    }
+    if (language.toLowerCase().startsWith('español')) {
+      return const [
+        'Gancho y consecuencia',
+        'Presión y elección',
+        'Reversión y corte en el pico',
+      ];
+    }
+    return const [
+      'Gancho e consequência',
+      'Pressão e escolha',
+      'Reversão e corte no pico',
+    ];
+  }
+
+  static String _localizedShotTitle(String language, int shotNumber) {
+    if (language.toLowerCase().startsWith('english')) {
+      return 'Narrative beat $shotNumber';
+    }
+    if (language.toLowerCase().startsWith('español')) {
+      return 'Latido narrativo $shotNumber';
+    }
+    return 'Batida narrativa $shotNumber';
+  }
+
+  static (String, String, String, String, String, String)
+  _microDramaDialogueSet(
+    MicroDramaProjectConfig config, {
+    required int shotNumber,
+    required String counterName,
+  }) {
+    final index = (shotNumber - 1) % 4;
+    if (config.language.toLowerCase().startsWith('english')) {
+      const protagonistLines = [
+        "I won't let them choose again.",
+        'If I retreat, I lose everything.',
+        'This choice is still mine.',
+        "I'm done running from this.",
+      ];
+      const counterLines = [
+        'Impulse is not freedom.',
+        'Protection is fear wearing armor.',
+        'One move cannot erase your debt.',
+        'Running is why you survived.',
+      ];
+      const responseLines = [
+        'Then the consequence carries my name.',
+        'I know the price. I still choose.',
+        "I'm choosing who pays.",
+        'This time, I decide the ending.',
+      ];
+      return (
+        'holding the pressure behind a controlled breath',
+        protagonistLines[index],
+        'closing the distance without raising the voice',
+        counterLines[index],
+        'meeting $counterName’s eyes and committing to the choice',
+        responseLines[index],
+      );
+    }
+    if (config.language.toLowerCase().startsWith('español')) {
+      const protagonistLines = [
+        'No dejaré que vuelvan a elegir.',
+        'Si retrocedo, lo pierdo todo.',
+        'Esta elección todavía es mía.',
+        'Ya no voy a seguir huyendo.',
+      ];
+      const counterLines = [
+        'El impulso no es libertad.',
+        'Protección es miedo con armadura.',
+        'Un gesto no borra tu deuda.',
+        'Huir fue lo que te salvó.',
+      ];
+      const responseLines = [
+        'Entonces la consecuencia llevará mi nombre.',
+        'Conozco el precio. Igual elijo.',
+        'Yo elegiré quién lo paga.',
+        'Esta vez, yo decido el final.',
+      ];
+      return (
+        'conteniendo la presión detrás de una respiración controlada',
+        protagonistLines[index],
+        'acortando la distancia sin levantar la voz',
+        counterLines[index],
+        'sosteniendo la mirada de $counterName y asumiendo la elección',
+        responseLines[index],
+      );
+    }
+    const protagonistLines = [
+      'Não deixo decidirem de novo.',
+      'Se eu recuar, perco tudo.',
+      'Essa escolha ainda é minha.',
+      'Eu cansei de fugir.',
+    ];
+    const counterLines = [
+      'Impulso não é liberdade.',
+      'Proteção é medo com outro nome.',
+      'Um gesto não apaga sua dívida.',
+      'Fugir foi o que salvou você.',
+    ];
+    const responseLines = [
+      'Então a consequência leva meu nome.',
+      'Sei o preço. Mesmo assim, escolho.',
+      'Eu escolho quem paga.',
+      'Desta vez, eu decido o final.',
+    ];
+    return (
+      'segurando a pressão atrás de uma respiração controlada',
+      protagonistLines[index],
+      'encurtando a distância sem elevar a voz',
+      counterLines[index],
+      'sustentando o olhar de $counterName e assumindo a escolha',
+      responseLines[index],
+    );
+  }
+
+  static (String, String, String, String) _microDramaShotActions(
+    MicroDramaProjectConfig config, {
+    required ProductionEpisodeItem episode,
+    required Map<String, dynamic> card,
+    required int shotNumber,
+    required int shotCount,
+    required String location,
+    required String counterName,
+  }) {
+    final isLast = shotNumber == shotCount;
+    final stageGoal = card['stage_goal']?.toString().trim();
+    final openingPressure = stageGoal?.isNotEmpty == true
+        ? stageGoal!
+        : episode.summary;
+    final providerOpening =
+        '$location is already under immediate visible pressure. ${config.protagonist} occupies the active foreground with the consequence of the previous beat still physically present while $counterName blocks the safest exit.';
+    final providerEnding = isLast
+        ? '${config.protagonist} completes the irreversible action; hold only until its visible consequence reads clearly, then cut before any explanatory reaction.'
+        : '${config.protagonist} makes one visible choice that changes the balance of power. $counterName reacts first; both settle into a readable continuity plateau without replaying the action.';
+    if (config.language.toLowerCase().startsWith('english')) {
+      return (
+        '$location is already under visible pressure: $openingPressure ${config.protagonist} enters frame with the consequence of the previous beat still active while $counterName blocks the safest exit.',
+        isLast
+            ? '${config.protagonist} completes an irreversible move tied to ${episode.cliffhanger}; hold only until the consequence becomes readable, then cut before any answer.'
+            : '${config.protagonist} makes a visible choice that changes the balance of power; $counterName reacts first, and the unfinished movement carries directly into the next shot.',
+        providerOpening,
+        providerEnding,
+      );
+    }
+    if (config.language.toLowerCase().startsWith('español')) {
+      return (
+        '$location ya está bajo presión visible: $openingPressure ${config.protagonist} entra en cuadro con la consecuencia anterior todavía activa mientras $counterName bloquea la salida más segura.',
+        isLast
+            ? '${config.protagonist} completa un movimiento irreversible ligado a ${episode.cliffhanger}; mantener solo hasta que la consecuencia sea legible y cortar antes de la respuesta.'
+            : '${config.protagonist} toma una decisión visible que cambia el poder; $counterName reacciona primero y el movimiento inconcluso continúa en el siguiente shot.',
+        providerOpening,
+        providerEnding,
+      );
+    }
+    return (
+      '$location já está sob pressão visível: $openingPressure ${config.protagonist} entra no quadro com a consequência anterior ainda ativa enquanto $counterName bloqueia a saída mais segura.',
+      isLast
+          ? '${config.protagonist} completa um movimento irreversível ligado a ${episode.cliffhanger}; sustentar apenas até a consequência ficar legível e cortar antes da resposta.'
+          : '${config.protagonist} faz uma escolha visível que muda o equilíbrio de poder; $counterName reage primeiro, e o movimento incompleto continua diretamente no próximo shot.',
+      providerOpening,
+      providerEnding,
+    );
+  }
+
+  static String _renderMicroDramaEpisodeScript({
+    required ProductionEpisodeItem episode,
+    required List<Map<String, dynamic>> scenes,
+  }) {
+    final buffer = StringBuffer();
+    for (var sceneIndex = 0; sceneIndex < scenes.length; sceneIndex++) {
+      final scene = scenes[sceneIndex];
+      if (sceneIndex > 0) buffer.writeln();
+      buffer.writeln(
+        '[Episode ${episode.number} - Scene ${scene['scene']} | ${scene['location']} | ${scene['time_of_day']} ${scene['interior_exterior']} | ${scene['dramatic_beat']}]',
+      );
+      buffer.writeln(
+        'Cast: ${(scene['cast'] as List<dynamic>? ?? const []).join(', ')}',
+      );
+      buffer.writeln();
+      buffer.writeln('Story:');
+      buffer.writeln(scene['story']);
+      buffer.writeln();
+      final shots = (scene['shots'] as List<dynamic>? ?? const [])
+          .whereType<Map>();
+      for (final shot in shots) {
+        buffer.writeln('Shot ${shot['number']}');
+        final rows = (shot['rows'] as List<dynamic>? ?? const [])
+            .whereType<Map>();
+        for (final row in rows) {
+          final duration = row['duration_seconds'];
+          if (row['type'] == 'dialogue') {
+            buffer.writeln(
+              '${row['speaker']}: (${row['performance']}) ${row['text']} (${duration}s)',
+            );
+          } else {
+            buffer.writeln('(action) ${row['text']} (${duration}s)');
+          }
+        }
+        buffer.writeln('Duration: ${shot['duration_seconds']}s');
+        buffer.writeln();
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  static String _compileMicroDramaProviderPrompt(
+    MicroDramaProjectConfig config, {
+    required Map<String, dynamic> scene,
+    required Map<String, dynamic> shot,
+    required List<Map<String, dynamic>> rows,
+    required List<String> referenceIds,
+    required Map<String, dynamic> voiceLocks,
+    required _MicroDramaCreativePackage creativePackage,
+  }) {
+    Map<String, dynamic> findReference(
+      List<Map<String, dynamic>> values,
+      String referenceId,
+    ) => values.firstWhere(
+      (item) => item['reference_id'] == referenceId,
+      orElse: () => const <String, dynamic>{},
+    );
+
+    final referenceLines = <String>[];
+    for (var index = 0; index < referenceIds.length; index++) {
+      final referenceId = referenceIds[index];
+      final character = findReference(creativePackage.characters, referenceId);
+      final environment = findReference(
+        creativePackage.environments,
+        referenceId,
+      );
+      final prop = findReference(creativePackage.props, referenceId);
+      if (character.isNotEmpty) {
+        referenceLines.add(
+          '@Image${index + 1} = Use ${character['name']} from this image.',
+        );
+      } else if (environment.isNotEmpty) {
+        referenceLines.add(
+          '@Image${index + 1} = ${environment['name']} LOCATION MASTER; use only its established geometry, materials and motivated lighting.',
+        );
+      } else if (prop.isNotEmpty) {
+        referenceLines.add(
+          '@Image${index + 1} = ${prop['name']} PROP MASTER; preserve its design, condition and scale without duplication.',
+        );
+      }
+    }
+
+    final timedBeats = <String>[];
+    final dialogueLines = <String>[];
+    final performances = <String>[];
+    var cursor = 0;
+    for (final row in rows) {
+      final duration = row['duration_seconds'] as int? ?? 1;
+      final end = cursor + duration;
+      if (row['type'] == 'dialogue') {
+        final performance =
+            row['provider_performance']?.toString() ??
+            'natural restrained dramatic delivery';
+        timedBeats.add(
+          '[$cursor-${end}s] ${row['speaker']} speaks while $performance; the other character gives an immediate readable reaction.',
+        );
+        dialogueLines.add(
+          '[$cursor-${end}s] ${row['speaker']}: "${row['text']}"',
+        );
+        performances.add('${row['speaker']}: $performance');
+      } else {
+        timedBeats.add(
+          '[$cursor-${end}s] ${row['provider_text'] ?? row['text']}',
+        );
+      }
+      cursor = end;
+    }
+
+    final cast = (scene['cast'] as List<dynamic>? ?? const [])
+        .map((item) => item.toString())
+        .toList();
+    final environment = findReference(
+      creativePackage.environments,
+      scene['location_id']?.toString() ?? '',
+    );
+    final activeSpeakers = rows
+        .where((row) => row['type'] == 'dialogue')
+        .map((row) => row['speaker'].toString())
+        .toSet();
+    final voiceBlocks = activeSpeakers
+        .where((speaker) => voiceLocks[speaker] != null)
+        .map(
+          (speaker) =>
+              'VOICE IDENTITY LOCK — ${speaker.toUpperCase()} — COPY VERBATIM\n${voiceLocks[speaker]}',
+        )
+        .join('\n\n');
+    final providerFinalState = rows.isNotEmpty
+        ? rows.last['provider_text']?.toString() ??
+              shot['final_state']?.toString() ??
+              'the dramatic consequence remains visible at the cut'
+        : shot['final_state']?.toString() ??
+              'the dramatic consequence remains visible at the cut';
+    final duration = shot['duration_seconds'] as int? ?? 10;
+    final animation = config.visualStyle.toLowerCase().contains('anima');
+    final blocks = <String>[
+      if (referenceLines.isNotEmpty)
+        'REFERENCE INDEX CONTRACT — DO NOT REORDER\n${referenceLines.join('\n')}',
+      'CAPTURE PROFILE: ${animation ? 'premium stylized narrative animation with coherent materials and restrained motion' : 'naturalistic live-action television drama with a premium vertical short-drama finish'}',
+      'SCENE: ${_microDramaEnvironmentProviderDescription(environment)} ${cast.join(' and ')} are already physically present in the established space at frame 1, wearing their canonical wardrobe. Preserve the 180-degree axis, body scale, eyelines and practical geometry. The story-critical prop remains a stable continuity object and must not duplicate or change condition unless a timed beat explicitly causes it.',
+      'ACTION AND TIMED BEATS:\n${timedBeats.join('\n')}',
+      'CAMERA AND OPTICS: ${_microDramaCameraCoverage(duration, cast, providerFinalState)}',
+      'LIGHT AND COLOR: ${_microDramaLightingProviderDescription(environment)} Keep exposure, white balance and practical-source direction stable; restrained contrast, natural highlight roll-off and readable faces.',
+      if (voiceBlocks.isNotEmpty) voiceBlocks,
+      if (performances.isNotEmpty)
+        'PERFORMANCE THIS TAKE: ${performances.toSet().join('; ')}. Natural pauses, breathing and reactions; no theatrical overstatement.',
+      if (dialogueLines.isNotEmpty)
+        'DIALOGUE — all spoken audio is native ${config.language}\n${dialogueLines.join('\n')}',
+      if (dialogueLines.isNotEmpty)
+        'SPOKEN LANGUAGE LOCK — ${config.language}\nSpeak only the exact quoted lines above, in order and with their assigned speaker. Never translate, paraphrase, improvise or add speech.',
+      'SOUND AND RECORDING CHARACTER: Native production dialogue at the apparent camera distance. Do not add background music or ambient sound effects. No narration, announcer voice or extra speech.',
+      'CONTINUITY: Treat this as one causal segment of the approved episode. Preserve character appearance, wardrobe, location geometry, light direction and prop condition. Do not replay a completed action, invert screen sides or reset the emotional state. END STATE: $providerFinalState',
+      'VISUAL STYLE: ${_microDramaVisualStyleProviderDescription(config.visualStyle)}',
+      'Do not generate subtitles, dialogue text, titles, timestamps, logos, watermarks or any written text anywhere in the video. Avoid shaky footage, floating camera motion, distorted limbs, malformed hands, deformed facial features, character drift, duplicated people or props, temporal flicker, texture pulsing and impossible reflections.',
+      if (animation)
+        'ANIMATION PROFILE: preserve the selected stylized medium, stable character proportions, coherent surface treatment, weighted motion and consistent frame-to-frame design; no drift into live-action, photorealism or another animation medium.'
+      else
+        'REALISTIC FILM PROFILE: naturalistic live-action narrative film; physical camera behavior with restrained motivated movement; moderate depth of field with gradual detail falloff; natural motion blur; motivated practical or environmental light; real skin, worn fabric and tactile material response; weighted motion with inertia, contact and recovery; restrained saturation with soft highlight roll-off; no beauty smoothing, waxy skin, artificial HDR, CGI or game-engine gloss.',
+    ];
+    return blocks.join('\n\n');
+  }
+
+  static String _compileMicroDramaAudioPrompt(
+    MicroDramaProjectConfig config, {
+    required List<Map<String, dynamic>> dialogueRows,
+    required Map<String, dynamic> voiceLocks,
+  }) {
+    final activeSpeakers = dialogueRows
+        .map((row) => row['speaker'].toString())
+        .toSet();
+    final activeVoiceLocks = activeSpeakers
+        .where((speaker) => voiceLocks[speaker] != null)
+        .map((speaker) => '$speaker: ${voiceLocks[speaker]}')
+        .join(' | ');
+    final exactLines = dialogueRows
+        .map((row) => '${row['speaker']}: "${row['text']}"')
+        .join(' | ');
+    return 'Áudio nativo em ${config.language}. Vozes bloqueadas: $activeVoiceLocks. Falas autorizadas, na ordem e sem paráfrase: $exactLines. Vozes naturais e distintas, com pausas respiratórias entre turnos. Sem música, efeitos ambientes, legendas, narração ou fala fora desta lista.';
+  }
+
+  static String _microDramaEnvironmentProviderDescription(
+    Map<String, dynamic> environment,
+  ) => switch (environment['role']) {
+    'Refúgio e vulnerabilidade' =>
+      'A compact private refuge with tactile signs of daily use, one practical side light, a recurring seat and personal objects arranged for intimate close coverage.',
+    'Centro de poder' =>
+      'A controlled authority space with rigid lines, a physical power barrier, precise surfaces and a clearly readable controlled exit.',
+    'Transição recorrente' =>
+      'A deep threshold space with one dominant doorway, a fixed waiting mark and a readable escape route, preserving entrance and exit direction.',
+    'Exposição e consequência' =>
+      'A public confrontation arena with controlled witnesses in depth, a clear confrontation axis and a visible route for the arriving threat.',
+    _ =>
+      'A practical recurring location with tactile materials, clear foreground action space, visible entrances and stable depth landmarks designed for a vertical dramatic frame.',
+  };
+
+  static String _microDramaLightingProviderDescription(
+    Map<String, dynamic> environment,
+  ) => switch (environment['role']) {
+    'Refúgio e vulnerabilidade' =>
+      'Soft warm side light from a visible practical source, with reserved shadow contrast for secrecy.',
+    'Centro de poder' =>
+      'Precise cool or sharply shaped practical light that reinforces order without artificial rim lighting.',
+    'Transição recorrente' =>
+      'Motivated backlight separates both sides of the threshold while preserving readable faces.',
+    'Exposição e consequência' =>
+      'Open motivated light makes the public consequence legible without flattening depth.',
+    _ =>
+      'Repeatable motivated night lighting from practical fixtures, with stable direction and tactile local contrast.',
+  };
+
+  static String _microDramaCameraCoverage(
+    int duration,
+    List<String> cast,
+    String finalState,
+  ) {
+    final primary = cast.isEmpty ? 'the active character' : cast.first;
+    final counter = cast.length > 1 ? cast.last : primary;
+    if (duration <= 5) {
+      final cut = (duration / 2).round().clamp(1, duration - 1);
+      return 'Coverage 1 [0-$cut s]: readable medium shot on $primary with a restrained push that preserves the location anchor. End state: the pressure is physically legible; Coverage 2 [$cut-$duration s]: clean same-axis cut to $counter and the visible consequence, settling on the dramatic button. End state: $finalState';
+    }
+    final firstCut = (duration * .3).round().clamp(2, duration - 4);
+    final secondCut = (duration * .65).round().clamp(
+      firstCut + 2,
+      duration - 2,
+    );
+    return 'Coverage 1 [0-$firstCut s]: medium-wide spatial anchor with a restrained push toward the active pressure; keep both positions and the practical geometry readable. End state: the conflict axis is established; Coverage 2 [$firstCut-$secondCut s]: clean same-axis medium close on the speaker applying pressure, one motivated movement only. End state: the line lands and the listener reacts; Coverage 3 [$secondCut-$duration s]: clean reverse or decisive close on the response and physical consequence, then settle without dead tail. End state: $finalState';
+  }
+
+  static String _microDramaVisualStyleProviderDescription(
+    String style,
+  ) => switch (style) {
+    'Cinema teatral realista' =>
+      'Naturalistic live-action narrative film, premium theatrical television composition, controlled blocking and restrained color.',
+    'K-drama moderno' =>
+      'Premium contemporary live-action television drama, elegant motivated coverage, clean production design and restrained emotional close-ups.',
+    'Noir urbano' =>
+      'Naturalistic live-action urban noir with motivated practical contrast, controlled shadows, wet tactile surfaces and restrained color.',
+    'Animação cinematográfica' =>
+      'Premium stylized cinematic animation with coherent materials, stable proportions, restrained acting and physically weighted motion.',
+    _ =>
+      'Live-action television drama style, premium vertical short-drama aesthetic, masterful readable composition and fast but motivated shot variation.',
+  };
 
   static String _slugify(String value) => value
       .toLowerCase()
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-|-$'), '');
+
+  static MicroDramaProjectConfig _microDramaConfigFromProject(
+    ProductionProject project,
+  ) {
+    final bible = project.seriesBible;
+    final episodeCount = project.episodes.isNotEmpty
+        ? project.episodes.length
+        : project.targetEpisodeCount.clamp(1, 80);
+    return MicroDramaProjectConfig(
+      title: project.title,
+      logline: bible['logline']?.toString().trim().isNotEmpty == true
+          ? bible['logline'].toString()
+          : project.description,
+      centralQuestion:
+          bible['central_question']?.toString().trim().isNotEmpty == true
+          ? bible['central_question'].toString()
+          : 'Qual escolha irreversível encerrará o conflito da temporada?',
+      protagonist: bible['protagonist']?.toString().trim().isNotEmpty == true
+          ? bible['protagonist'].toString()
+          : 'Protagonista',
+      opposingForce:
+          bible['opposing_force']?.toString().trim().isNotEmpty == true
+          ? bible['opposing_force'].toString()
+          : 'Força oposta',
+      stakes: bible['stakes']?.toString().trim().isNotEmpty == true
+          ? bible['stakes'].toString()
+          : 'A perda se torna pública e irreversível antes do prazo final.',
+      genre: bible['genre']?.toString().trim().isNotEmpty == true
+          ? bible['genre'].toString()
+          : project.genre,
+      background: bible['background']?.toString().trim().isNotEmpty == true
+          ? bible['background'].toString()
+          : 'Cidade moderna',
+      trope: bible['trope']?.toString().trim().isNotEmpty == true
+          ? bible['trope'].toString()
+          : 'Segunda chance',
+      visualStyle: bible['visual_style']?.toString().trim().isNotEmpty == true
+          ? bible['visual_style'].toString()
+          : 'Microdrama moderno',
+      language: bible['language']?.toString().trim().isNotEmpty == true
+          ? bible['language'].toString()
+          : 'Português (Brasil)',
+      rating: bible['rating']?.toString().trim().isNotEmpty == true
+          ? bible['rating'].toString()
+          : '14 anos',
+      episodeCount: episodeCount,
+      firstEpisodeDurationSeconds: project.episodes.isNotEmpty
+          ? project.episodes.first.durationSeconds
+          : 120,
+      episodeDurationSeconds: project.episodes.length > 1
+          ? project.episodes[1].durationSeconds
+          : 60,
+      maxShotDurationSeconds:
+          ((bible['max_shot_duration_seconds'] as num?)?.toInt() ?? 10)
+              .clamp(5, 10)
+              .toInt(),
+      automaticReview: _readBool(bible['automatic_review'], fallback: true),
+    );
+  }
+
+  static ProductionProject _ensureMicroDramaCreativePackage(
+    ProductionProject project,
+  ) {
+    if (project.formatFamily != 'micro_drama_vertical') return project;
+    final bible = project.seriesBible;
+    final hasCharacters =
+        bible['characters'] is List && (bible['characters'] as List).isNotEmpty;
+    final hasEnvironments =
+        bible['environments'] is List &&
+        (bible['environments'] as List).isNotEmpty;
+    final hasProps =
+        bible['props'] is List && (bible['props'] as List).isNotEmpty;
+    final hasScenes =
+        bible['scene_cards'] is List &&
+        (bible['scene_cards'] as List).isNotEmpty;
+    if (hasCharacters &&
+        hasEnvironments &&
+        hasProps &&
+        bible['creation_workflow'] == 'guided_microdrama_v3_outline_first') {
+      return project;
+    }
+
+    final episodeCount = project.episodes.isNotEmpty
+        ? project.episodes.length
+        : project.targetEpisodeCount.clamp(1, 80);
+    final config = _microDramaConfigFromProject(project);
+    final creativePackage = _buildMicroDramaCreativePackage(config, project.id);
+    final rawEpisodeCards = bible['episode_cards'];
+    var episodeCards = <Map<String, dynamic>>[];
+    if (rawEpisodeCards is List) {
+      episodeCards = rawEpisodeCards
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    if (episodeCards.length != project.episodes.length) {
+      episodeCards = project.episodes.map((episode) {
+        final plan = _microDramaEpisodePlan(
+          config,
+          episodeNumber: episode.number,
+        );
+        return <String, dynamic>{
+          'episode': episode.number,
+          'title': episode.title,
+          'duration_seconds': episode.durationSeconds,
+          'episode_job': plan.job,
+          'stage_goal': plan.goal,
+          'emotional_beat': plan.emotionalBeat,
+          'treatment': episode.summary,
+          'value_shift': plan.valueChange,
+          'cold_open': episode.summary,
+          'immediate_goal': plan.goal,
+          'antagonist_countermove':
+              '${config.opposingForce} remove uma opção segura.',
+          'peak_action': episode.cliffhanger,
+          'status': 'OUTLINE_REVIEW_REQUIRED',
+          'script_status': episode.takes.isEmpty
+              ? 'NOT_STARTED'
+              : 'DRAFT_REVIEW_REQUIRED',
+        };
+      }).toList();
+    }
+    final sceneCards = (bible['scene_cards'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final scriptedEpisodes = project.episodes
+        .where((episode) => episode.takes.isNotEmpty)
+        .length;
+    final allScriptsCreated =
+        project.episodes.isNotEmpty &&
+        scriptedEpisodes == project.episodes.length;
+    final scriptState = scriptedEpisodes == 0
+        ? 'NOT_STARTED'
+        : allScriptsCreated
+        ? 'ALL_EPISODE_SCRIPTS_CREATED'
+        : 'PARTIAL_EPISODE_SCRIPTS_CREATED';
+
+    final generatedById = {
+      for (final reference in creativePackage.references)
+        reference.id: reference,
+    };
+    final references = project.references.map((existing) {
+      final generated = generatedById.remove(existing.id);
+      if (generated == null) return existing;
+      final legacyPlaceholder =
+          existing.description.contains('Definir ') ||
+          existing.description.contains('Escolher um objeto');
+      return ProductionReferenceItem(
+        id: existing.id,
+        label: existing.label,
+        category: existing.category,
+        assetPath: existing.assetPath,
+        publicUrl: existing.publicUrl,
+        description: existing.description.isEmpty || legacyPlaceholder
+            ? generated.description
+            : existing.description,
+        canonical: existing.canonical || generated.canonical,
+        metadata: existing.metadata.isEmpty
+            ? generated.metadata
+            : existing.metadata,
+      );
+    }).toList()..addAll(generatedById.values);
+    final workflow = Map<String, dynamic>.from(
+      bible['workflow'] as Map? ?? const {},
+    );
+    return project.copyWith(
+      seriesBible: {
+        ...bible,
+        'creation_workflow': 'guided_microdrama_v3_outline_first',
+        'workflow': {
+          ...workflow,
+          'outline': workflow['outline'] ?? 'GENERATED_REVIEW_REQUIRED',
+          'characters': 'GENERATED_REVIEW_REQUIRED',
+          'environments': 'GENERATED_REVIEW_REQUIRED',
+          'props': 'GENERATED_REVIEW_REQUIRED',
+          'characters_locations_props': 'GENERATED_REVIEW_REQUIRED',
+          'scripts': scriptState,
+          'production': allScriptsCreated
+              ? workflow['production'] ?? 'NOT_STARTED'
+              : 'BLOCKED_BY_SCRIPT',
+        },
+        'season_outline':
+            bible['season_outline'] ??
+            {
+              'title': config.title,
+              'logline': config.logline,
+              'central_question': config.centralQuestion,
+              'stakes': config.stakes,
+              'episode_count': episodeCount,
+              'status': 'DRAFT_REVIEW_REQUIRED',
+            },
+        'characters': hasCharacters
+            ? bible['characters']
+            : creativePackage.characters,
+        'character_bible':
+            bible['character_bible'] ??
+            (hasCharacters ? bible['characters'] : creativePackage.characters),
+        'environments': hasEnvironments
+            ? bible['environments']
+            : creativePackage.environments,
+        'location_bible':
+            bible['location_bible'] ??
+            (hasEnvironments
+                ? bible['environments']
+                : creativePackage.environments),
+        'props': hasProps ? bible['props'] : creativePackage.props,
+        'object_bible':
+            bible['object_bible'] ??
+            (hasProps ? bible['props'] : creativePackage.props),
+        'episode_cards': episodeCards,
+        'scene_cards': hasScenes ? bible['scene_cards'] : const [],
+        'script_package':
+            bible['script_package'] ??
+            {
+              'status': scriptedEpisodes == 0
+                  ? 'NOT_STARTED'
+                  : allScriptsCreated
+                  ? 'DRAFT_REVIEW_REQUIRED'
+                  : 'PARTIAL_DRAFT',
+              'episodes': scriptedEpisodes,
+              'scenes': sceneCards.length,
+              'beats': project.episodes.fold<int>(
+                0,
+                (total, episode) => total + episode.takes.length,
+              ),
+            },
+      },
+      references: references,
+    );
+  }
 
   Future<void> _persistLocalProjects() async {
     if (_cache == null) return;
@@ -1346,6 +3103,9 @@ class LocalProductionWorkspaceService {
             canonical:
                 _stringify(asset.metadata).contains('LOCATION_MASTER') ||
                 _stringify(asset.metadata).contains('WORLD_ENVIRONMENT_MASTER'),
+            metadata: asset.metadata is Map
+                ? Map<String, dynamic>.from(asset.metadata as Map)
+                : const {},
           ),
         )
         .toList();
@@ -1387,8 +3147,12 @@ class LocalProductionWorkspaceService {
       seriesBible: {
         'source': plan?.source ?? 'Vertix API',
         'seriesBible': plan?.seriesBible,
+        'character_bible': plan?.characterBible,
+        'location_bible': plan?.locationBible,
+        'object_bible': plan?.objectBible,
         'seasonArc': plan?.seasonArc,
         'episodeMap': plan?.episodeMap,
+        'scene_cards': plan?.sceneCards,
       },
       episodes: [
         ProductionEpisodeItem(

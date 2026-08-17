@@ -29,6 +29,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
   int _episodeCount = 8;
   int _firstEpisodeDuration = 120;
   int _episodeDuration = 60;
+  int _maxShotDuration = 10;
   bool _automaticReview = true;
   String? _error;
 
@@ -129,7 +130,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
                     ),
                     SizedBox(height: 3),
                     Text(
-                      'Da premissa ao outline, ganchos, assets e beats de produção.',
+                      'Primeiro o esboço geral da temporada; depois o roteiro por cenas de cada episódio.',
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -250,6 +251,16 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             values: const [45, 60, 90],
             labelFor: (value) => '$value segundos',
             onChanged: (value) => setState(() => _episodeDuration = value),
+          ),
+          _dropdown<int>(
+            label: 'Limite máximo de cada shot',
+            icon: Icons.movie_filter_outlined,
+            value: _maxShotDuration,
+            values: const [5, 8, 10],
+            labelFor: (value) => value == 10
+                ? 'Até 10 segundos · recomendado'
+                : 'Até $value segundos',
+            onChanged: (value) => setState(() => _maxShotDuration = value),
           ),
           _dropdown<String>(
             label: 'Classificação',
@@ -433,7 +444,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
       children: [
         _stepTitle(
           'Revisar e criar',
-          'O Vertix criará o outline, a cadeia de ganchos, placeholders canônicos e os beats de cada episódio.',
+          'O Vertix criará primeiro o outline, a cadeia de ganchos e as bíblias canônicas. Os roteiros por cenas serão gerados depois, episódio por episódio.',
         ),
         const SizedBox(height: 18),
         Container(
@@ -469,6 +480,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
                   _reviewPill('$_episodeCount episódios'),
                   _reviewPill(_formatDuration(totalSeconds)),
                   _reviewPill('9:16'),
+                  _reviewPill('Limite por shot: ${_maxShotDuration}s'),
                   _reviewPill(_genre),
                   _reviewPill(_trope),
                   _reviewPill(_language),
@@ -495,18 +507,18 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         ),
         _reviewRow(
           Icons.people_outline,
-          'Assets canônicos',
-          'Protagonista, força oposta, ambiente mestre e objeto narrativo.',
+          'Personagens, ambientes e adereços',
+          'Fichas detalhadas de aparência, personalidade, função, geografia, luz, estado e continuidade.',
         ),
         _reviewRow(
           Icons.movie_filter_outlined,
-          'Roteiro de produção',
-          'Beats de até 15s, vídeo com áudio integrado e música separada.',
+          'Roteiro por cenas, depois do esboço',
+          'O roteirista escolherá a duração suficiente para cada shot, sem ultrapassar ${_maxShotDuration}s, somente após a revisão do esboço geral.',
           last: true,
         ),
         const SizedBox(height: 14),
         const Text(
-          'Status inicial: RASCUNHO. A criação não trava o roteiro; a aprovação humana continua obrigatória antes da produção.',
+          'Status inicial: ESBOÇO EM REVISÃO. Nenhuma cena, diálogo ou beat de produção será criado nesta primeira etapa.',
           style: TextStyle(
             color: AppColors.textTertiary,
             fontSize: 11,
@@ -547,7 +559,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             ),
             label: Text(
               _step == _stepLabels.length - 1
-                  ? 'Criar microdrama'
+                  ? 'Criar esboço da série'
                   : 'Continuar',
             ),
           ),
@@ -597,6 +609,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         episodeCount: _episodeCount,
         firstEpisodeDurationSeconds: _firstEpisodeDuration,
         episodeDurationSeconds: _episodeDuration,
+        maxShotDurationSeconds: _maxShotDuration,
         automaticReview: _automaticReview,
       ),
     );
