@@ -1,0 +1,27 @@
+{
+  "take_id": "take-02",
+  "profile": 4,
+  "session_file": "C:\\Users\\Fabiano\\dola-launcher\\dola-session.json",
+  "profile_root": "C:\\Users\\Fabiano\\playwright-profiles",
+  "playwright_module": "C:/Users/Fabiano/dola-launcher/node_modules/playwright",
+  "browser_executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "url": "https://www.dola.com/chat/",
+  "model": "Dreamina Seedance 2.5",
+  "duration_seconds": 10,
+  "aspect_ratio": "9:16",
+  "headless": false,
+  "timeout_minutes": 15,
+  "reference_upload_timeout_seconds": 180,
+  "reference_upload_settle_ms": 3000,
+  "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\compiled\\take-02-prompt.txt",
+  "prompt_sha256": "0441e3f65172282753d4d8be418d6cf7699fa42088c331ad772e88d2455c7398",
+  "references": [
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\enemy-drone-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-01-last-frame.png"
+  ],
+  "output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02.mp4",
+  "meta_output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-dola-meta.json",
+  "error_screenshot": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-profile-4-error.png"
+}

@@ -1,0 +1,27 @@
+{
+  "take_id": "take-01",
+  "profile": 1,
+  "session_file": "C:\\Users\\Fabiano\\dola-launcher\\dola-session.json",
+  "profile_root": "C:\\Users\\Fabiano\\playwright-profiles",
+  "playwright_module": "C:/Users/Fabiano/dola-launcher/node_modules/playwright",
+  "browser_executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "url": "https://www.dola.com/chat/",
+  "model": "Dreamina Seedance 2.5",
+  "duration_seconds": 10,
+  "aspect_ratio": "9:16",
+  "headless": false,
+  "timeout_minutes": 15,
+  "reference_upload_timeout_seconds": 180,
+  "reference_upload_settle_ms": 3000,
+  "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\compiled\\take-01-prompt.txt",
+  "prompt_sha256": "a385cbf2b514ca36112e727224b5ca753bd097ac807724cbe1622f9bd75b6837",
+  "references": [
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-cartoon-v2.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-cartoon-v2.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-cartoon-v2.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\prop-nucleo-8-cartoon-v2.png"
+  ],
+  "output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01.mp4",
+  "meta_output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01-dola-meta.json",
+  "error_screenshot": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01-profile-1-error.png"
+}

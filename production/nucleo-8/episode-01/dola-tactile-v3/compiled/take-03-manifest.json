@@ -1,0 +1,82 @@
+{
+  "take_id": "take-03",
+  "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\compiled\\take-03-prompt.txt",
+  "prompt_chars": 5671,
+  "prompt_words": 857,
+  "prompt_sha256": "72e2e11a8cc71d70d0e084e13d535f63402cdd62d45f8292e253092dff3d836b",
+  "references": [
+    {
+      "key": "nara",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+      "label": "NARA CHARACTER IDENTITY",
+      "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+      "must_not_control": "",
+      "category": "character",
+      "character_name": "Nara"
+    },
+    {
+      "key": "iko",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+      "label": "IKO CHARACTER IDENTITY",
+      "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+      "must_not_control": "",
+      "category": "character",
+      "character_name": "Iko"
+    },
+    {
+      "key": "drone",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\enemy-drone-tactile-v3.png",
+      "label": "HUNTER DRONE VEHICLE MASTER",
+      "role": "Source of truth for one small sapphire-charcoal-gold hunter drone with one central cyan lens, two folding blade-wings, vector thrusters and an underslung pulse emitter.",
+      "must_not_control": "character identity or train geometry",
+      "category": "vehicle",
+      "character_name": ""
+    },
+    {
+      "key": "previous_final_frame",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-last-frame.png",
+      "label": "PREVIOUS TAKE EXACT FINAL FRAME",
+      "role": "Transition state only: visible eye/gaze state, pose, support, grips, screen layout, prop, light and camera state. Do not use it to change the characters or invent environment geometry."
+    }
+  ],
+  "observed_state": {
+    "receipt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\observed\\take-03.json",
+    "source_take_id": "take-02",
+    "source_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-last-frame.png",
+    "source_frame_sha256": "47d10a83c5f48ea08cdb77eedebdc5b3efb58fbd2a08394925fe3cb3e6c12c4a",
+    "observed_at": "2026-08-16T18:36:17.225868-03:00"
+  },
+  "dialogue_assignment": [
+    {
+      "line_id": "ep01-l005",
+      "speaker": "Nara",
+      "text": "Quando eu abrir a algema, pula pra mim!",
+      "take_start_seconds": 0.8,
+      "take_end_seconds": 3.7,
+      "episode_start_seconds": 20.8,
+      "episode_end_seconds": 23.7
+    }
+  ],
+  "episode_dialogue_master_sha256": "65c0e3cdeb6da7692cf00306f9d87d71ebf5f7f0aed63c6caeea33ba16194aab",
+  "voice_identity_locks": [
+    {
+      "speaker": "Nara",
+      "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+      "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+    }
+  ],
+  "prompt_cleanup": {
+    "payload_format": "atlas_compact_single_line",
+    "single_line": true,
+    "atlas_compact_target_chars": 5800,
+    "within_atlas_compact_target": true,
+    "removed_generic_quality_attributes": [],
+    "spoken_language_lock_beside_dialogue": true,
+    "final_film_profile": [
+      "Premium stylized 3D tactile puppet action adventure continuing the same magnificent aerial prison train, vertical 9:16, huge glossy expressive eyes, visible fiber hair and knit textures, hand-painted miniature technology, stop-motion charm with animated-feature fluidity, elegant heroic motion and coherent physics."
+    ],
+    "film_profile_at_absolute_end": false,
+    "global_film_style_at_beginning": true,
+    "expensive_locks_at_absolute_end": true
+  }
+}

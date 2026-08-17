@@ -1,0 +1,20 @@
+{
+  "frame_count": 710,
+  "last_frame_index": 709,
+  "last_pts_time": "29.541667",
+  "duration": 29.6,
+  "width": 720,
+  "height": 1280,
+  "avg_frame_rate": "24/1",
+  "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\nucleo-8-ep01-takes-01-03.mp4",
+  "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\nucleo-8-ep01-takes-01-03-last-frame.png",
+  "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\nucleo-8-ep01-takes-01-03-contact-5.jpg",
+  "contact_frame_indices": [
+    0,
+    177,
+    354,
+    532,
+    709
+  ],
+  "processed_at": "2026-08-16T18:45:49.237527-03:00"
+}

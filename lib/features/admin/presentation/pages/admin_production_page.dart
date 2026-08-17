@@ -6,6 +6,7 @@ import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../widgets/micro_drama_creation_dialog.dart';
 
 class AdminProductionPage extends StatefulWidget {
   const AdminProductionPage({super.key});
@@ -107,9 +108,9 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
         title: const Text('Producoes'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle_outline),
+            icon: const Icon(Icons.auto_stories_outlined),
             onPressed: _showCreateProjectDialog,
-            tooltip: 'Nova obra local',
+            tooltip: 'Criar microdrama',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -217,7 +218,7 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Banco remoto + projetos locais, prompts, takes e timeline.',
+                  'Microdramas do contrato narrativo à produção em vídeo.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -495,83 +496,14 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
   }
 
   Future<void> _showCreateProjectDialog() async {
-    final titleController = TextEditingController();
-    final genreController = TextEditingController(text: 'drama vertical');
-    var format = 'vertical_series';
-    final project = await showDialog<ProductionProject>(
+    final config = await showDialog<MicroDramaProjectConfig>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Nova obra local'),
-          content: SizedBox(
-            width: 430,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleController,
-                  autofocus: true,
-                  decoration: const InputDecoration(labelText: 'Titulo'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: genreController,
-                  decoration: const InputDecoration(labelText: 'Genero'),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: format,
-                  decoration: const InputDecoration(labelText: 'Formato'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'vertical_series',
-                      child: Text('Serie / filme vertical'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'anime_vertical',
-                      child: Text('Anime vertical'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'animated_webtoon',
-                      child: Text('Webtoon animado'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setDialogState(() => format = value);
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final title = titleController.text.trim();
-                if (title.isEmpty) return;
-                final created = await _localService.createProject(
-                  title: title,
-                  genre: genreController.text.trim().isEmpty
-                      ? 'vertical'
-                      : genreController.text.trim(),
-                  formatFamily: format,
-                );
-                if (dialogContext.mounted) {
-                  Navigator.pop(dialogContext, created);
-                }
-              },
-              child: const Text('Criar no workspace'),
-            ),
-          ],
-        ),
-      ),
+      barrierDismissible: false,
+      builder: (_) => const MicroDramaCreationDialog(),
     );
-    titleController.dispose();
-    genreController.dispose();
-    if (project == null || !mounted) return;
+    if (config == null || !mounted) return;
+    final project = await _localService.createMicroDramaProject(config);
+    if (!mounted) return;
     await _loadSeries();
     if (!mounted) return;
     context.push(

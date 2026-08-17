@@ -1,0 +1,8 @@
+version: 1
+take_id: take-02
+source_take_id: take-01
+source_frame: C:\Users\Fabiano\AndroidStudioProjects\vertix\production\nucleo-8\episode-01\dola-tactile-v4-logic\take-01-last-frame.png
+source_frame_sha256: ef10e9ad0f23e1039e93addf8862a1c7ad802615a3130d33a76e8ab30e21c068
+observed_at: 2026-08-16T19:30:21.029833-03:00
+boundary_state_lock:
+Exact final frame: exterior vertical wide; complete blue-gold prison car center-left, fully supported on continuous intact rail. A separated broken endpoint and open gap are ahead at screen-right. No fall, wheel departure or downward tilt. Nara, Iko and cable are too small to verify. Warm window, sapphire sky and gold sunset remain.

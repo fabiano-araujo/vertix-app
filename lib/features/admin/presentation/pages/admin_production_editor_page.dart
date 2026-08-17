@@ -3,11 +3,29 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:video_player/video_player.dart';
 
+import '../../../../core/constants/api_constants.dart';
 import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/theme/app_colors.dart';
+
+String _resolveProductionMediaUrl(String source) {
+  final value = source.trim();
+  final uri = Uri.tryParse(value);
+  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+    return value;
+  }
+  if (value.startsWith('/generated-production/')) {
+    return Uri.base.resolve(value.substring(1)).toString();
+  }
+  if (value.startsWith('generated-production/')) {
+    return Uri.base.resolve(value).toString();
+  }
+  if (value.startsWith('/')) return '${ApiConstants.baseUrl}$value';
+  return value;
+}
 
 class AdminProductionEditorPage extends StatefulWidget {
   final int seriesId;
@@ -36,6 +54,13 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isGeneratingEpisode = false;
+  bool _showHookChain = false;
+  bool _episodeProductionMode = false;
+  bool _showTechnicalEditor = false;
+  int _productionTakeIndex = 0;
+  int _studioTabIndex = 1;
+  final TextEditingController _assistantController = TextEditingController();
+  String? _assistantRequest;
   String? _error;
 
   bool get _isAdmin => _authService.currentUser?.isAdmin == true;
@@ -52,6 +77,12 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   void initState() {
     super.initState();
     _loadProject();
+  }
+
+  @override
+  void dispose() {
+    _assistantController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProject() async {
@@ -185,7 +216,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     if (_isGeneratingEpisode || _episode == null) return;
     setState(() {
       _isGeneratingEpisode = true;
-      _sectionIndex = 1;
+      _sectionIndex = 2;
     });
     for (var index = 0; index < _episode!.takes.length; index++) {
       if (!mounted) return;
@@ -199,6 +230,17 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       const SnackBar(
         content: Text('Episodio simulado e montado na timeline local'),
       ),
+    );
+  }
+
+  Future<void> _showEpisodePreview() async {
+    final project = _project;
+    final episode = _episode;
+    if (project == null || episode == null) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _EpisodePreviewDialog(project: project, episode: episode),
     );
   }
 
@@ -227,15 +269,31 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ),
       );
     }
+    if (_isLoading || _error != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              )
+            : _buildError(),
+      );
+    }
+    if (_episodeProductionMode) return _buildEpisodeProductionScaffold();
+    if (_showTechnicalEditor) return _buildTechnicalEditorScaffold();
+    return _buildStudioWorkbenchScaffold();
+  }
+
+  Widget _buildTechnicalEditorScaffold() {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () => setState(() => _showTechnicalEditor = false),
         ),
-        title: Text(_project?.title ?? 'Studio de producao'),
+        title: Text('${_project?.title ?? 'Studio'} • editor tecnico'),
         actions: [
           IconButton(
             tooltip: 'Salvar localmente',
@@ -255,14 +313,387 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            )
-          : _error != null
-          ? _buildError()
-          : _buildEditor(),
+      body: _buildEditor(),
     );
+  }
+
+  Widget _buildStudioWorkbenchScaffold() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildStudioTopBar(),
+            const Divider(height: 1),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showAssistant = constraints.maxWidth >= 980;
+                  return Row(
+                    children: [
+                      if (showAssistant) ...[
+                        SizedBox(
+                          width: (constraints.maxWidth * .38).clamp(360, 500),
+                          child: _buildWritingAssistant(),
+                        ),
+                        const VerticalDivider(width: 1),
+                      ],
+                      Expanded(child: _buildStudioMainPane()),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudioTopBar() {
+    final project = _project!;
+    const tabs = [
+      (Icons.tune, 'Ajustes'),
+      (Icons.auto_stories_outlined, 'Esboço e roteiro'),
+      (Icons.people_outline, 'Personagens'),
+      (Icons.landscape_outlined, 'Ambientes'),
+      (Icons.inventory_2_outlined, 'Adereços'),
+    ];
+    return Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: const Color(0xFF17191D),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 1180;
+          return Row(
+            children: [
+              IconButton(
+                tooltip: 'Voltar',
+                onPressed: () => context.pop(),
+                icon: const Icon(Icons.arrow_back),
+              ),
+              const SizedBox(width: 4),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: wide ? 210 : 150),
+                child: Text(
+                  project.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              if (wide) ...[
+                const SizedBox(width: 22),
+                TextButton(
+                  onPressed: () => _showStudioMessage(
+                    'Envie seu feedback pelo canal da equipe.',
+                  ),
+                  child: const Text('Feedback'),
+                ),
+              ],
+              const Spacer(),
+              if (wide)
+                ...List.generate(tabs.length, (index) {
+                  final selected = _studioTabIndex == index;
+                  return _studioTopTab(
+                    icon: tabs[index].$1,
+                    label: tabs[index].$2,
+                    selected: selected,
+                    onTap: () => setState(() => _studioTabIndex = index),
+                  );
+                })
+              else
+                PopupMenuButton<int>(
+                  tooltip: 'Seções do projeto',
+                  initialValue: _studioTabIndex,
+                  onSelected: (value) =>
+                      setState(() => _studioTabIndex = value),
+                  itemBuilder: (_) => List.generate(
+                    tabs.length,
+                    (index) => PopupMenuItem(
+                      value: index,
+                      child: Row(
+                        children: [
+                          Icon(tabs[index].$1, size: 18),
+                          const SizedBox(width: 10),
+                          Text(tabs[index].$2),
+                        ],
+                      ),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        Icon(tabs[_studioTabIndex].$1, size: 18),
+                        const SizedBox(width: 8),
+                        Text(tabs[_studioTabIndex].$2),
+                        const Icon(Icons.arrow_drop_down),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _showTechnicalEditor = true),
+                icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
+                label: Text(wide ? 'Quadro do projeto' : 'Quadro'),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Salvar',
+                onPressed: _isSaving ? null : _saveProject,
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _studioTopTab({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) => InkWell(
+    onTap: onTap,
+    child: Container(
+      height: 72,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: selected ? AppColors.primaryLight : Colors.transparent,
+            width: 3,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: 16,
+            color: selected ? AppColors.primaryLight : AppColors.textTertiary,
+          ),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: TextStyle(
+              color: selected
+                  ? AppColors.textPrimary
+                  : AppColors.textSecondary,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildWritingAssistant() {
+    final episode = _episode!;
+    final firstTake = episode.takes.isEmpty ? null : episode.takes.first;
+    return ColoredBox(
+      color: const Color(0xFF181A1E),
+      child: Column(
+        children: [
+          Container(
+            height: 70,
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            alignment: Alignment.centerLeft,
+            child: const Row(
+              children: [
+                Icon(Icons.auto_awesome, color: AppColors.primaryLight),
+                SizedBox(width: 12),
+                Text(
+                  'Assistente de roteiro',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(18),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.surfaceLighter),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.description_outlined, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Roteiro por cenas (${episode.takes.length})',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'EP${episode.number} · ${episode.title}',
+                      style: const TextStyle(
+                        color: AppColors.primaryLight,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      episode.summary,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        height: 1.6,
+                      ),
+                    ),
+                    if (firstTake != null) ...[
+                      const SizedBox(height: 22),
+                      Text(
+                        'Cena ${firstTake.number} · ${firstTake.title}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        firstTake.visualPrompt,
+                        maxLines: 12,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          height: 1.55,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 22),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.bolt,
+                            size: 18,
+                            color: AppColors.warning,
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text(
+                              episode.cliffhanger,
+                              style: const TextStyle(fontSize: 12, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_assistantRequest != null) ...[
+                      const SizedBox(height: 18),
+                      const Divider(),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'ÚLTIMO PEDIDO',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: .8,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _assistantRequest!,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          _buildAssistantComposer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssistantComposer() => Container(
+    margin: const EdgeInsets.all(16),
+    padding: const EdgeInsets.fromLTRB(14, 6, 7, 6),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: AppColors.surfaceLighter),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.attach_file, color: AppColors.textTertiary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: _assistantController,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => _submitAssistantRequest(),
+            decoration: const InputDecoration(
+              hintText: 'Peça um ajuste no roteiro...',
+              border: InputBorder.none,
+              filled: false,
+            ),
+          ),
+        ),
+        IconButton.filled(
+          tooltip: 'Enviar',
+          onPressed: _submitAssistantRequest,
+          icon: const Icon(Icons.arrow_upward),
+        ),
+      ],
+    ),
+  );
+
+  void _submitAssistantRequest() {
+    final value = _assistantController.text.trim();
+    if (value.isEmpty) return;
+    setState(() {
+      _assistantRequest = value;
+      _assistantController.clear();
+    });
+    _showStudioMessage('Pedido anotado. Revise o roteiro antes de salvar.');
+  }
+
+  void _showStudioMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _buildError() => Center(
@@ -477,6 +908,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   Widget _buildSectionBar() {
     const sections = [
       (Icons.dashboard_outlined, 'Resumo'),
+      (Icons.account_tree_outlined, 'Roteiro'),
       (Icons.movie_filter_outlined, 'Takes'),
       (Icons.collections_outlined, 'Referencias'),
       (Icons.view_timeline_outlined, 'Timeline'),
@@ -509,15 +941,36 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
 
   Widget _buildSelectedSection() => switch (_sectionIndex) {
     0 => _buildOverview(),
-    1 => _buildTakes(),
-    2 => _buildReferences(),
-    3 => _buildTimeline(),
+    1 => _buildScript(),
+    2 => _buildTakes(),
+    3 => _buildReferences(),
+    4 => _buildTimeline(),
     _ => _buildAudio(),
   };
 
   Widget _buildOverview() {
     final project = _project!;
     final episode = _episode!;
+    final bibleEntries = project.seriesBible.entries
+        .where(
+          (entry) =>
+              entry.value is! Map &&
+              entry.value is! Iterable &&
+              entry.value != null,
+        )
+        .toList();
+    final hasContract =
+        _bibleText(project, 'logline', fallback: '').isNotEmpty &&
+        _bibleText(project, 'central_question', fallback: '').isNotEmpty;
+    final assetsReady = project.references.isNotEmpty;
+    final outlineReady = project.episodes.every(
+      (item) =>
+          item.summary.trim().isNotEmpty && item.cliffhanger.trim().isNotEmpty,
+    );
+    final beatsReady = project.episodes.every((item) => item.takes.isNotEmpty);
+    final productionReady = project.episodes
+        .expand((item) => item.takes)
+        .any((take) => take.status == 'COMPLETED');
     return ListView(
       key: const PageStorageKey('production-overview'),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
@@ -562,36 +1015,37 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
               title: 'Pipeline da obra',
               icon: Icons.account_tree_outlined,
               child: Column(
-                children: const [
+                children: [
                   _WorkflowStep(
-                    icon: Icons.menu_book_outlined,
-                    title: 'Biblia da obra',
-                    subtitle: 'Genero, arco, personagens e regras do mundo',
-                    done: true,
+                    icon: Icons.tune,
+                    title: 'Ajustes e contrato',
+                    subtitle: 'Formato, logline, pergunta central e risco',
+                    done: hasContract,
+                  ),
+                  _WorkflowStep(
+                    icon: Icons.account_tree_outlined,
+                    title: 'Outline e ganchos',
+                    subtitle: 'Pagamento, escalada, virada e corte no pico',
+                    done: outlineReady,
                   ),
                   _WorkflowStep(
                     icon: Icons.people_outline,
-                    title: 'Identidades e ambientes',
-                    subtitle: 'Masters canonicos e mapa espacial',
-                    done: true,
+                    title: 'Personagens e assets',
+                    subtitle: 'Identidades, ambientes e objetos canonicos',
+                    done: assetsReady,
                   ),
                   _WorkflowStep(
                     icon: Icons.description_outlined,
-                    title: 'Episodio linear',
-                    subtitle: 'Gancho, escalada, virada e cliffhanger',
-                    done: true,
+                    title: 'Roteiro por beats',
+                    subtitle:
+                        'Acoes filmaveis e dialogo aprovado antes dos takes',
+                    done: beatsReady,
                   ),
                   _WorkflowStep(
                     icon: Icons.movie_filter_outlined,
-                    title: 'Takes tecnicos',
-                    subtitle: 'Prompts, referencias e pontes de continuidade',
-                    done: false,
-                  ),
-                  _WorkflowStep(
-                    icon: Icons.graphic_eq,
-                    title: 'Pos-producao',
-                    subtitle: 'Montagem, vozes, musica, ambiente e SFX',
-                    done: false,
+                    title: 'Producao',
+                    subtitle: 'Videos com audio integrado e musica separada',
+                    done: productionReady,
                     last: true,
                   ),
                 ],
@@ -616,11 +1070,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _panel(
           title: 'Biblia de producao',
           icon: Icons.hub_outlined,
-          trailing: _pill('${project.seriesBible.length} contratos'),
+          trailing: _pill('${bibleEntries.length} contratos'),
           child: Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: project.seriesBible.entries
+            children: bibleEntries
                 .map(
                   (entry) => Container(
                     width: 310,
@@ -643,7 +1097,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
                         ),
                         const SizedBox(height: 7),
                         Text(
-                          entry.value?.toString() ?? '',
+                          entry.value.toString(),
                           style: const TextStyle(
                             color: AppColors.textSecondary,
                             height: 1.35,
@@ -659,6 +1113,440 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ),
       ],
     );
+  }
+
+  Widget _buildScript() {
+    final project = _project!;
+    final totalSeconds = project.episodes.fold<int>(
+      0,
+      (sum, episode) => sum + episode.durationSeconds,
+    );
+    return ListView(
+      key: const PageStorageKey('production-script'),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
+      children: [
+        _panel(
+          title: 'Visao geral do projeto',
+          icon: Icons.auto_stories_outlined,
+          trailing: _pill(
+            _bibleText(project, 'package_status', fallback: 'DRAFT'),
+            AppColors.warning,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'LOGLINE',
+                style: TextStyle(
+                  color: AppColors.primaryLight,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                _bibleText(project, 'logline', fallback: project.description),
+                style: const TextStyle(height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'GRANDE EXPECTATIVA',
+                style: TextStyle(
+                  color: AppColors.primaryLight,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                _bibleText(
+                  project,
+                  'central_question',
+                  fallback: 'Defina a pergunta central da temporada.',
+                ),
+                style: const TextStyle(height: 1.45),
+              ),
+              const SizedBox(height: 15),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _pill('${project.episodes.length} episodios'),
+                  _pill(_longDuration(totalSeconds)),
+                  _pill('${project.references.length} assets'),
+                  _pill(project.genre),
+                  _pill('9:16'),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.surfaceLighter),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _scriptModeButton(
+                  label: 'Lista de episodios',
+                  icon: Icons.view_list_outlined,
+                  selected: !_showHookChain,
+                  onTap: () => setState(() => _showHookChain = false),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _scriptModeButton(
+                  label: 'Corrente de gancho',
+                  icon: Icons.account_tree_outlined,
+                  selected: _showHookChain,
+                  onTap: () => setState(() => _showHookChain = true),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_showHookChain)
+          ..._buildHookChain(project)
+        else
+          ...List.generate(
+            project.episodes.length,
+            (index) => _buildOutlineEpisodeCard(project.episodes[index], index),
+          ),
+      ],
+    );
+  }
+
+  Widget _scriptModeButton({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) => Material(
+    color: selected ? AppColors.primary.withAlpha(42) : Colors.transparent,
+    borderRadius: BorderRadius.circular(10),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected
+                  ? AppColors.primaryLight
+                  : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: selected
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildOutlineEpisodeCard(
+    ProductionEpisodeItem episode,
+    int episodeIndex,
+  ) {
+    final selected = episodeIndex == _episodeIndex;
+    return Card(
+      color: AppColors.surface,
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.surfaceLighter,
+        ),
+      ),
+      child: InkWell(
+        onTap: () => setState(() => _episodeIndex = episodeIndex),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'EP${episode.number}',
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      episode.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (selected)
+                    const Icon(
+                      Icons.check_circle,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                episode.summary,
+                maxLines: 5,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 11),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.bolt, color: AppColors.warning, size: 17),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        episode.cliffhanger,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, height: 1.35),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 11),
+              Row(
+                children: [
+                  _pill(_timecode(episode.durationSeconds)),
+                  const SizedBox(width: 7),
+                  _pill('${episode.takes.length} beats'),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => setState(() {
+                      _episodeIndex = episodeIndex;
+                      _sectionIndex = 0;
+                    }),
+                    icon: const Icon(Icons.edit_outlined, size: 17),
+                    label: const Text('Ver / editar'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildHookChain(ProductionProject project) {
+    final entries = _hookEntries(project);
+    return List.generate(project.episodes.length, (index) {
+      final episode = project.episodes[index];
+      final entry = entries.firstWhere(
+        (item) => item['episode'] == episode.number,
+        orElse: () => const <String, dynamic>{},
+      );
+      final opening =
+          entry['opening_pickup']?.toString() ??
+          (index == 0
+              ? 'Abrir na consequencia visivel da premissa.'
+              : 'Pagar imediatamente o gancho anterior.');
+      final unresolved =
+          (entry['unresolved_questions'] as List<dynamic>? ?? const <dynamic>[])
+              .map((item) => item.toString())
+              .where((item) => item.trim().isNotEmpty)
+              .toList();
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.surfaceLighter),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _hookBlock(
+              icon: Icons.bolt,
+              color: AppColors.warning,
+              eyebrow: index == project.episodes.length - 1
+                  ? 'GANCHO FINAL • FIM DA TEMPORADA'
+                  : 'GANCHO FINAL • LANCA PARA EP${episode.number + 1}',
+              title: 'EP${episode.number} • ${episode.title}',
+              body: episode.cliffhanger,
+            ),
+            Container(
+              height: 24,
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.arrow_downward,
+                size: 18,
+                color: AppColors.textTertiary,
+              ),
+            ),
+            _hookBlock(
+              icon: Icons.play_circle_outline,
+              color: AppColors.success,
+              eyebrow: 'COLETA DE ABERTURA',
+              title: index == 0
+                  ? 'EP1 • Descoberta fria'
+                  : 'EP${episode.number} • Do gancho anterior',
+              body: opening,
+            ),
+            if (unresolved.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'NAO RESOLVIDO',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      ...unresolved.map(
+                        (question) => Padding(
+                          padding: const EdgeInsets.only(bottom: 5),
+                          child: Text(
+                            '• $question',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    });
+  }
+
+  Widget _hookBlock({
+    required IconData icon,
+    required Color color,
+    required String eyebrow,
+    required String title,
+    required String body,
+  }) => Padding(
+    padding: const EdgeInsets.all(14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withAlpha(28),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18, color: color),
+        ),
+        const SizedBox(width: 11),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eyebrow,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  List<Map<String, dynamic>> _hookEntries(ProductionProject project) =>
+      (project.seriesBible['hook_chain'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+
+  String _bibleText(
+    ProductionProject project,
+    String key, {
+    required String fallback,
+  }) {
+    final value = project.seriesBible[key]?.toString().trim();
+    return value == null || value.isEmpty ? fallback : value;
+  }
+
+  String _longDuration(int seconds) {
+    final hours = seconds ~/ 3600;
+    final minutes = (seconds % 3600) ~/ 60;
+    if (hours > 0) return '${hours}h ${minutes}m';
+    return '${minutes}m';
   }
 
   Widget _buildTakes() {
@@ -715,7 +1603,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
             },
           ),
           OutlinedButton.icon(
-            onPressed: () => setState(() => _sectionIndex = 3),
+            onPressed: () => setState(() => _sectionIndex = 4),
             icon: const Icon(Icons.view_timeline_outlined, size: 18),
             label: const Text('Ver montagem'),
           ),
@@ -733,13 +1621,14 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ? episode.takes[takeIndex - 1].lastFrameLabel
         : null;
     final statusColor = _statusColor(take.status);
-    return Container(
+    return Card(
       key: ValueKey(take.id),
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+      color: AppColors.surface,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
+        side: BorderSide(
           color: take.status == 'GENERATING'
               ? AppColors.primary
               : AppColors.surfaceLighter,
@@ -1444,7 +2333,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     }
     if (reference.publicUrl?.isNotEmpty == true) {
       return CachedNetworkImage(
-        imageUrl: reference.publicUrl!,
+        imageUrl: _resolveProductionMediaUrl(reference.publicUrl!),
         fit: BoxFit.cover,
         errorWidget: (_, __, ___) => _referenceFallback(reference),
       );
@@ -1634,15 +2523,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
                 label: const Text('EDL'),
               ),
               FilledButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Preview local: a montagem acompanha o estado simulado dos takes.',
-                      ),
-                    ),
-                  );
-                },
+                onPressed: _showEpisodePreview,
                 icon: const Icon(Icons.play_arrow, size: 19),
                 label: const Text('Reproduzir'),
               ),
@@ -1656,7 +2537,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
               _pill('${_timecode(totalSeconds)} de video'),
               _pill('9:16 vertical'),
               _pill('24 fps'),
-              _pill('audio multifaixa'),
+              _pill('video com audio'),
+              _pill('musica separada'),
             ],
           ),
         ),
@@ -1832,9 +2714,6 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     double trackWidth,
   ) {
     final video = <_TimelineClip>[];
-    final continuity = <_TimelineClip>[];
-    final dialogue = <_TimelineClip>[];
-    final sfx = <_TimelineClip>[];
     var cursor = 0;
     for (final take in episode.takes) {
       final completed = take.status == 'COMPLETED';
@@ -1845,38 +2724,6 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           label: 'T${take.number} ${take.title}',
           color: completed ? AppColors.success : AppColors.primary,
           icon: completed ? Icons.check_circle_outline : Icons.movie_outlined,
-        ),
-      );
-      if (take.usePreviousLastFrame) {
-        continuity.add(
-          _TimelineClip(
-            start: cursor.toDouble(),
-            duration: 1.4,
-            label: 'Frame T${take.number - 1}',
-            color: AppColors.warning,
-            icon: Icons.link,
-          ),
-        );
-      }
-      if (take.audioPrompt.trim().isNotEmpty) {
-        dialogue.add(
-          _TimelineClip(
-            start: cursor + 0.6,
-            duration: take.durationSeconds - 1.2,
-            label: 'Voz / T${take.number}',
-            color: const Color(0xFF8B5CF6),
-            icon: Icons.record_voice_over_outlined,
-          ),
-        );
-      }
-      final sfxStart = cursor + (take.durationSeconds * 0.58);
-      sfx.add(
-        _TimelineClip(
-          start: sfxStart,
-          duration: take.durationSeconds * 0.3,
-          label: 'SFX T${take.number}',
-          color: const Color(0xFFF97316),
-          icon: Icons.bolt,
         ),
       );
       cursor += take.durationSeconds;
@@ -1892,15 +2739,6 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
             ),
           ]
         : const <_TimelineClip>[];
-    final ambience = [
-      _TimelineClip(
-        start: 0,
-        duration: totalSeconds.toDouble(),
-        label: 'Ambiente continuo',
-        color: const Color(0xFF14B8A6),
-        icon: Icons.air,
-      ),
-    ];
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -1918,23 +2756,9 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
               _timelineRuler(totalSeconds, trackWidth),
               const SizedBox(height: 5),
               _timelineLane(
-                label: 'VIDEO',
+                label: 'VIDEO + AUDIO',
                 icon: Icons.movie_outlined,
                 clips: video,
-                totalSeconds: totalSeconds,
-                trackWidth: trackWidth,
-              ),
-              _timelineLane(
-                label: 'PONTE',
-                icon: Icons.link,
-                clips: continuity,
-                totalSeconds: totalSeconds,
-                trackWidth: trackWidth,
-              ),
-              _timelineLane(
-                label: 'DIALOGO',
-                icon: Icons.mic_none,
-                clips: dialogue,
                 totalSeconds: totalSeconds,
                 trackWidth: trackWidth,
               ),
@@ -1942,20 +2766,6 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
                 label: 'MUSICA',
                 icon: Icons.music_note,
                 clips: music,
-                totalSeconds: totalSeconds,
-                trackWidth: trackWidth,
-              ),
-              _timelineLane(
-                label: 'AMBIENTE',
-                icon: Icons.air,
-                clips: ambience,
-                totalSeconds: totalSeconds,
-                trackWidth: trackWidth,
-              ),
-              _timelineLane(
-                label: 'SFX',
-                icon: Icons.graphic_eq,
-                clips: sfx,
                 totalSeconds: totalSeconds,
                 trackWidth: trackWidth,
               ),
@@ -2158,7 +2968,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           title: 'Faixas do episodio',
           icon: Icons.multitrack_audio_outlined,
           trailing: OutlinedButton.icon(
-            onPressed: () => setState(() => _sectionIndex = 3),
+            onPressed: () => setState(() => _sectionIndex = 4),
             icon: const Icon(Icons.view_timeline_outlined, size: 18),
             label: const Text('Abrir timeline'),
           ),
@@ -2706,4 +3516,531 @@ class _TimelineClip {
     required this.color,
     required this.icon,
   });
+}
+
+class _PreviewClip {
+  final ProductionTakeItem take;
+  final String source;
+  final bool isAsset;
+
+  const _PreviewClip({
+    required this.take,
+    required this.source,
+    required this.isAsset,
+  });
+}
+
+class _EpisodePreviewDialog extends StatefulWidget {
+  final ProductionProject project;
+  final ProductionEpisodeItem episode;
+
+  const _EpisodePreviewDialog({required this.project, required this.episode});
+
+  @override
+  State<_EpisodePreviewDialog> createState() => _EpisodePreviewDialogState();
+}
+
+class _EpisodePreviewDialogState extends State<_EpisodePreviewDialog> {
+  late final List<_PreviewClip> _clips = _previewClips(widget.episode);
+  late final Duration _totalDuration = _episodeDuration(widget.episode);
+  late final bool _usesAssembledPreview =
+      widget.episode.assembledOutputUrl?.trim().isNotEmpty == true;
+
+  VideoPlayerController? _controller;
+  Timer? _storyboardTimer;
+  Duration _storyboardPosition = Duration.zero;
+  int _clipIndex = 0;
+  int _loadGeneration = 0;
+  bool _isAdvancingClip = false;
+  bool _isLoadingVideo = false;
+  bool _isPlaying = false;
+  bool _storyboardMode = false;
+  String? _videoError;
+
+  bool get _hasPlayableVideo => _clips.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_hasPlayableVideo) {
+      _loadClip(0, autoplay: true);
+    } else {
+      _storyboardMode = true;
+      _isPlaying = true;
+      _startStoryboardTimer();
+    }
+  }
+
+  static List<_PreviewClip> _previewClips(ProductionEpisodeItem episode) {
+    final assembled = episode.assembledOutputUrl?.trim();
+    if (assembled != null && assembled.isNotEmpty && episode.takes.isNotEmpty) {
+      final clip = _previewClip(episode.takes.first, assembled);
+      if (clip != null) return [clip];
+    }
+    final clips = <_PreviewClip>[];
+    for (final take in episode.takes) {
+      final output = take.outputUrl?.trim();
+      if (output == null || output.isEmpty || output.startsWith('local://')) {
+        continue;
+      }
+      final clip = _previewClip(take, output);
+      if (clip != null) clips.add(clip);
+    }
+    return clips;
+  }
+
+  static _PreviewClip? _previewClip(ProductionTakeItem take, String output) {
+    if (output.startsWith('asset://')) {
+      return _PreviewClip(
+        take: take,
+        source: output.substring('asset://'.length),
+        isAsset: true,
+      );
+    }
+    final source = _resolveProductionMediaUrl(output);
+    final uri = Uri.tryParse(source);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return null;
+    }
+    return _PreviewClip(take: take, source: source, isAsset: false);
+  }
+
+  static Duration _episodeDuration(ProductionEpisodeItem episode) {
+    final seconds = episode.takes.fold<int>(
+      0,
+      (total, take) => total + take.durationSeconds,
+    );
+    return Duration(seconds: seconds > 0 ? seconds : 1);
+  }
+
+  Future<void> _loadClip(int index, {required bool autoplay}) async {
+    if (index < 0 || index >= _clips.length) return;
+    final generation = ++_loadGeneration;
+    _storyboardTimer?.cancel();
+    final previous = _controller;
+    _controller = null;
+    await previous?.dispose();
+    if (!mounted || generation != _loadGeneration) return;
+
+    setState(() {
+      _clipIndex = index;
+      _isLoadingVideo = true;
+      _isPlaying = autoplay;
+      _storyboardMode = false;
+      _videoError = null;
+    });
+
+    final clip = _clips[index];
+    final controller = clip.isAsset
+        ? VideoPlayerController.asset(clip.source)
+        : VideoPlayerController.networkUrl(Uri.parse(clip.source));
+
+    try {
+      await controller.initialize();
+      if (!mounted || generation != _loadGeneration) {
+        await controller.dispose();
+        return;
+      }
+      controller.addListener(_handleVideoUpdate);
+      _controller = controller;
+      setState(() => _isLoadingVideo = false);
+      if (autoplay) {
+        await controller.play();
+      }
+    } catch (error) {
+      await controller.dispose();
+      if (!mounted || generation != _loadGeneration) return;
+      _useStoryboard(
+        'Nao foi possivel carregar o video do take ${clip.take.number}: $error',
+      );
+    }
+  }
+
+  void _handleVideoUpdate() {
+    final controller = _controller;
+    if (!mounted ||
+        _storyboardMode ||
+        _isAdvancingClip ||
+        controller == null ||
+        !controller.value.isInitialized) {
+      return;
+    }
+    final value = controller.value;
+    if (value.hasError) {
+      _useStoryboard(value.errorDescription ?? 'Erro ao reproduzir o video');
+      return;
+    }
+    if (value.isPlaying != _isPlaying) {
+      setState(() => _isPlaying = value.isPlaying);
+    }
+    final duration = value.duration;
+    if (duration > Duration.zero &&
+        value.position >= duration - const Duration(milliseconds: 80)) {
+      if (_clipIndex + 1 < _clips.length) {
+        _isAdvancingClip = true;
+        _loadClip(
+          _clipIndex + 1,
+          autoplay: true,
+        ).whenComplete(() => _isAdvancingClip = false);
+      } else if (value.isPlaying) {
+        controller.pause();
+        setState(() => _isPlaying = false);
+      }
+    }
+  }
+
+  void _togglePlayback() {
+    if (_storyboardMode) {
+      setState(() => _isPlaying = !_isPlaying);
+      if (_isPlaying) {
+        _startStoryboardTimer();
+      } else {
+        _storyboardTimer?.cancel();
+      }
+      return;
+    }
+
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+  }
+
+  void _startStoryboardTimer() {
+    _storyboardTimer?.cancel();
+    _storyboardTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (!mounted || !_isPlaying) return;
+      final next = _storyboardPosition + const Duration(milliseconds: 100);
+      if (next >= _totalDuration) {
+        setState(() {
+          _storyboardPosition = Duration.zero;
+          _isPlaying = false;
+        });
+        _storyboardTimer?.cancel();
+      } else {
+        setState(() => _storyboardPosition = next);
+      }
+    });
+  }
+
+  void _useStoryboard(String message) {
+    _storyboardTimer?.cancel();
+    final controller = _controller;
+    _controller = null;
+    controller?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _storyboardMode = true;
+      _isLoadingVideo = false;
+      _isPlaying = true;
+      _storyboardPosition = Duration.zero;
+      _videoError = message;
+    });
+    _startStoryboardTimer();
+  }
+
+  void _restart() {
+    if (_storyboardMode) {
+      setState(() {
+        _storyboardPosition = Duration.zero;
+        _isPlaying = true;
+      });
+      _startStoryboardTimer();
+    } else {
+      _loadClip(0, autoplay: true);
+    }
+  }
+
+  void _skipStoryboard(Duration amount) {
+    final next = _storyboardPosition + amount;
+    final clamped = next < Duration.zero
+        ? Duration.zero
+        : next > _totalDuration
+        ? _totalDuration
+        : next;
+    setState(() => _storyboardPosition = clamped);
+  }
+
+  ProductionTakeItem get _currentTake {
+    if (_storyboardMode || _usesAssembledPreview) {
+      final position = _storyboardMode
+          ? _storyboardPosition
+          : (_controller?.value.position ?? Duration.zero);
+      var elapsed = 0;
+      for (final take in widget.episode.takes) {
+        elapsed += take.durationSeconds;
+        if (position.inMilliseconds < elapsed * 1000) return take;
+      }
+      return widget.episode.takes.last;
+    }
+    return _clips[_clipIndex].take;
+  }
+
+  Duration get _position {
+    if (_storyboardMode) return _storyboardPosition;
+    return _controller?.value.position ?? Duration.zero;
+  }
+
+  Duration get _positionDuration {
+    if (_storyboardMode) return _totalDuration;
+    final duration = _controller?.value.duration ?? Duration.zero;
+    return duration > Duration.zero ? duration : Duration(seconds: 1);
+  }
+
+  @override
+  void dispose() {
+    _storyboardTimer?.cancel();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final currentTake = _currentTake;
+    final currentPosition = _position;
+    final duration = _positionDuration;
+    final progress = duration.inMilliseconds == 0
+        ? 0.0
+        : (currentPosition.inMilliseconds / duration.inMilliseconds).clamp(
+            0.0,
+            1.0,
+          );
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.play_circle_outline, color: AppColors.primary),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text('Prévia da montagem', overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 430,
+          maxHeight: screenHeight * 0.72,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AspectRatio(
+                aspectRatio: 9 / 16,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: _buildViewport(currentTake),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: 'Voltar 10 segundos',
+                    onPressed: _storyboardMode
+                        ? () => _skipStoryboard(const Duration(seconds: -10))
+                        : null,
+                    icon: const Icon(Icons.replay_10),
+                  ),
+                  IconButton.filled(
+                    tooltip: _isPlaying ? 'Pausar' : 'Reproduzir',
+                    onPressed: _togglePlayback,
+                    icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
+                  ),
+                  IconButton(
+                    tooltip: 'Reiniciar',
+                    onPressed: _restart,
+                    icon: const Icon(Icons.replay),
+                  ),
+                  IconButton(
+                    tooltip: 'Avançar 10 segundos',
+                    onPressed: _storyboardMode
+                        ? () => _skipStoryboard(const Duration(seconds: 10))
+                        : null,
+                    icon: const Icon(Icons.forward_10),
+                  ),
+                ],
+              ),
+              LinearProgressIndicator(value: progress),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(_formatPreviewDuration(currentPosition)),
+                  const Spacer(),
+                  Text(_formatPreviewDuration(duration)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Take ${currentTake.number} • ${currentTake.title}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 5),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _storyboardMode
+                      ? _videoError == null
+                            ? 'Prévia storyboard: os takes ainda não têm vídeo renderizado.'
+                            : 'Vídeo indisponível; exibindo a prévia storyboard.'
+                      : 'Vídeos renderizados serão reproduzidos em sequência.',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              if (_hasPlayableVideo && _storyboardMode) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: () => _loadClip(0, autoplay: true),
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Tentar vídeo novamente'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fechar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildViewport(ProductionTakeItem take) {
+    final controller = _controller;
+    if (!_storyboardMode &&
+        !_isLoadingVideo &&
+        controller != null &&
+        controller.value.isInitialized) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(
+            color: Colors.black,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: controller.value.size.width,
+                height: controller.value.size.height,
+                child: VideoPlayer(controller),
+              ),
+            ),
+          ),
+          if (!_isPlaying)
+            Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withAlpha(170),
+                  shape: BoxShape.circle,
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: Icon(Icons.play_arrow, size: 34),
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _buildProjectCover(),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x22000000), Color(0xE9000000)],
+            ),
+          ),
+        ),
+        if (_isLoadingVideo)
+          const Center(child: CircularProgressIndicator(color: Colors.white))
+        else
+          Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withAlpha(150),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white54),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(15),
+                child: Icon(Icons.movie_filter_outlined, size: 34),
+              ),
+            ),
+          ),
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: Text(
+            'TAKE ${take.number}\n${take.title}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProjectCover() {
+    if (widget.project.coverAssetPath?.isNotEmpty == true) {
+      return Image.asset(
+        widget.project.coverAssetPath!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _buildProjectCoverFallback(),
+      );
+    }
+    if (widget.project.coverUrl?.isNotEmpty == true) {
+      return CachedNetworkImage(
+        imageUrl: widget.project.coverUrl!,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _buildProjectCoverFallback(),
+      );
+    }
+    return _buildProjectCoverFallback();
+  }
+
+  Widget _buildProjectCoverFallback() => const DecoratedBox(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF183153), Color(0xFF121212)],
+      ),
+    ),
+    child: Center(
+      child: Icon(
+        Icons.movie_creation_outlined,
+        size: 54,
+        color: AppColors.primaryLight,
+      ),
+    ),
+  );
+}
+
+String _formatPreviewDuration(Duration duration) {
+  final minutes = duration.inMinutes.toString().padLeft(2, '0');
+  final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }

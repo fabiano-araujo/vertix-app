@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "created_at": "2026-08-16T22:51:09.764011-03:00",
+  "takes": {
+    "take-01": {
+      "prompt": {
+        "take_id": "take-01",
+        "media_category": "animation_cartoon",
+        "animation_profile": "tactile_3d_puppet",
+        "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\compiled\\take-01-prompt.txt",
+        "prompt_chars": 3163,
+        "prompt_words": 460,
+        "prompt_sha256": "c052bd5058d68d1e24e6407e95d0eac3ed96d7f45964eda4ecfaa33be03312f8",
+        "references": [
+          {
+            "key": "nara",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+            "label": "NARA CHARACTER IDENTITY",
+            "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Nara"
+          },
+          {
+            "key": "iko",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+            "label": "IKO CHARACTER IDENTITY",
+            "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Iko"
+          },
+          {
+            "key": "train",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-tactile-v3.png",
+            "label": "PRISON TRAIN LOCATION MASTER",
+            "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+            "must_not_control": "character identity, dialogue or temporal action state",
+            "category": "environment",
+            "character_name": ""
+          }
+        ],
+        "observed_state": null,
+        "dialogue_assignment": [
+          {
+            "line_id": "ep01-l001",
+            "speaker": "Nara",
+            "text": "Iko! Afasta do vidro!",
+            "take_start_seconds": 1.0,
+            "take_end_seconds": 2.3,
+            "episode_start_seconds": 1.0,
+            "episode_end_seconds": 2.3
+          }
+        ],
+        "physical_timeline": {
+          "entity": "the complete prison train",
+          "entry_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "exit_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "events": [],
+          "forbidden_states": [
+            "the train airborne or falling",
+            "any wheel beyond the rail endpoint",
+            "the train tilted downward into the abyss",
+            "the broken endpoint underneath or behind the train"
+          ]
+        },
+        "dialogue_visual_claims": [],
+        "dialogue_action_contracts": [
+          {
+            "line_id": "ep01-l001",
+            "spatial_precondition": "Iko is inside beside the same closed window with clear floor space directly behind him",
+            "required_resolution": "obey",
+            "response_start": 2.2,
+            "response_end": 3.8,
+            "visible_result": "Iko takes two clear steps away from the glass before Nara opens the clasp",
+            "incompatible_state": "Iko remaining against the glass when the passage opens or the train already falling"
+          }
+        ],
+        "episode_dialogue_master_sha256": "7a43214553868aa67eef7b95637fc8127c73912294c2bbd22745d0e0cb880db8",
+        "voice_identity_locks": [
+          {
+            "speaker": "Nara",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+            "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+          }
+        ],
+        "prompt_cleanup": {
+          "payload_format": "atlas_compact_single_line",
+          "single_line": true,
+          "atlas_compact_target_chars": 3600,
+          "within_atlas_compact_target": true,
+          "removed_generic_quality_attributes": [],
+          "spoken_language_lock_beside_dialogue": true,
+          "final_film_profile": [
+            "Stylized 3D tactile puppet action adventure with huge glossy expressive eyes, soft molded faces, visible fiber hair, knit and felt clothing, hand-painted miniature technology, sapphire-turquoise-gold aerial light and coherent contact physics."
+          ],
+          "film_profile_at_absolute_end": false,
+          "global_film_style_at_beginning": true,
+          "expensive_locks_at_absolute_end": true
+        }
+      },
+      "status": "ready_for_user_review",
+      "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01.mp4",
+      "profile": 9,
+      "generated_at": "2026-08-16T22:55:53.505475-03:00",
+      "frames": {
+        "frame_count": 241,
+        "last_frame_index": 240,
+        "last_pts_time": "10.000000",
+        "duration": 10.08,
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01.mp4",
+        "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01-last-frame.png",
+        "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01-contact-10.jpg",
+        "contact_frame_indices": [
+          0,
+          27,
+          53,
+          80,
+          107,
+          133,
+          160,
+          187,
+          213,
+          240
+        ],
+        "processed_at": "2026-08-16T22:57:18.243392-03:00"
+      }
+    },
+    "take-02": {
+      "prompt": {
+        "take_id": "take-02",
+        "media_category": "animation_cartoon",
+        "animation_profile": "tactile_3d_puppet",
+        "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\compiled\\take-02-prompt.txt",
+        "prompt_chars": 3519,
+        "prompt_words": 507,
+        "prompt_sha256": "3640d519408575c34fc4e461d1806c6f0f86cd042442d08e3542b844d66eaffb",
+        "references": [
+          {
+            "key": "nara",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+            "label": "NARA CHARACTER IDENTITY",
+            "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Nara"
+          },
+          {
+            "key": "iko",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+            "label": "IKO CHARACTER IDENTITY",
+            "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Iko"
+          },
+          {
+            "key": "train",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-tactile-v3.png",
+            "label": "PRISON TRAIN LOCATION MASTER",
+            "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+            "must_not_control": "character identity, dialogue or temporal action state",
+            "category": "environment",
+            "character_name": ""
+          },
+          {
+            "key": "previous_context_sheet",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01-contact-10.jpg",
+            "label": "SPATIAL CONTINUITY MAP ONLY — 10-FRAME SHEET",
+            "role": "10-frame context: chronological sequence of previous take; spatial/action guide; continue only from panel 10, exact final frame. No replay, reorder, camera/panel copy, character source or split-screen; canonical references control appearance."
+          }
+        ],
+        "observed_state": {
+          "receipt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\observed\\take-02.txt",
+          "source_take_id": "take-01",
+          "source_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-01-last-frame.png",
+          "source_frame_sha256": "790c79e91db20bd88966b067d9ce963d5fbe672ed7f0b3eb0868ba06b699a65b",
+          "observed_at": "2026-08-16T22:57:01.514485-03:00"
+        },
+        "dialogue_assignment": [
+          {
+            "line_id": "ep01-l002",
+            "speaker": "Iko",
+            "text": "Nara... o trilho termina ali!",
+            "take_start_seconds": 0.8,
+            "take_end_seconds": 2.7,
+            "episode_start_seconds": 10.8,
+            "episode_end_seconds": 12.7
+          },
+          {
+            "line_id": "ep01-l003",
+            "speaker": "Nara",
+            "text": "Eu sei. Me dá dez segundos.",
+            "take_start_seconds": 4.5,
+            "take_end_seconds": 6.6,
+            "episode_start_seconds": 14.5,
+            "episode_end_seconds": 16.6
+          }
+        ],
+        "physical_timeline": {
+          "entity": "the complete prison train",
+          "entry_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "exit_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "events": [],
+          "forbidden_states": [
+            "the train airborne or falling",
+            "any wheel beyond the rail endpoint",
+            "the train tilted downward into the abyss",
+            "the broken endpoint underneath or behind the train"
+          ]
+        },
+        "dialogue_visual_claims": [
+          {
+            "line_id": "ep01-l002",
+            "claim_type": "approaching_state",
+            "subject": "rail geometry and wheel support",
+            "visible_evidence": "every wheel is visibly on continuous intact rail while the rail's broken endpoint is clearly ahead in the travel direction",
+            "evidence_start": 0.3,
+            "evidence_end": 3.0,
+            "incompatible_prior_state": "the train already airborne, falling, beyond the endpoint or accompanied by broken rail underneath it"
+          }
+        ],
+        "dialogue_action_contracts": [],
+        "episode_dialogue_master_sha256": "7a43214553868aa67eef7b95637fc8127c73912294c2bbd22745d0e0cb880db8",
+        "voice_identity_locks": [
+          {
+            "speaker": "Iko",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; boy vocal age 12; bright upper-mid register; clear youthful timbre; light chest resonance; quick breath; curious reactive cadence; clean articulation; slightly rising endings; no processing.",
+            "identity_lock_sha256": "9feb1e1cf0f7d04fb1e6891225425c039e151c3d39d35dda439de0cdbc032f98"
+          },
+          {
+            "speaker": "Nara",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+            "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+          }
+        ],
+        "prompt_cleanup": {
+          "payload_format": "atlas_compact_single_line",
+          "single_line": true,
+          "atlas_compact_target_chars": 3600,
+          "within_atlas_compact_target": true,
+          "removed_generic_quality_attributes": [],
+          "spoken_language_lock_beside_dialogue": true,
+          "final_film_profile": [
+            "Stylized 3D tactile puppet action with huge glossy expressive eyes, fiber hair, knit and felt surfaces, hand-painted miniature technology, sapphire-gold daylight and coherent contact physics."
+          ],
+          "film_profile_at_absolute_end": false,
+          "global_film_style_at_beginning": true,
+          "expensive_locks_at_absolute_end": true
+        }
+      },
+      "status": "ready_for_user_review",
+      "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-02.mp4",
+      "profile": 10,
+      "generated_at": "2026-08-16T23:01:10.120049-03:00",
+      "frames": {
+        "frame_count": 241,
+        "last_frame_index": 240,
+        "last_pts_time": "10.000000",
+        "duration": 10.08,
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-02.mp4",
+        "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-02-last-frame.png",
+        "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-atlas-cartoon-v6\\take-02-contact-10.jpg",
+        "contact_frame_indices": [
+          0,
+          27,
+          53,
+          80,
+          107,
+          133,
+          160,
+          187,
+          213,
+          240
+        ],
+        "processed_at": "2026-08-16T23:01:13.125353-03:00"
+      }
+    }
+  },
+  "final": {
+    "status": "stale",
+    "updated_at": "2026-08-16T22:57:14.372841-03:00"
+  },
+  "updated_at": "2026-08-16T23:01:13.126352-03:00"
+}

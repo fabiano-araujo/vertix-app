@@ -1,0 +1,8 @@
+version: 1
+take_id: take-02
+source_take_id: take-01
+source_frame: C:\Users\Fabiano\AndroidStudioProjects\vertix\production\nucleo-8\episode-01\dola-atlas-cartoon-v7-continuity5\take-01-last-frame.png
+source_frame_sha256: 790c79e91db20bd88966b067d9ce963d5fbe672ed7f0b3eb0868ba06b699a65b
+observed_at: 2026-08-17T00:02:59.091571-03:00
+boundary_state_lock:
+Passage already open. Nara is crouched and braced outside screen-left, one boot on the lower support, natural amber eyes, near arm toward the rail; cable and other hand are not visible. Iko is upright inside screen-right, partly cropped and facing Nara, with the silver restraint around torso and waist. No contact. Train supported on the luminous rail; no fall. Endpoint is off-crop and requires new coverage. Gold, sapphire and cyan light stays stable. Completed panels 1-4: Iko stepped back; Nara released the clasp, opened the passage and pointed ahead. Never replay. Panel 5 alone is frame 1.

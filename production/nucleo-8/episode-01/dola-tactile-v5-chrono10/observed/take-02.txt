@@ -1,0 +1,8 @@
+version: 1
+take_id: take-02
+source_take_id: take-01
+source_frame: C:\Users\Fabiano\AndroidStudioProjects\vertix\production\nucleo-8\episode-01\dola-tactile-v5-chrono10\take-01-last-frame.png
+source_frame_sha256: 18d3cf04dcbd7c0a28eae06034be538193cfc6160ea26eada10b901864b9dace
+observed_at: 2026-08-16T22:07:49.296821-03:00
+boundary_state_lock:
+Panel 10: Nara is upright at screen-right and Iko at screen-left, side by side behind the exterior railing, backs mostly to camera, feet planted, no contact, bright cloud city ahead. No chain, window, cable, motorcycle or wheels are visible. Their approach, core insert and city turn are complete; do not replay them.

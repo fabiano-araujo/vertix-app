@@ -1,0 +1,918 @@
+{
+  "profile-1": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T03:25:27.213Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-4": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T03:36:35.719Z",
+    "dolaUsageState": "daily_limit",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-5": {
+    "status": "ok",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T03:49:57.503Z",
+    "dolaUsageState": "authentication_lost",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-6": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:09:37.162Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-7": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:10:15.626Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-8": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T13:11:00.621Z",
+    "dolaUsageState": "submitted_unconfirmed",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-9": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:13:19.819Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-10": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T15:25:53.690Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-11": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T13:14:12.227Z",
+    "dolaUsageState": "daily_limit",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-12": {
+    "status": "ok",
+    "conta": "usuario12@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T15:28:10.972Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-13": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T15:29:48.541Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-14": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T14:41:43.606Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-original-omit-ref5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-15": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:30:12.822Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-16": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:39:57.353Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-variant-01",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-17": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:40:53.197Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-variant-02",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-18": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T13:41:36.970Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-variant-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-19": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T13:49:54.164Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-repeat-1",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-20": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:52:31.040Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-ref-1",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-21": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:52:30.957Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-ref-2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-22": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T13:52:32.215Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-ref-3",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-23": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T14:58:05.414Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-ref5-clean",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-24": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:03:29.620Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-test-2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-25": {
+    "status": "ok",
+    "conta": "usuario25@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T20:20:45.473Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-26": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:03:37.798Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-test-4",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-27": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:03:38.550Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-test-5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-28": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:04:56.219Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-five-test-1b",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-29": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:21:58.646Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-reduced-test-1",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-30": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:21:55.544Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-reduced-test-2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-31": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T14:21:52.673Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-03-reduced-test-3",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-32": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T20:54:38.764Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-33": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T20:52:14.509Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-34": {
+    "status": "ok",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T23:03:09.383Z",
+    "dolaUsageState": "authentication_lost",
+    "dolaUsageTake": "take-05-white-face-continuity-v3",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-35": {
+    "status": "ok",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T20:43:34.685Z",
+    "dolaUsageState": "submitted_unconfirmed",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-36": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T20:36:57.627Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-37": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T20:34:19.116Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-38": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T20:32:55.396Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-39": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T14:31:34.683Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-omit-ref-5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-40": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T14:58:05.203Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03-ref5-full-head-mask",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-41": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T20:31:46.196Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-42": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T21:05:54.869Z",
+    "dolaUsageState": "rejected_before_consumption",
+    "dolaUsageTake": "take-04-full-pencil-continuity",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-43": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T16:00:52.319Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-44": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T20:17:49.724Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04-image2-third-face",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-45": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T17:15:20.930Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-04",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-46": {
+    "status": "ok",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T23:08:36.692Z",
+    "dolaUsageState": "authentication_lost",
+    "dolaUsageTake": "take-05-white-face-continuity-v4",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-47": {
+    "status": "ok",
+    "conta": "usuario47@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T23:12:17.701Z",
+    "dolaUsageState": "authentication_lost",
+    "dolaUsageTake": "take-05-white-face-continuity-v5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-48": {
+    "status": "ok",
+    "conta": "usuario48@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": null,
+    "dolaAvailableOn": "2026-08-16",
+    "dolaUsedAt": "2026-08-16T23:14:38.064Z",
+    "dolaUsageState": "authentication_lost",
+    "dolaUsageTake": "take-05-white-face-continuity-v6",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-49": {
+    "status": "ok",
+    "conta": "usuario49@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-11",
+    "dolaAvailableOn": "2026-08-12",
+    "dolaUsedAt": "2026-08-11T13:11:57.678Z",
+    "dolaUsageState": "submitted_unconfirmed",
+    "dolaUsageTake": "take-02",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-50": {
+    "status": "ok",
+    "conta": "usuario50@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-11",
+    "dolaAvailableOn": "2026-08-12",
+    "dolaUsedAt": "2026-08-11T13:12:03.882Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-03",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-52": {
+    "status": "ja_logado",
+    "email": "usuario52@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T21:31:14.422Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-04-test-4refs",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-51": {
+    "status": "final_desconhecido",
+    "email": "usuario51@snapdark.com",
+    "google": "final_desconhecido"
+  },
+  "profile-53": {
+    "status": "ja_logado",
+    "email": "usuario53@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T21:52:56.473Z",
+    "dolaUsageState": "daily_limit",
+    "dolaUsageTake": "take-04-four-frame-continuity-v2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-54": {
+    "status": "ja_logado",
+    "email": "usuario54@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:09:30.269Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04-five-required-references-v4",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-55": {
+    "status": "ja_logado",
+    "email": "usuario55@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:14:11.158Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04-five-required-references-correct-tarik-v5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-56": {
+    "status": "ok",
+    "email": "usuario56@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:40:34.098Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-05-white-face-continuity-compact-v5",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-57": {
+    "status": "ok",
+    "email": "usuario57@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T21:54:15.273Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04-four-frame-continuity-v3",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-58": {
+    "status": "ok",
+    "email": "usuario58@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:32:37.863Z",
+    "dolaUsageState": "rejected_after_generation",
+    "dolaUsageTake": "take-05-white-face-continuity-v2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-59": {
+    "status": "ok",
+    "email": "usuario59@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:43:59.653Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-05-white-face-continuity-compact-v6",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-60": {
+    "status": "sem_opcao_email",
+    "email": "usuario60@snapdark.com",
+    "dola": false
+  },
+  "profile-61": {
+    "status": "ok",
+    "email": "usuario61@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:51:25.543Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-05-white-face-continuity-v2",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-62": {
+    "status": "ok",
+    "email": "usuario62@snapdark.com",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T21:29:53.908Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-04-test-3refs",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-63": {
+    "status": "sem_opcao_email",
+    "email": "usuario63@snapdark.com",
+    "dola": false
+  },
+  "profile-64": {
+    "status": "sem_opcao_email",
+    "email": "usuario64@snapdark.com",
+    "dola": false
+  },
+  "profile-65": {
+    "status": "sem_opcao_email",
+    "email": "usuario65@snapdark.com",
+    "dola": false
+  },
+  "profile-66": {
+    "status": "sem_opcao_email",
+    "email": "usuario66@snapdark.com",
+    "dola": false
+  },
+  "profile-67": {
+    "status": "sem_opcao_email",
+    "email": "usuario67@snapdark.com",
+    "dola": false
+  },
+  "profile-68": {
+    "status": "sem_opcao_email",
+    "email": "usuario68@snapdark.com",
+    "dola": false
+  },
+  "profile-69": {
+    "status": "sem_opcao_email",
+    "email": "usuario69@snapdark.com",
+    "dola": false
+  },
+  "profile-70": {
+    "status": "sem_opcao_email",
+    "email": "usuario70@snapdark.com",
+    "dola": false
+  },
+  "profile-71": {
+    "status": "sem_opcao_email",
+    "email": "usuario71@snapdark.com",
+    "dola": false
+  },
+  "profile-72": {
+    "status": "sem_opcao_email",
+    "email": "usuario72@snapdark.com",
+    "dola": false
+  },
+  "profile-73": {
+    "status": "sem_opcao_email",
+    "email": "usuario73@snapdark.com",
+    "dola": false
+  },
+  "profile-74": {
+    "status": "sem_opcao_email",
+    "email": "usuario74@snapdark.com",
+    "dola": false
+  },
+  "profile-75": {
+    "status": "sem_opcao_email",
+    "email": "usuario75@snapdark.com",
+    "dola": false
+  },
+  "profile-76": {
+    "status": "sem_opcao_email",
+    "email": "usuario76@snapdark.com",
+    "dola": false
+  },
+  "profile-77": {
+    "status": "sem_opcao_email",
+    "email": "usuario77@snapdark.com",
+    "dola": false
+  },
+  "profile-78": {
+    "status": "sem_opcao_email",
+    "email": "usuario78@snapdark.com",
+    "dola": false
+  },
+  "profile-79": {
+    "status": "sem_opcao_email",
+    "email": "usuario79@snapdark.com",
+    "dola": false
+  },
+  "profile-80": {
+    "status": "sem_opcao_email",
+    "email": "usuario80@snapdark.com",
+    "dola": false
+  },
+  "profile-81": {
+    "status": "sem_opcao_email",
+    "email": "usuario81@snapdark.com",
+    "dola": false
+  },
+  "profile-82": {
+    "status": "sem_opcao_email",
+    "email": "usuario82@snapdark.com",
+    "dola": false
+  },
+  "profile-83": {
+    "status": "sem_opcao_email",
+    "email": "usuario83@snapdark.com",
+    "dola": false
+  },
+  "profile-84": {
+    "status": "sem_opcao_email",
+    "email": "usuario84@snapdark.com",
+    "dola": false
+  },
+  "profile-85": {
+    "status": "sem_opcao_email",
+    "email": "usuario85@snapdark.com",
+    "dola": false
+  },
+  "profile-86": {
+    "status": "sem_opcao_email",
+    "email": "usuario86@snapdark.com",
+    "dola": false
+  },
+  "profile-87": {
+    "status": "sem_opcao_email",
+    "email": "usuario87@snapdark.com",
+    "dola": false
+  },
+  "profile-88": {
+    "status": "sem_opcao_email",
+    "email": "usuario88@snapdark.com",
+    "dola": false
+  },
+  "profile-89": {
+    "status": "sem_opcao_email",
+    "email": "usuario89@snapdark.com",
+    "dola": false
+  },
+  "profile-90": {
+    "status": "sem_opcao_email",
+    "email": "usuario90@snapdark.com",
+    "dola": false
+  },
+  "profile-91": {
+    "status": "sem_opcao_email",
+    "email": "usuario91@snapdark.com",
+    "dola": false
+  },
+  "profile-92": {
+    "status": "sem_opcao_email",
+    "email": "usuario92@snapdark.com",
+    "dola": false
+  },
+  "profile-93": {
+    "status": "sem_opcao_email",
+    "email": "usuario93@snapdark.com",
+    "dola": false
+  },
+  "profile-94": {
+    "status": "sem_opcao_email",
+    "email": "usuario94@snapdark.com",
+    "dola": false
+  },
+  "profile-95": {
+    "status": "sem_opcao_email",
+    "email": "usuario95@snapdark.com",
+    "dola": false
+  },
+  "profile-96": {
+    "status": "sem_opcao_email",
+    "email": "usuario96@snapdark.com",
+    "dola": false
+  },
+  "profile-97": {
+    "status": "sem_opcao_email",
+    "email": "usuario97@snapdark.com",
+    "dola": false
+  },
+  "profile-98": {
+    "status": "sem_opcao_email",
+    "email": "usuario98@snapdark.com",
+    "dola": false
+  },
+  "profile-99": {
+    "status": "sem_opcao_email",
+    "email": "usuario99@snapdark.com",
+    "dola": false
+  },
+  "profile-100": {
+    "status": "sem_opcao_email",
+    "email": "usuario100@snapdark.com",
+    "dola": false
+  },
+  "profile-101": {
+    "status": "sem_opcao_email",
+    "email": "usuario101@snapdark.com",
+    "dola": false
+  },
+  "profile-102": {
+    "status": "sem_opcao_email",
+    "email": "usuario102@snapdark.com",
+    "dola": false
+  },
+  "profile-103": {
+    "status": "sem_opcao_email",
+    "email": "usuario103@snapdark.com",
+    "dola": false
+  },
+  "profile-104": {
+    "status": "sem_opcao_email",
+    "email": "usuario104@snapdark.com",
+    "dola": false
+  },
+  "profile-105": {
+    "status": "sem_opcao_email",
+    "email": "usuario105@snapdark.com",
+    "dola": false
+  },
+  "profile-106": {
+    "status": "sem_opcao_email",
+    "email": "usuario106@snapdark.com",
+    "dola": false
+  },
+  "profile-107": {
+    "status": "sem_opcao_email",
+    "email": "usuario107@snapdark.com",
+    "dola": false
+  },
+  "profile-108": {
+    "status": "sem_opcao_email",
+    "email": "usuario108@snapdark.com",
+    "dola": false
+  },
+  "profile-109": {
+    "status": "sem_opcao_email",
+    "email": "usuario109@snapdark.com",
+    "dola": false
+  },
+  "profile-110": {
+    "status": "sem_opcao_email",
+    "email": "usuario110@snapdark.com",
+    "dola": false
+  },
+  "profile-111": {
+    "status": "sem_opcao_email",
+    "email": "usuario111@snapdark.com",
+    "dola": false
+  },
+  "profile-112": {
+    "status": "sem_opcao_email",
+    "email": "usuario112@snapdark.com",
+    "dola": false
+  },
+  "profile-113": {
+    "status": "sem_opcao_email",
+    "email": "usuario113@snapdark.com",
+    "dola": false
+  },
+  "profile-114": {
+    "status": "sem_opcao_email",
+    "email": "usuario114@snapdark.com",
+    "dola": false
+  },
+  "profile-115": {
+    "status": "sem_opcao_email",
+    "email": "usuario115@snapdark.com",
+    "dola": false
+  },
+  "profile-116": {
+    "status": "sem_opcao_email",
+    "email": "usuario116@snapdark.com",
+    "dola": false
+  },
+  "profile-117": {
+    "status": "sem_opcao_email",
+    "email": "usuario117@snapdark.com",
+    "dola": false
+  },
+  "profile-118": {
+    "status": "sem_opcao_email",
+    "email": "usuario118@snapdark.com",
+    "dola": false
+  },
+  "profile-120": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T22:37:16.583Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-05-white-face-continuity-compact-v4",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-121": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-12",
+    "dolaAvailableOn": "2026-08-13",
+    "dolaUsedAt": "2026-08-12T23:55:46.223Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-01",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "profile-122": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-12",
+    "dolaAvailableOn": "2026-08-13",
+    "dolaUsedAt": "2026-08-12T23:55:46.318Z",
+    "dolaUsageState": "used_today",
+    "dolaUsageTake": "take-01",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  }
+}

@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "created_at": "2026-08-16T21:40:12.660670-03:00",
+  "takes": {
+    "take-01": {
+      "prompt": {
+        "take_id": "take-01",
+        "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\compiled\\take-01-prompt.txt",
+        "prompt_chars": 5632,
+        "prompt_words": 848,
+        "prompt_sha256": "6bf3127b474cc6459ee1e128e49b91b0fa5116a7ac93140f6e3616f2374734aa",
+        "references": [
+          {
+            "key": "nara",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+            "label": "NARA CHARACTER IDENTITY",
+            "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Nara"
+          },
+          {
+            "key": "iko",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+            "label": "IKO CHARACTER IDENTITY",
+            "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Iko"
+          },
+          {
+            "key": "train",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-tactile-v3.png",
+            "label": "PRISON TRAIN LOCATION MASTER",
+            "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+            "must_not_control": "character identity, dialogue or temporal action state",
+            "category": "environment",
+            "character_name": ""
+          },
+          {
+            "key": "core",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\prop-nucleo-8-tactile-v3.png",
+            "label": "NÚCLEO 8 PROP MASTER",
+            "role": "Source of truth for the compact octagonal cobalt-and-gold forearm device and exactly eight cyan perimeter segments, all steadily lit before the first rewind.",
+            "must_not_control": "body anatomy or environment geometry",
+            "category": "prop",
+            "character_name": ""
+          }
+        ],
+        "observed_state": null,
+        "dialogue_assignment": [
+          {
+            "line_id": "ep01-l001",
+            "speaker": "Nara",
+            "text": "Iko! Afasta do vidro!",
+            "take_start_seconds": 6.6,
+            "take_end_seconds": 7.9,
+            "episode_start_seconds": 6.6,
+            "episode_end_seconds": 7.9
+          }
+        ],
+        "physical_timeline": {
+          "entity": "the complete prison train",
+          "entry_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "exit_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "events": [],
+          "forbidden_states": [
+            "the train airborne or falling",
+            "any wheel beyond the rail endpoint",
+            "the train tilted downward into the abyss",
+            "the broken endpoint underneath or behind the train"
+          ]
+        },
+        "dialogue_visual_claims": [],
+        "dialogue_action_contracts": [
+          {
+            "line_id": "ep01-l001",
+            "spatial_precondition": "Iko is inside beside the same closed window with clear floor space directly behind him",
+            "required_resolution": "obey",
+            "response_start": 7.2,
+            "response_end": 8.5,
+            "visible_result": "Iko takes two clear steps away from the glass before Nara opens the clasp",
+            "incompatible_state": "Iko remaining against the glass when the passage opens or the train already falling"
+          }
+        ],
+        "episode_dialogue_master_sha256": "7a43214553868aa67eef7b95637fc8127c73912294c2bbd22745d0e0cb880db8",
+        "voice_identity_locks": [
+          {
+            "speaker": "Nara",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+            "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+          }
+        ],
+        "prompt_cleanup": {
+          "payload_format": "atlas_compact_single_line",
+          "single_line": true,
+          "atlas_compact_target_chars": 5800,
+          "within_atlas_compact_target": true,
+          "removed_generic_quality_attributes": [],
+          "spoken_language_lock_beside_dialogue": true,
+          "final_film_profile": [
+            "Premium stylized 3D tactile puppet action adventure in vertical 9:16, huge glossy expressive eyes, soft molded faces, visible fiber hair, knit and felt clothing, hand-painted miniature technology, stop-motion charm with animated-feature fluidity, magnificent sapphire-turquoise-gold aerial scale and coherent physics."
+          ],
+          "film_profile_at_absolute_end": false,
+          "global_film_style_at_beginning": true,
+          "expensive_locks_at_absolute_end": true
+        }
+      },
+      "status": "ready_for_user_review",
+      "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01.mp4",
+      "profile": 16,
+      "generated_at": "2026-08-16T21:43:58.543460-03:00",
+      "frames": {
+        "frame_count": 241,
+        "last_frame_index": 240,
+        "last_pts_time": "10.000000",
+        "duration": 10.08,
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01.mp4",
+        "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01-last-frame.png",
+        "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01-contact-10.jpg",
+        "contact_frame_indices": [
+          0,
+          27,
+          53,
+          80,
+          107,
+          133,
+          160,
+          187,
+          213,
+          240
+        ],
+        "processed_at": "2026-08-16T21:44:02.652897-03:00"
+      }
+    },
+    "take-02": {
+      "prompt": {
+        "take_id": "take-02",
+        "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\compiled\\take-02-prompt.txt",
+        "prompt_chars": 5086,
+        "prompt_words": 766,
+        "prompt_sha256": "96d6fe8d9b932f4304bcee19b89f0a5affaf90419f78fd9de8d00ea8552b6a92",
+        "references": [
+          {
+            "key": "nara",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+            "label": "NARA CHARACTER IDENTITY",
+            "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Nara"
+          },
+          {
+            "key": "iko",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+            "label": "IKO CHARACTER IDENTITY",
+            "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Iko"
+          },
+          {
+            "key": "train",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-tactile-v3.png",
+            "label": "PRISON TRAIN LOCATION MASTER",
+            "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+            "must_not_control": "character identity, dialogue or temporal action state",
+            "category": "environment",
+            "character_name": ""
+          },
+          {
+            "key": "previous_context_sheet",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01-contact-10.jpg",
+            "label": "SPATIAL CONTINUITY MAP ONLY — 10-FRAME SHEET",
+            "role": "10-frame context: chronological sequence of previous take; spatial/action guide; continue only from panel 10, exact final frame. No replay, reorder, camera/panel copy, character source or split-screen; canonical references control appearance."
+          }
+        ],
+        "observed_state": {
+          "receipt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\observed\\take-02.txt",
+          "source_take_id": "take-01",
+          "source_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-01-last-frame.png",
+          "source_frame_sha256": "18d3cf04dcbd7c0a28eae06034be538193cfc6160ea26eada10b901864b9dace",
+          "observed_at": "2026-08-16T22:07:49.296821-03:00"
+        },
+        "dialogue_assignment": [
+          {
+            "line_id": "ep01-l002",
+            "speaker": "Iko",
+            "text": "Nara... o trilho termina ali!",
+            "take_start_seconds": 0.8,
+            "take_end_seconds": 2.7,
+            "episode_start_seconds": 10.8,
+            "episode_end_seconds": 12.7
+          },
+          {
+            "line_id": "ep01-l003",
+            "speaker": "Nara",
+            "text": "Eu sei. Me dá dez segundos.",
+            "take_start_seconds": 3.3,
+            "take_end_seconds": 5.4,
+            "episode_start_seconds": 13.3,
+            "episode_end_seconds": 15.4
+          }
+        ],
+        "physical_timeline": {
+          "entity": "the complete prison train",
+          "entry_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "exit_state": "fully supported by continuous intact suspended rail under every wheel before the broken endpoint",
+          "events": [],
+          "forbidden_states": [
+            "the train airborne or falling",
+            "any wheel beyond the rail endpoint",
+            "the train tilted downward into the abyss",
+            "the broken endpoint underneath or behind the train"
+          ]
+        },
+        "dialogue_visual_claims": [
+          {
+            "line_id": "ep01-l002",
+            "claim_type": "approaching_state",
+            "subject": "rail geometry and wheel support",
+            "visible_evidence": "every wheel is visibly on continuous intact rail while the rail's broken endpoint is clearly ahead in the travel direction",
+            "evidence_start": 0.3,
+            "evidence_end": 3.0,
+            "incompatible_prior_state": "the train already airborne, falling, beyond the endpoint or accompanied by broken rail underneath it"
+          }
+        ],
+        "dialogue_action_contracts": [],
+        "episode_dialogue_master_sha256": "7a43214553868aa67eef7b95637fc8127c73912294c2bbd22745d0e0cb880db8",
+        "voice_identity_locks": [
+          {
+            "speaker": "Iko",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; boy vocal age 12; bright upper-mid register; clear youthful timbre; light chest resonance; quick breath; curious reactive cadence; clean articulation; slightly rising endings; no processing.",
+            "identity_lock_sha256": "9feb1e1cf0f7d04fb1e6891225425c039e151c3d39d35dda439de0cdbc032f98"
+          },
+          {
+            "speaker": "Nara",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+            "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+          }
+        ],
+        "prompt_cleanup": {
+          "payload_format": "atlas_compact_single_line",
+          "single_line": true,
+          "atlas_compact_target_chars": 5800,
+          "within_atlas_compact_target": true,
+          "removed_generic_quality_attributes": [],
+          "spoken_language_lock_beside_dialogue": true,
+          "final_film_profile": [
+            "Magnificent stylized 3D tactile puppet action, vertical 9:16, huge glossy eyes, fiber hair, knit textures, hand-painted miniature technology and coherent physics."
+          ],
+          "film_profile_at_absolute_end": false,
+          "global_film_style_at_beginning": true,
+          "expensive_locks_at_absolute_end": true
+        }
+      },
+      "status": "ready_for_user_review",
+      "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-02.mp4",
+      "profile": 22,
+      "generated_at": "2026-08-16T22:11:43.590027-03:00",
+      "frames": {
+        "frame_count": 241,
+        "last_frame_index": 240,
+        "last_pts_time": "10.000000",
+        "duration": 10.08,
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-02.mp4",
+        "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-02-last-frame.png",
+        "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v5-chrono10\\take-02-contact-10.jpg",
+        "contact_frame_indices": [
+          0,
+          27,
+          53,
+          80,
+          107,
+          133,
+          160,
+          187,
+          213,
+          240
+        ],
+        "processed_at": "2026-08-16T22:11:46.328347-03:00"
+      }
+    }
+  },
+  "final": {
+    "status": "stale",
+    "updated_at": "2026-08-16T22:07:59.903638-03:00"
+  },
+  "updated_at": "2026-08-16T22:11:46.328347-03:00"
+}

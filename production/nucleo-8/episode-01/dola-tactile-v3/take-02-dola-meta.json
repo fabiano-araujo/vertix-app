@@ -1,0 +1,49 @@
+{
+  "take_id": "take-02",
+  "profile": 4,
+  "session_file": "C:\\Users\\Fabiano\\dola-launcher\\dola-session.json",
+  "profile_root": "C:\\Users\\Fabiano\\playwright-profiles",
+  "playwright_module": "C:/Users/Fabiano/dola-launcher/node_modules/playwright",
+  "browser_executable": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "url": "https://www.dola.com/chat/",
+  "model": "Dreamina Seedance 2.5",
+  "duration_seconds": 10,
+  "aspect_ratio": "9:16",
+  "headless": false,
+  "timeout_minutes": 15,
+  "reference_upload_timeout_seconds": 180,
+  "reference_upload_settle_ms": 3000,
+  "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\compiled\\take-02-prompt.txt",
+  "prompt_sha256": "0441e3f65172282753d4d8be418d6cf7699fa42088c331ad772e88d2455c7398",
+  "references": [
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\enemy-drone-tactile-v3.png",
+    "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-01-last-frame.png"
+  ],
+  "output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02.mp4",
+  "meta_output": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-dola-meta.json",
+  "error_screenshot": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-02-profile-4-error.png",
+  "prompt_chars": 5755,
+  "profile_usage": {
+    "status": "ja_logado",
+    "dola": true,
+    "dolaUsedOn": "2026-08-16",
+    "dolaAvailableOn": "2026-08-17",
+    "dolaUsedAt": "2026-08-16T21:32:10.258Z",
+    "dolaUsageState": "unrecognized_provider_response",
+    "dolaUsageTake": "take-02",
+    "dolaLastModel": "Dreamina Seedance 2.5"
+  },
+  "recovered_from": "https://www.dola.com/chat/38416367814512401",
+  "conversation_prompt_verified": true,
+  "completed_at": "2026-08-16T21:35:24.444Z",
+  "source": {
+    "video": {
+      "src": "https://v16-dola.dola.com/8ad69983f240150f1c47d0543d319d6f/6a8b67a2/video/tos/mya/tos-mya-ve-50851/oEavo99aMtoLASNXBvIIQRQ2oEoZinyPcCjIi/?a=489823&ch=0&cr=7&dr=0&er=0&lr=cici_ai&cd=0%7C0%7C0%7C1&cv=1&br=1586&bt=793&cs=4&ds=4&ft=ApKAtl7ThWH68J1Crbmo0P31&mime_type=video_mp4&qs=0&rc=ZjtmODQ7Njo0NGlmaTs8Z0Bpajtwc3c5cjM1ZGYzcDY5NUAxMGJjNDZhNV8xNWA0LWE2YSMzZXNfMmRrbi5hLS1kXjJzcw%3D%3D&dy_q=1786916120&l=2026081705352095BFB49988DE345EAC16&download=true",
+      "duration": null
+    },
+    "link": null,
+    "source_key": "https://v16-dola.dola.com/8ad69983f240150f1c47d0543d319d6f/6a8b67a2/video/tos/mya/tos-mya-ve-50851/oEavo99aMtoLASNXBvIIQRQ2oEoZinyPcCjIi/?a=489823&ch=0&cr=7&dr=0&er=0&lr=cici_ai&cd=0%7C0%7C0%7C1&cv=1&br=1586&bt=793&cs=4&ds=4&ft=ApKAtl7ThWH68J1Crbmo0P31&mime_type=video_mp4&qs=0&rc=ZjtmODQ7Njo0NGlmaTs8Z0Bpajtwc3c5cjM1ZGYzcDY5NUAxMGJjNDZhNV8xNWA0LWE2YSMzZXNfMmRrbi5hLS1kXjJzcw%3D%3D&dy_q=1786916120&l=2026081705352095BFB49988DE345EAC16&download=true"
+  }
+}

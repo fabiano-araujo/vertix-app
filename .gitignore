@@ -57,6 +57,7 @@ node_modules/
 # Local development tools and browser/test artifacts
 /.codex_tools/
 /.playwright-mcp/
+/.playwright-cli/
 /tmp/
 /*.png
 
@@ -65,6 +66,7 @@ node_modules/
 /generated_assets/
 /output/
 /outputs/
+/web/generated-production/
 /seedance_refs/
 /series_bibles/
 /seedance_notion_prompts/

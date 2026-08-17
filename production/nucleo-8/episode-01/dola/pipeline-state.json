@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "created_at": "2026-08-16T17:56:02.888019-03:00",
+  "takes": {
+    "take-01": {
+      "prompt": {
+        "take_id": "take-01",
+        "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\compiled\\take-01-prompt.txt",
+        "prompt_chars": 4928,
+        "prompt_words": 745,
+        "prompt_sha256": "a385cbf2b514ca36112e727224b5ca753bd097ac807724cbe1622f9bd75b6837",
+        "references": [
+          {
+            "key": "nara",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-cartoon-v2.png",
+            "label": "NARA CHARACTER IDENTITY",
+            "role": "Source of truth for Nara's face, asymmetrical curls with turquoise streak, body proportions, cobalt-and-gold outfit, coral scarf and cartoon rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Nara"
+          },
+          {
+            "key": "iko",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-cartoon-v2.png",
+            "label": "IKO CHARACTER IDENTITY",
+            "role": "Source of truth for Iko's face, hair, twelve-year-old body proportions, turquoise-ivory-indigo outfit and cartoon rendering only.",
+            "must_not_control": "",
+            "category": "character",
+            "character_name": "Iko"
+          },
+          {
+            "key": "train",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-cartoon-v2.png",
+            "label": "PRISON TRAIN LOCATION MASTER",
+            "role": "Source of truth for the single rounded prison car, panoramic side window, inner restraint column, roof ribs, suspended rail, clouds, turbines and sapphire-gold technology.",
+            "must_not_control": "character identity, dialogue or temporal action state",
+            "category": "environment",
+            "character_name": ""
+          },
+          {
+            "key": "core",
+            "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\prop-nucleo-8-cartoon-v2.png",
+            "label": "NÚCLEO 8 PROP MASTER",
+            "role": "Source of truth for the compact octagonal cobalt-and-gold forearm device and exactly eight cyan perimeter segments, all steadily lit before the first rewind.",
+            "must_not_control": "body anatomy or environment geometry",
+            "category": "prop",
+            "character_name": ""
+          }
+        ],
+        "observed_state": null,
+        "dialogue_assignment": [
+          {
+            "line_id": "ep01-l001",
+            "speaker": "Nara",
+            "text": "Iko! Afasta do vidro!",
+            "take_start_seconds": 7.0,
+            "take_end_seconds": 9.0,
+            "episode_start_seconds": 7.0,
+            "episode_end_seconds": 9.0
+          }
+        ],
+        "episode_dialogue_master_sha256": "65c0e3cdeb6da7692cf00306f9d87d71ebf5f7f0aed63c6caeea33ba16194aab",
+        "voice_identity_locks": [
+          {
+            "speaker": "Nara",
+            "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+            "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+          }
+        ],
+        "prompt_cleanup": {
+          "payload_format": "atlas_compact_single_line",
+          "single_line": true,
+          "atlas_compact_target_chars": 5400,
+          "within_atlas_compact_target": true,
+          "removed_generic_quality_attributes": [],
+          "spoken_language_lock_beside_dialogue": true,
+          "final_film_profile": [
+            "Premium stylized 3D cartoon action adventure in vertical 9:16, animated-feature polish, magnificent sapphire-turquoise-gold aerial city, readable heroic silhouettes, dynamic but coherent physics and beautiful high-altitude scale."
+          ],
+          "film_profile_at_absolute_end": false,
+          "global_film_style_at_beginning": true,
+          "expensive_locks_at_absolute_end": true
+        }
+      },
+      "status": "ready_for_user_review",
+      "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01.mp4",
+      "profile": 1,
+      "generated_at": "2026-08-16T18:00:56.564608-03:00",
+      "frames": {
+        "frame_count": 241,
+        "last_frame_index": 240,
+        "last_pts_time": "10.000000",
+        "duration": 10.08,
+        "width": 720,
+        "height": 1280,
+        "avg_frame_rate": "24/1",
+        "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01.mp4",
+        "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01-last-frame.png",
+        "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola\\take-01-contact-5.jpg",
+        "contact_frame_indices": [
+          0,
+          60,
+          120,
+          180,
+          240
+        ],
+        "processed_at": "2026-08-16T18:00:59.431208-03:00"
+      }
+    }
+  },
+  "final": {
+    "status": "stale",
+    "updated_at": "2026-08-16T17:56:02.888019-03:00"
+  },
+  "updated_at": "2026-08-16T18:00:59.433221-03:00"
+}

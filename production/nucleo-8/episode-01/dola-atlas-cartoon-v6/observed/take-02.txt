@@ -1,0 +1,8 @@
+version: 1
+take_id: take-02
+source_take_id: take-01
+source_frame: C:\Users\Fabiano\AndroidStudioProjects\vertix\production\nucleo-8\episode-01\dola-atlas-cartoon-v6\take-01-last-frame.png
+source_frame_sha256: 790c79e91db20bd88966b067d9ce963d5fbe672ed7f0b3eb0868ba06b699a65b
+observed_at: 2026-08-16T22:57:01.514485-03:00
+boundary_state_lock:
+The prison-car side passage is already open and must not be opened again. Nara occupies the screen-left foreground outside the opening, crouched and braced against the exterior edge; one boot is visibly planted against the lower exterior support. Her face is in left profile toward screen-right, with natural amber eyes and no facial glow or color change. Her near arm extends across the opening toward the forward rail; the roof rescue cable and her other hand are outside the final crop and are not visible. Iko remains inside at screen-right, upright and partly edge-cropped, facing screen-left toward Nara; a silver restraint chain remains visibly wrapped across his torso/waist. They do not touch. The open passage separates Nara outside from Iko inside. The train is still supported and moving along the luminous rail visible ahead; no airborne, falling or impact state is visible. The exact broken endpoint is not visible in this final crop and must be established by the next coverage shot rather than inferred from this frame. Warm gold sunset rim, sapphire sky fill, cyan rail accents and the same handcrafted tactile 3D puppet rendering remain stable. Completed before the cut: Iko moved clear enough for Nara to open the passage; the passage is fully open. Do not replay Iko stepping back, the clasp release or the opening motion.

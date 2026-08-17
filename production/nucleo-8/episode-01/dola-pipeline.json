@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "series": "NÚCLEO 8",
+  "episode_title": "Oito Segundos",
+  "delivery_mode": "episode_segment",
+  "workspace_root": "C:/Users/Fabiano/AndroidStudioProjects/vertix",
+  "output_dir": "production/nucleo-8/episode-01/dola-atlas-cartoon-v7-continuity5",
+  "artifacts": {"metadata_mode":"compact"},
+  "spoken_locale": "BRAZILIAN PORTUGUESE (pt-BR)",
+  "provider": {
+    "session_file": "C:/Users/Fabiano/dola-launcher/dola-session.json",
+    "profile_root": "C:/Users/Fabiano/playwright-profiles",
+    "playwright_module": "C:/Users/Fabiano/dola-launcher/node_modules/playwright",
+    "browser_executable": "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "model": "Dreamina Seedance 2.5",
+    "duration_seconds": 10,
+    "duration_tolerance_seconds": 0.25,
+    "aspect_ratio": "9:16",
+    "headless": false,
+    "timeout_minutes": 15,
+    "reference_upload_timeout_seconds": 180,
+    "reference_upload_settle_ms": 3000,
+    "recovery_urls": {"take-02":"https://www.dola.com/chat/38416367986810897"},
+    "max_profile_attempts": 3
+  },
+  "prompt": {
+    "payload_format": "atlas_compact_single_line",
+    "media_category": "animation_cartoon",
+    "animation_profile": "tactile_3d_puppet",
+    "max_chars": 6000,
+    "atlas_compact_target_chars": 4200,
+    "atlas_animation_target_chars": 3600,
+    "animation_max_shots_per_10s": 3,
+    "source_max_chars": 8000,
+    "dynamic_reserve_chars": 900,
+    "dialogue_max_words_per_second": 3.4,
+    "dialogue_edge_margin_seconds": 0.3,
+    "enforce_complexity_budget": true,
+    "require_motivated_camera_coverage": true,
+    "camera_coverage_min_events": 2,
+    "camera_coverage_require_shot_labels": true,
+    "camera_coverage_require_end_states": true
+  },
+  "episode_dialogue_master": {
+    "status": "LOCKED",
+    "lines": [
+      {"line_id":"ep01-l001","speaker":"Nara","text":"Iko! Afasta do vidro!","purpose":"clear the window before Nara opens a safe entry","responds_to":"Nara reaches Iko's exterior window while the train is still fully supported.","causes":"Iko visibly steps back and gives Nara room to open the window.","action_contract_required":true},
+      {"line_id":"ep01-l002","speaker":"Iko","text":"Nara... o trilho termina ali!","purpose":"name the approaching rail endpoint without pretending the train has already fallen","responds_to":"Iko sees the intact rail ending ahead while every wheel is still supported.","causes":"Nara sets a ten-second rescue deadline.","visual_claim_required":true},
+      {"line_id":"ep01-l003","speaker":"Nara","text":"Eu sei. Me dá dez segundos.","purpose":"define the rescue clock while confirming the danger is still ahead","responds_to":"Iko identifies the approaching endpoint.","causes":"Nara reaches Iko's restraint chain immediately."},
+      {"line_id":"ep01-l004","speaker":"Nara","text":"Quando eu cortar, segura o cabo!","purpose":"give Iko a spatially possible action after his chain is severed","responds_to":"Nara has reached the restraint while the rescue cable hangs within Iko's reach.","causes":"Iko grips the cable as soon as the chain opens.","action_contract_required":true},
+      {"line_id":"ep01-l005","speaker":"Iko","text":"Nara... tem um drone atrás de você!","purpose":"reveal the current pursuer only when it is visibly present","responds_to":"One hunter drone enters outside behind Nara after Iko grips the cable.","causes":"Nara must trigger the escape before the train reaches the endpoint.","visual_claim_required":true},
+      {"line_id":"ep01-l006","speaker":"Nara","text":"Agora!","purpose":"trigger the first jump attempt","responds_to":"The restraint opens and Nara is ready to catch Iko.","causes":"Iko jumps toward Nara."},
+      {"line_id":"ep01-l007","speaker":"Iko","text":"Nara!","purpose":"express fear when the first rescue fails","responds_to":"The drone pulse breaks their support and both fall.","causes":"Nara decides to activate the Núcleo 8."},
+      {"line_id":"ep01-l008","speaker":"Nara","text":"Não pula! Abaixa!","purpose":"change the plan before Iko repeats the failed action","responds_to":"Nara returns to the instant before Iko's jump.","causes":"Iko ducks and avoids the pulse path."},
+      {"line_id":"ep01-l009","speaker":"Iko","text":"Você acabou de mandar eu pular!","purpose":"prove that Iko experiences only the new timeline","responds_to":"Nara gives a contradictory order without explanation.","causes":"Nara dismisses the contradiction and moves to her new tactic."},
+      {"line_id":"ep01-l010","speaker":"Nara","text":"O plano mudou!","purpose":"keep momentum and withhold the rewind explanation","responds_to":"Iko challenges the changed order.","causes":"Nara uses the drone as an anchor."},
+      {"line_id":"ep01-l011","speaker":"Nara","text":"Agora, pega minha mão!","purpose":"trigger the successful rescue connection","responds_to":"The drone cable creates a new stable arc.","causes":"Iko reaches Nara and they leave the train."},
+      {"line_id":"ep01-l012","speaker":"Nara","text":"Você está inteiro?","purpose":"reset emotional proximity after the crash","responds_to":"Nara and Iko land on the maintenance platform.","causes":"Iko answers with the question he cannot ignore."},
+      {"line_id":"ep01-l013","speaker":"Iko","text":"Como você sabia onde ele ia atirar?","purpose":"surface the impossible knowledge created by the rewind","responds_to":"Iko remembers Nara predicting the drone shot.","causes":"Nara postpones the explanation."},
+      {"line_id":"ep01-l014","speaker":"Nara","text":"Depois.","purpose":"preserve urgency and defer exposition","responds_to":"Iko asks how Nara predicted the attack.","causes":"Nara uses their private signal to reassure him."},
+      {"line_id":"ep01-l015","speaker":"Nara","text":"Duas batidas. Como sempre.","purpose":"invoke the siblings' private memory","responds_to":"Nara wants to restore normality after the impossible escape.","causes":"Iko reveals that the shared memory no longer exists for him."},
+      {"line_id":"ep01-l016","speaker":"Iko","text":"A gente tinha um sinal?","purpose":"deliver the memory-cost cliffhanger","responds_to":"Nara performs the familiar two-tap signal.","causes":"Nara sees one Núcleo segment go dark and understands the price."}
+    ]
+  },
+  "dialogue_review": "user",
+  "continuity": {
+    "pencil_faces": false,
+    "use_previous_contact_sheet": true,
+    "contact_sheet_frame_count": 5,
+    "contact_sheet_columns": 5,
+    "attach_previous_final_frame": false,
+    "require_observed_state_receipt": true
+  },
+  "assembly": {
+    "output": "nucleo-8-ep01-assembled.mp4",
+    "audio_overlap_seconds": 0.32,
+    "crf": 19,
+    "preset": "medium",
+    "audio_bitrate": "192k"
+  },
+  "recording_character": "Native Brazilian Portuguese production dialogue at action-camera distance, with coherent wind, metal reflections, breathing and the same environmental noise floor.",
+  "negatives": [
+    "No subtitles, captions, logos, speech bubbles or on-screen text",
+    "No photorealism, horror grime or live-action people",
+    "No extra characters, cars, doors, rails or platforms. Five-frame order: panels 1-4 are completed history; panel 5 alone is the exact boundary. Preserve established blocking, objects and environment; no replay, reversal, reordering, panels or split-screen. MANDATORY COVERAGE CUT / STRONG OPENING COVERAGE DELTA before frame 1 with a different shot size or subject emphasis; never use a near-identical camera."
+  ],
+  "audio_continuity_groups": {
+    "falling_train": {
+      "ambience_lock": "Continuous bright high-altitude wind, magnetic rail hum, stressed metal and distant turbine rumble; intensity follows speed while the base acoustic world remains coherent.",
+      "music_lock": "No generated music in raw takes; preserve clean dialogue and diegetic action effects for one episode-level score in post-production."
+    }
+  },
+  "references": {
+    "nara": {
+      "path": "production/nucleo-8/references/character-nara-tactile-v3.png",
+      "label": "NARA CHARACTER IDENTITY",
+      "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+      "category": "character",
+      "character_name": "Nara"
+    },
+    "iko": {
+      "path": "production/nucleo-8/references/character-iko-tactile-v3.png",
+      "label": "IKO CHARACTER IDENTITY",
+      "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+      "category": "character",
+      "character_name": "Iko"
+    },
+    "train": {
+      "path": "production/nucleo-8/references/location-prison-train-tactile-v3.png",
+      "label": "PRISON TRAIN LOCATION MASTER",
+      "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+      "must_not_control": "character identity, dialogue or temporal action state",
+      "category": "environment"
+    },
+    "core": {
+      "path": "production/nucleo-8/references/prop-nucleo-8-tactile-v3.png",
+      "label": "NÚCLEO 8 PROP MASTER",
+      "role": "Source of truth for the compact octagonal cobalt-and-gold forearm device and exactly eight cyan perimeter segments, all steadily lit before the first rewind.",
+      "must_not_control": "body anatomy or environment geometry",
+      "category": "prop"
+    },
+    "drone": {
+      "path": "production/nucleo-8/references/enemy-drone-tactile-v3.png",
+      "label": "HUNTER DRONE VEHICLE MASTER",
+      "role": "Source of truth for one small sapphire-charcoal-gold hunter drone with one central cyan lens, two folding blade-wings, vector thrusters and an underslung pulse emitter.",
+      "must_not_control": "character identity or train geometry",
+      "category": "vehicle"
+    }
+  },
+  "speaker_reference_keys": {"Nara":"nara","Iko":"iko"},
+  "voices": {
+    "Nara": {"identity_lock":"Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing."},
+    "Iko": {"identity_lock":"Original fictional Brazilian voice; Brazilian Portuguese; boy vocal age 12; bright upper-mid register; clear youthful timbre; light chest resonance; quick breath; curious reactive cadence; clean articulation; slightly rising endings; no processing."}
+  },
+  "takes": [
+    {
+      "id":"take-01","duration_seconds":10,"output":"take-01.mp4","use_previous_frame":false,
+      "reference_keys":["nara","iko","train"],"visible_character_keys":["nara","iko"],"required_prop_keys":[],"audio_continuity_group":"falling_train","requires_physical_timeline":true,
+      "provider_film_opening":"Stylized 3D tactile puppet action adventure with huge glossy expressive eyes, soft molded faces, visible fiber hair, knit and felt clothing, hand-painted miniature technology, sapphire-turquoise-gold aerial light and coherent contact physics.",
+      "provider_scene_premise":"Outside a speeding prison train still fully supported on intact suspended rail, Nara is already braced at the closed window beside her chained brother while the broken endpoint remains ahead.",
+      "provider_constraints":"Iko remains visibly chained inside; Nara remains outside at the same window. No rescue completion, city-view pause, time jump, core activation or core insert. The train stays fully supported before the gap. No text, extra people, cars, doors, rails or platforms.",
+      "complexity":{"major_body_state_changes":1,"plot_prop_state_changes":1,"spoken_turns":1,"primary_camera_strategies":1,"dominant_dramatic_button":"The window passage opens only after Iko visibly steps back, while the train remains on the rail."},
+      "physical_timeline":{"entity":"the complete prison train","entry_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","exit_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","events":[],"forbidden_states":["the train airborne or falling","any wheel beyond the rail endpoint","the train tilted downward into the abyss","the broken endpoint underneath or behind the train"]},
+      "frame_1_character_states":{"nara":"outside screen-left, already secured by one taut roof cable with both magnetic boots planted beside Iko's closed window","iko":"inside the same panoramic window at screen-right, chained upright to the central restraint column and close to the glass"},
+      "sections":{
+        "environment":"One rounded prison car races screen-right above luminous clouds. A continuous intact suspended rail is visibly under every wheel; its broken endpoint and open gap are far ahead at screen-right.",
+        "blocking":"Nara is already braced outside Iko's closed window; Iko remains chained inside near the glass with two clear steps of floor behind him.",
+        "action":"Nara commands Iko away from the glass. Iko takes two clear steps back while still chained. Only after he is clear, Nara releases the outer clasp and swings the window open. The train never leaves the rail.",
+        "camera_and_beats":"0.0-4.2s establish supported train, Nara outside and Iko chained inside; Nara warns and Iko steps back. 4.2-10.0s Nara opens the clasp only after he is clear and the passage lands open.",
+        "camera_coverage":"Shot 1 [0.0s-4.2s]: extreme side-wide lateral track keeps every wheel on intact rail, the endpoint ahead, Nara braced outside and Iko chained inside in one readable geography. End state: Iko has completed two steps away from the glass while Nara remains outside. Shot 2 [4.2s-10.0s]: same-axis medium split-depth slow push as Nara releases the clasp and the window swings open. End state: passage open, Iko still chained inside, Nara securely braced outside, train fully supported and gap ahead.",
+        "eyelines":"Nara looks through the glass at Iko; Iko looks at Nara and then at the clear floor space behind him; nobody looks at camera.",
+        "light":"Brilliant sapphire sky fill, warm gold rim and cyan train accents stay stable.",
+        "sound":"Magnetic rail hum, fast wind, two boot steps and one window-clasp release; no music.",
+        "end_state":"Nara is securely braced outside the now-open window; her single rescue cable remains anchored above that window, taut and in her hand; Iko has stepped back but remains chained; the complete train is still fully supported before the endpoint."
+      },
+      "dialogue_action_contracts":[{"line_id":"ep01-l001","spatial_precondition":"Iko is inside beside the same closed window with clear floor space directly behind him","required_resolution":"obey","response_start":2.2,"response_end":3.8,"visible_result":"Iko takes two clear steps away from the glass before Nara opens the clasp","incompatible_state":"Iko remaining against the glass when the passage opens or the train already falling"}],
+      "performances":{"Nara":"Urgent and protective, one precise command without panic."},
+      "dialogue":[{"line_id":"ep01-l001","start":1.0,"end":2.3}]
+    },
+    {
+      "id":"take-02","duration_seconds":10,"output":"take-02.mp4","use_previous_frame":true,
+      "reference_keys":["nara","iko","train"],"visible_character_keys":["nara","iko"],"required_prop_keys":[],"audio_continuity_group":"falling_train","requires_physical_timeline":true,
+      "provider_film_opening":"Stylized 3D tactile puppet action with huge glossy expressive eyes, fiber hair, knit and felt surfaces, hand-painted miniature technology, sapphire-gold daylight and coherent contact physics.",
+      "provider_scene_premise":"At the open prison-car passage, chained Iko warns of the rail endpoint ahead; Nara is braced outside and commits to a ten-second rescue.",
+      "provider_constraints":"Panel 5 alone is frame 1; passage already open. No handle, clasp or glass action, fall, drone, time jump, text or extras. Keep Iko chained inside and Nara outside.",
+      "complexity":{"major_body_state_changes":0,"plot_prop_state_changes":0,"spoken_turns":2,"primary_camera_strategies":1,"dominant_dramatic_button":"Nara reaches through the open window toward Iko's restraint while the train remains supported and the gap stays ahead."},
+      "physical_timeline":{"entity":"the complete prison train","entry_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","exit_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","events":[],"forbidden_states":["the train airborne or falling","any wheel beyond the rail endpoint","the train tilted downward into the abyss","the broken endpoint underneath or behind the train"]},
+      "sections":{
+        "continuity":"{{OBSERVED_BOUNDARY_STATE}} FIVE-FRAME ORDER: panels 1-4 are completed history; panel 5 alone is frame 1. The sheet controls blocking, restraint, train, axis, light and environment. New action begins after panel 5; no replay or reversal.",
+        "environment":"The same prison car moves screen-right, every wheel on intact rail with the broken endpoint visibly ahead.",
+        "blocking":"Iko remains chained inside the open window; Nara remains braced outside that same opening with the rescue cable taut above her.",
+        "action":"The passage is already open before frame 1 and nobody touches its handle or clasp. Iko points through the existing opening to the broken endpoint and warns Nara while the train remains supported. Nara answers, turns from the endpoint back to Iko and reaches directly toward the visible restraint chain on his torso without cutting it yet.",
+        "camera_and_beats":"0.0-4.2s forward-side support proof and Iko's warning. 4.2-10.0s same-axis window two-shot for Nara's reply and her reach toward the restraint.",
+        "camera_coverage":"Shot 1 [0.0s-4.2s]: hard editorial cut to a fixed forward-looking wide from inside behind Iko's shoulder, visibly different from every sheet panel; the already-open passage frames Nara outside, every wheel on intact rail and the broken endpoint ahead as Iko points. End state: the warning is complete, the opening remains untouched and the train has not fallen. Shot 2 [4.2s-10.0s]: same-axis medium split-depth slow push from inside as Nara answers and reaches directly to the visible restraint chain, never toward the window handle. End state: Nara's hand is at the chain, Iko remains chained inside, Nara remains outside, train fully supported and gap ahead.",
+        "eyelines":"Iko looks and points to the endpoint ahead, then looks to Nara; Nara looks from the endpoint back to Iko's restraint.",
+        "light":"Preserve bright sapphire daylight, gold rim and cyan practical accents.",
+        "sound":"Continuous rail hum and wind; one chain rattle as Nara reaches; no cut, drone or fall; no music.",
+        "end_state":"Nara is braced outside the open window with her hand at Iko's restraint; Iko remains chained inside; the complete train remains fully supported before the endpoint and the gap remains ahead."
+      },
+      "dialogue_visual_claims":[{"line_id":"ep01-l002","claim_type":"approaching_state","subject":"rail geometry and wheel support","visible_evidence":"every wheel is visibly on continuous intact rail while the rail's broken endpoint is clearly ahead in the travel direction","evidence_start":0.3,"evidence_end":3.0,"incompatible_prior_state":"the train already airborne, falling, beyond the endpoint or accompanied by broken rail underneath it"}],
+      "performances":{"Iko":"Urgent but factual; he points to a danger that is still ahead.","Nara":"Calm under pressure, defining a precise rescue clock."},
+      "dialogue":[{"line_id":"ep01-l002","start":0.8,"end":2.7},{"line_id":"ep01-l003","start":4.5,"end":6.6}]
+    },
+    {
+      "id":"take-03","duration_seconds":10,"output":"take-03.mp4","use_previous_frame":true,
+      "reference_keys":["nara","iko","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["drone"],"audio_continuity_group":"falling_train","requires_physical_timeline":true,
+      "provider_film_opening":"Premium stylized 3D tactile puppet action adventure continuing the same magnificent on-rail prison-train chase, vertical 9:16, huge glossy expressive eyes, fiber hair, knit textures and coherent physical staging.",
+      "provider_scene_premise":"Inside the still-supported prison train, Nara gives Iko a possible instruction, cuts his chain, Iko grips the rescue cable, and only then one hunter drone becomes visible behind Nara.",
+      "complexity":{"major_body_state_changes":0,"plot_prop_state_changes":1,"spoken_turns":2,"primary_camera_strategies":1,"dominant_dramatic_button":"Iko grips the cable as the drone appears, while the train remains on rail just before the endpoint."},
+      "physical_timeline":{"entity":"the complete prison train","entry_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","exit_state":"fully supported by continuous intact suspended rail under every wheel before the broken endpoint","events":[],"forbidden_states":["the train airborne or falling","any wheel beyond the rail endpoint","the train tilted downward into the abyss","the broken endpoint underneath or behind the train"]},
+      "sections":{
+        "continuity":"{{OBSERVED_BOUNDARY_STATE}} Cut before frame 1 to a chain-and-cable insert on the same axis; preserve Nara and Iko together inside, Iko's locked chain, the open window, exact train support and light; do not replay Nara's entry.",
+        "environment":"The same prison car continues screen-right on intact rail. The endpoint is now very close but still ahead; the complete train remains supported throughout.",
+        "blocking":"Nara stands beside chained Iko; the taut rescue cable hangs within Iko's reach; one drone may enter only outside behind Nara after Iko grips the cable.",
+        "action":"Nara tells Iko to grip the cable when she cuts. Her compact clasp unfolds once into a short cyan-edged blade and fully severs the restraint chain. Only after the severed chain drops clear, Iko takes the same hanging cable with both hands and completes a secure grip. Only after that grip is complete, a cyan reflection reveals one hunter drone outside behind Nara; Iko warns her. The drone does not fire and the train never leaves the rail.",
+        "camera_and_beats":"0.0-2.8s instruction with locked chain and reachable cable together; 2.8-5.2s one clasp unfold and chain fully severed; 5.4-6.9s Iko grips cable; 7.0-9.6s drone appears and Iko warns; 9.6-10.0s hold all danger geography.",
+        "camera_coverage":"Shot 1 [0.0s-2.8s]: chain-and-cable insert sharing Nara, Iko, locked chain and reachable cable as she speaks. End state: the instruction is spatially possible. Shot 2 [2.8s-6.9s]: same-axis close as the clasp becomes a blade, chain is completely cut and drops, then Iko grips the cable with both hands. End state: Iko is free and securely gripping cable before any drone appears. Shot 3 [7.0s-10.0s]: interior medium with window depth; one drone becomes visible behind Nara as Iko warns her, while intact rail remains under the train and the endpoint stays ahead. End state: cable grip secure, drone visible but not firing, train still supported.",
+        "eyelines":"Nara watches Iko's hands reach the cable; Iko confirms his grip, then looks past Nara to the drone; drone lens tracks Nara.",
+        "light":"Preserve sapphire daylight and gold rim; blade and drone add narrow cyan reflections only.",
+        "sound":"Continuous wind and rail hum; one clasp unfold, one chain cut, cable tension and one drone approach; no pulse and no music.",
+        "end_state":"Nara and freed Iko are together inside; Iko grips the rescue cable with both hands; one drone is visible outside behind Nara; train remains fully supported before the endpoint."
+      },
+      "dialogue_action_contracts":[{"line_id":"ep01-l004","spatial_precondition":"Nara and Iko are together beside the restraint, and the same taut rescue cable from the prior takes hangs within Iko's arm reach","required_resolution":"obey","response_start":5.4,"response_end":6.9,"visible_result":"after the chain is completely cut and has dropped clear, Iko closes both hands around the cable and holds it securely","incompatible_state":"Iko gripping before the chain is severed, Iko jumping toward Nara, either sibling already falling, or the cable outside his reach"}],
+      "dialogue_visual_claims":[{"line_id":"ep01-l005","claim_type":"current_state","subject":"the hunter drone's position","visible_evidence":"one hunter drone is fully visible through the window outside directly behind Nara while Iko looks at it","evidence_start":7.0,"evidence_end":9.6,"incompatible_prior_state":"a warning before any drone is visible, a drone visible before Iko's cable grip is complete, or a drone already firing"}],
+      "performances":{"Nara":"Fast, precise instruction with protective authority.","Iko":"Alarm rises only after he actually sees the drone."},
+      "dialogue":[{"line_id":"ep01-l004","start":0.7,"end":2.7},{"line_id":"ep01-l005","start":7.3,"end":9.6}]
+    },
+    {
+      "id":"take-04","duration_seconds":10,"output":"take-04.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon aerial action in the same prison car, vertical 9:16, bright magnificent design and coherent physical stakes.","provider_scene_premise":"With Iko already free and gripping the rescue cable, Nara commands the first escape through the open window as the drone lines up a pulse.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":0,"spoken_turns":1,"primary_camera_strategies":1,"dominant_dramatic_button":"Iko completes his leap through the opening while the pulse reaches their rescue line."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a wider opening-and-cable angle on the same axis; never replay the chain cut, cable grip or drone arrival.","environment":"Same prison-car interior and panoramic opening; the train remains on the last intact rail before the endpoint.","blocking":"Nara braces beside the open window; Iko is already free and holds the taut rescue cable with both hands; the drone remains outside behind Nara.","action":"Without touching the already severed restraint, Nara braces the cable at the opening and commands Iko to go now. Iko completes one leap outward through the open window while keeping both hands on the cable; the drone charges one pulse outside but does not hit until the next take.","camera_and_beats":"0.0-2.0s confirm free Iko, cable grip and command; 2.0-6.5s Iko leaps through the opening; 6.5-10.0s pulse closes on the rescue line.","camera_coverage":"Shot 1 [0.0s-2.0s]: wider opening-and-cable angle proving the restraint already severed and Iko already gripping the cable as Nara speaks. End state: no action is replayed. Shot 2 [2.0s-6.5s]: cut wider as Iko completes one outward leap through the open window while retaining both grips. End state: Iko is outside on the cable within Nara's reach. Shot 3 [6.5s-10.0s]: cut to the drone emitter and track the pulse toward the cable line. End state: the pulse nearly reaches, but has not yet broken, their support.","eyelines":"Nara and Iko look at each other; drone lens targets the cable line.","light":"Same daylight; drone pulse adds a narrow cyan streak only.","sound":"Same wind and rail; jump effort, cable strain and pulse charge; no restraint-cut sound and no music."},"performances":{"Nara":"Sharp decisive trigger command."},"dialogue":[{"line_id":"ep01-l006","start":0.8,"end":1.4}]},
+    {
+      "id":"take-05","duration_seconds":10,"output":"take-05.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core","drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon aerial action, vertical 9:16, beautiful large-scale danger and readable body mechanics.","provider_scene_premise":"The drone pulse breaks the first rescue and both siblings fall until Nara reaches the Núcleo 8.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":0,"spoken_turns":1,"primary_camera_strategies":1,"dominant_dramatic_button":"Nara's hand reaches the fully lit Núcleo 8 during free fall."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a close support insert, same axis; no near-identical camera and no replay of Iko's jump.","environment":"Same train above the cloud abyss and distant turbines.","blocking":"Iko is within Nara's reach at the opening; the pulse reaches the support line.","action":"The pulse snaps the support, Nara catches Iko for an instant, then both separate from the train and enter one continuous free fall; Iko cries her name and Nara reaches the Núcleo 8.","camera_and_beats":"0.0-2.5s support breaks; 2.5-7.0s siblings fall; 7.0-10.0s Nara reaches the core.","camera_coverage":"Shot 1 [0.0s-2.5s]: close insert as the pulse breaks the support and cut wider at impact. End state: both bodies lose train contact. Shot 2 [2.5s-7.0s]: descending side track through open sky as Iko calls Nara. End state: Nara has oriented toward Iko. Shot 3 [7.0s-10.0s]: push to Nara's right forearm during the same fall. End state: her hand is on the fully lit core.","eyelines":"Iko looks at Nara; Nara looks from Iko to the core.","light":"Stable bright sky with moving gold rim; no darkness.","sound":"Wind deepens, cable snap and falling cloth; no music."},"performances":{"Iko":"One frightened involuntary cry, youthful and clear."},"dialogue":[{"line_id":"ep01-l007","start":3.0,"end":3.9}]},
+    {
+      "id":"take-06","duration_seconds":10,"output":"take-06.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core","drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon time-rewind spectacle, vertical 9:16, magnificent clean color and perfectly readable reverse causality.","provider_scene_premise":"Nara activates the Núcleo 8 and the exact prior eight seconds reverse around her.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":1,"spoken_turns":0,"primary_camera_strategies":1,"dominant_dramatic_button":"The world returns to the instant before Iko's jump while one core segment is dark."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to an extreme core close-up, then preserve the same spatial axis; no near-identical reconstruction.","environment":"The same train, cloud abyss, cable, glass and drone reverse along their immediately prior paths only.","blocking":"Nara and Iko begin falling; Nara's hand is already on the core.","action":"The core flashes once; translucent cyan-gold ribbons reverse the exact previous eight seconds: bodies rise, cable reconnects, glass and positions restore. Nara alone keeps focused forward awareness. The rewind completes at the pre-jump interior position and exactly one of eight perimeter segments goes dark.","camera_and_beats":"0.0-2.0s core activation; 2.0-8.8s exact visible rewind; 8.8-10.0s restored plateau with one dark segment.","camera_coverage":"Shot 1 [0.0s-2.0s]: extreme close push on the activated core. End state: the rewind wave is fully launched. Shot 2 [2.0s-8.8s]: pull wide while the fall, cable and glass reverse coherently. End state: Nara and Iko have returned inside before the jump. Shot 3 [8.8s-10.0s]: cut to Nara's alert face and the core in shared depth. End state: Nara remembers, Iko does not react, and one segment is dark.","eyelines":"Nara remains consciously focused on Iko; Iko's gaze reverses naturally with the physical action.","light":"One controlled cyan-gold temporal ribbon; environment palette remains stable.","sound":"Reverse only the recent diegetic effects, then restore the same wind and rail bed; no speech and no music."},"dialogue":[]},
+    {
+      "id":"take-07","duration_seconds":10,"output":"take-07.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core","drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon action in the restored prison-car moment, vertical 9:16, quick readable reactions and magnificent aerial scale.","provider_scene_premise":"Nara changes the order before the pulse, proving she remembers a failed future that Iko never lived.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":0,"spoken_turns":3,"primary_camera_strategies":1,"dominant_dramatic_button":"Iko ducks safely as Nara commits to the changed plan."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a tighter two-shot with different emphasis; no near-identical camera and no replay of the rewind.","environment":"Same restored car interior and approaching drone outside.","blocking":"Nara and Iko occupy their restored pre-jump positions; one core segment remains dark.","action":"Nara immediately cancels the jump and orders Iko down; Iko protests while ducking; Nara confirms the plan changed and turns toward the drone.","camera_and_beats":"0.0-2.5s new order; 2.5-6.0s Iko protests while ducking; 6.0-10.0s Nara commits to new tactic.","camera_coverage":"Shot 1 [0.0s-2.5s]: tighter two-shot with a sharp push on Nara's new command. End state: Iko has begun ducking. Shot 2 [2.5s-6.0s]: cut to Iko's moving reaction as he protests. End state: Iko is fully below the pulse line. Shot 3 [6.0s-10.0s]: cut to Nara turning eyes and shoulders toward the drone as she answers. End state: Nara is committed to the drone tactic, Iko remains ducked.","eyelines":"Nara looks at Iko then the drone; Iko looks at Nara while ducking.","light":"Same daylight and local cyan pulse light.","sound":"Same wind and rail; pulse passes above Iko; no music."},"performances":{"Nara":"Urgent correction followed by clipped confidence.","Iko":"Confused protest while obeying, quick youthful cadence."},"dialogue":[{"line_id":"ep01-l008","start":0.8,"end":2.3},{"line_id":"ep01-l009","start":3.0,"end":5.8},{"line_id":"ep01-l010","start":6.3,"end":7.7}]},
+    {
+      "id":"take-08","duration_seconds":10,"output":"take-08.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core","drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon rescue action, vertical 9:16, elegant swinging mechanics, clear silhouettes and brilliant aerial beauty.","provider_scene_premise":"Nara cables the drone as a moving anchor and reaches Iko on a new safe arc.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":1,"spoken_turns":1,"primary_camera_strategies":1,"dominant_dramatic_button":"Iko's hand closes around Nara's hand on the successful arc."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a drone-lens insert with different emphasis; no near-identical camera and no replay of Iko ducking.","environment":"Same car, drone, rail gap and cloud abyss.","blocking":"Iko remains low inside; Nara is positioned to launch a second cable at the drone.","action":"Nara fires one cable into the drone, uses its forward momentum as a moving anchor, swings in one coherent arc and reaches Iko; she calls for his hand and their grip completes.","camera_and_beats":"0.0-2.5s cable attaches to drone; 2.5-6.5s swing arc; 6.5-9.2s hand call and grip; 9.2-10.0s hold.","camera_coverage":"Shot 1 [0.0s-2.5s]: drone-lens insert and quick rack to the incoming hook. End state: cable is securely attached to the drone. Shot 2 [2.5s-6.5s]: cut wide and track Nara's single swing arc past the window. End state: Nara reaches Iko's plane. Shot 3 [6.5s-10.0s]: cut close on faces and hands as Nara speaks and the grip closes. End state: their hands are securely locked and the cable remains taut to the drone.","eyelines":"Nara tracks Iko's hand; Iko tracks Nara; drone lens faces its flight path.","light":"Stable bright daylight and cyan cable edge.","sound":"Cable launch, drone strain, wind arc and hand impact; no music."},"performances":{"Nara":"Protective command with confident timing and open urgency."},"dialogue":[{"line_id":"ep01-l011","start":5.5,"end":7.3}]},
+    {
+      "id":"take-09","duration_seconds":10,"output":"take-09.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core","drone"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core","drone"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon escape action, vertical 9:16, enormous beautiful city depth and coherent impact physics.","provider_scene_premise":"The drone anchor pulls the siblings clear of the train and into a maintenance platform crash.","complexity":{"major_body_state_changes":1,"plot_prop_state_changes":0,"spoken_turns":0,"primary_camera_strategies":1,"dominant_dramatic_button":"Both siblings finish the crash alive on the maintenance platform as the train falls away."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a clearly wider aerial silhouette view; no near-identical camera and no replay of the hand grip.","environment":"Same rail gap with the confirmed maintenance platform ahead and below on the outer side.","blocking":"Nara and Iko begin joined on the drone cable arc; the train continues toward the gap.","action":"The cable arc pulls both siblings clear; Nara shields Iko and they complete one hard slide across the maintenance platform while the prison car falls past in the background.","camera_and_beats":"0.0-4.0s clear the train; 4.0-8.8s complete platform impact and slide; 8.8-10.0s hold survival plateau.","camera_coverage":"Shot 1 [0.0s-4.0s]: wide aerial track of the joined silhouettes clearing the train. End state: both are safely beyond the car. Shot 2 [4.0s-8.8s]: cut low along the platform as Nara shields Iko through one impact and slide. End state: their slide is fully stopped. Shot 3 [8.8s-10.0s]: pull focus from the fallen siblings to the train dropping behind. End state: both siblings remain alive on the platform and the train is separated below.","eyelines":"Nara checks Iko; Iko tracks Nara; neither looks at camera.","light":"Brilliant gold rim and sapphire sky persist through impact.","sound":"Cable release, platform impact, metal slide and distant falling train; no music."},"dialogue":[]},
+    {
+      "id":"take-10","duration_seconds":10,"output":"take-10.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon aftermath on the same aerial maintenance platform, vertical 9:16, beautiful open scale and intimate readable reactions.","provider_scene_premise":"After the crash, Nara checks Iko and he confronts her impossible knowledge of the drone shot.","complexity":{"major_body_state_changes":0,"plot_prop_state_changes":0,"spoken_turns":3,"primary_camera_strategies":1,"dominant_dramatic_button":"Nara refuses the explanation and prepares their private signal."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a tighter low two-shot; no near-identical camera and no replay of the crash.","environment":"Same maintenance platform above clouds; fallen train remains distant below, not restored.","blocking":"Nara and Iko remain on the stopped platform impact positions and recover without relocating.","action":"Nara checks Iko for injury. Iko sits up enough to ask how she predicted the shot. Nara answers only that she will explain later and raises two fingers for their signal.","camera_and_beats":"0.0-2.5s Nara's check; 2.5-6.6s Iko's question; 6.6-10.0s Nara defers and prepares signal.","camera_coverage":"Shot 1 [0.0s-2.5s]: tighter low two-shot with a gentle push as Nara checks Iko. End state: Iko is visibly uninjured. Shot 2 [2.5s-6.6s]: cut to Iko's medium-close question with Nara in depth. End state: Iko waits for the impossible answer. Shot 3 [6.6s-10.0s]: clean reverse close on Nara's brief reply and raised two fingers. End state: Nara has deferred the answer and prepared the signal.","eyelines":"Nara and Iko maintain direct sibling eyelines.","light":"Soft gold rim and open sapphire fill, stable after the action.","sound":"Wind and cooling platform metal under clean dialogue; no music."},"performances":{"Nara":"Protective concern, then quiet withholding.","Iko":"Breathless but lucid, genuine puzzled urgency."},"dialogue":[{"line_id":"ep01-l012","start":0.8,"end":2.2},{"line_id":"ep01-l013","start":3.1,"end":6.3},{"line_id":"ep01-l014","start":7.0,"end":7.7}]},
+    {
+      "id":"take-11","duration_seconds":10,"output":"take-11.mp4","use_previous_frame":true,"reference_keys":["nara","iko","train","core"],"visible_character_keys":["nara","iko"],"required_prop_keys":["core"],"audio_continuity_group":"falling_train","provider_film_opening":"Premium stylized 3D cartoon emotional-action cliffhanger, vertical 9:16, magnificent aerial backdrop, restrained sibling intimacy and precise prop storytelling.","provider_scene_premise":"Nara performs the siblings' private two-tap signal, but Iko no longer remembers it and one Núcleo segment goes dark.","complexity":{"major_body_state_changes":0,"plot_prop_state_changes":1,"spoken_turns":2,"primary_camera_strategies":1,"dominant_dramatic_button":"One core segment goes completely dark as Nara realizes Iko lost their memory."},"sections":{"continuity":"{{OBSERVED_BOUNDARY_STATE}} STRONG OPENING COVERAGE DELTA: cut before frame 1 to a close hand-and-face composition; no near-identical camera and no replay of Nara raising her hand.","environment":"Same maintenance platform and luminous clouds, with no new threat entering.","blocking":"Nara and Iko remain close in their recovered positions; Nara's right forearm core is visible.","action":"Nara taps Iko's hand exactly twice and names their familiar signal. Iko reacts with honest confusion and asks if they had one. Nara freezes. Exactly one of the eight cyan perimeter segments on the core fades fully to black while the other seven remain steadily lit.","camera_and_beats":"0.0-4.0s two taps and Nara's line; 4.0-7.5s Iko's confused question; 7.5-10.0s Nara reads the cost and the segment goes dark.","camera_coverage":"Shot 1 [0.0s-4.0s]: close hand-and-face composition as Nara performs exactly two taps and speaks; small push on the familiar gesture. End state: the two-tap signal is complete. Shot 2 [4.0s-7.5s]: clean reverse close on Iko's sincere confused question. End state: Iko clearly does not recognize the signal. Shot 3 [7.5s-10.0s]: cut to Nara's silent realization with the core in shared depth and rack focus to it. End state: exactly one segment is fully black, seven remain cyan, and Nara understands the cost.","eyelines":"Nara watches Iko's face; Iko watches their hands then Nara; no camera look.","light":"Stable golden daylight; only one core segment locally loses cyan emission without changing the environment palette.","sound":"Two distinct fingertip taps, quiet wind, one subtle core power-down tone and no music.","end_state":"Nara is frozen in realization; Iko is confused; one of eight core segments is black and seven remain cyan."
+      },"performances":{"Nara":"Gentle familiar warmth that stops into stunned silence.","Iko":"Sincere confusion, not a joke, softly rising question."},"dialogue":[{"line_id":"ep01-l015","start":2.0,"end":3.9},{"line_id":"ep01-l016","start":5.0,"end":7.3}]
+    }
+  ]
+}

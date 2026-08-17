@@ -1,0 +1,79 @@
+{
+  "take_id": "take-01",
+  "prompt_file": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\compiled\\take-01-prompt.txt",
+  "prompt_chars": 4920,
+  "prompt_words": 742,
+  "prompt_sha256": "80fb282659b0731ec3f770bbbc67a8a3a32475fa83b451415897a67ad4628710",
+  "references": [
+    {
+      "key": "nara",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-nara-tactile-v3.png",
+      "label": "NARA CHARACTER IDENTITY",
+      "role": "Source of truth for Nara's huge glossy amber eyes, tactile face, asymmetrical fiber curls with turquoise streak, body proportions, cobalt-and-gold outfit, knitted coral scarf and handcrafted puppet rendering only.",
+      "must_not_control": "",
+      "category": "character",
+      "character_name": "Nara"
+    },
+    {
+      "key": "iko",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\character-iko-tactile-v3.png",
+      "label": "IKO CHARACTER IDENTITY",
+      "role": "Source of truth for Iko's huge glossy amber eyes, tactile face, fiber hair, twelve-year-old body proportions, knitted turquoise-ivory-indigo outfit and handcrafted puppet rendering only.",
+      "must_not_control": "",
+      "category": "character",
+      "character_name": "Iko"
+    },
+    {
+      "key": "train",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\location-prison-train-tactile-v3.png",
+      "label": "PRISON TRAIN LOCATION MASTER",
+      "role": "Source of truth for the single hand-built rounded prison car, panoramic side window, inner restraint column, roof ribs, broken suspended rail, wool-like clouds, turbine towers and painted sapphire-gold miniature materials.",
+      "must_not_control": "character identity, dialogue or temporal action state",
+      "category": "environment",
+      "character_name": ""
+    },
+    {
+      "key": "core",
+      "path": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\references\\prop-nucleo-8-tactile-v3.png",
+      "label": "NÚCLEO 8 PROP MASTER",
+      "role": "Source of truth for the compact octagonal cobalt-and-gold forearm device and exactly eight cyan perimeter segments, all steadily lit before the first rewind.",
+      "must_not_control": "body anatomy or environment geometry",
+      "category": "prop",
+      "character_name": ""
+    }
+  ],
+  "observed_state": null,
+  "dialogue_assignment": [
+    {
+      "line_id": "ep01-l001",
+      "speaker": "Nara",
+      "text": "Iko! Afasta do vidro!",
+      "take_start_seconds": 7.0,
+      "take_end_seconds": 9.0,
+      "episode_start_seconds": 7.0,
+      "episode_end_seconds": 9.0
+    }
+  ],
+  "episode_dialogue_master_sha256": "65c0e3cdeb6da7692cf00306f9d87d71ebf5f7f0aed63c6caeea33ba16194aab",
+  "voice_identity_locks": [
+    {
+      "speaker": "Nara",
+      "identity_lock": "Original fictional Brazilian voice; Brazilian Portuguese; female vocal age 18; mid register; warm agile lightly husky mezzo timbre; forward resonance; controlled breath; quick decisive cadence; crisp consonants; firm phrase endings; no processing.",
+      "identity_lock_sha256": "2c38a9df7a384b62dbc17e6debeddc64636ce952cf9d738c447aec66a236eb35"
+    }
+  ],
+  "prompt_cleanup": {
+    "payload_format": "atlas_compact_single_line",
+    "single_line": true,
+    "atlas_compact_target_chars": 5800,
+    "within_atlas_compact_target": true,
+    "removed_generic_quality_attributes": [],
+    "spoken_language_lock_beside_dialogue": true,
+    "final_film_profile": [
+      "Premium stylized 3D tactile puppet action adventure in vertical 9:16, huge glossy expressive eyes, soft molded faces, visible fiber hair, knit and felt clothing, hand-painted miniature technology, stop-motion charm with animated-feature fluidity, magnificent sapphire-turquoise-gold aerial scale and coherent physics."
+    ],
+    "film_profile_at_absolute_end": false,
+    "global_film_style_at_beginning": true,
+    "expensive_locks_at_absolute_end": true
+  }
+}

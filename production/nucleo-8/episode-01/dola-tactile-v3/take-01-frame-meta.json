@@ -1,0 +1,20 @@
+{
+  "frame_count": 241,
+  "last_frame_index": 240,
+  "last_pts_time": "10.000000",
+  "duration": 10.08,
+  "width": 720,
+  "height": 1280,
+  "avg_frame_rate": "24/1",
+  "video": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-01.mp4",
+  "last_frame": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-01-last-frame.png",
+  "contact_sheet": "C:\\Users\\Fabiano\\AndroidStudioProjects\\vertix\\production\\nucleo-8\\episode-01\\dola-tactile-v3\\take-01-contact-5.jpg",
+  "contact_frame_indices": [
+    0,
+    60,
+    120,
+    180,
+    240
+  ],
+  "processed_at": "2026-08-16T18:11:30.774104-03:00"
+}
