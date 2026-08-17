@@ -3,6 +3,9 @@ import aiGenerationService from '../services/ai-generation.service';
 import seriesProductionService from '../services/series-production.service';
 import seriesCatalogService from '../services/series-catalog.service';
 import storageService from '../services/storage.service';
+import codexWorkflowService, {
+  CodexWorkflowRequest,
+} from '../services/codex-workflow.service';
 import { prisma } from '../services/prisma';
 
 const parseJsonField = (value?: string | null) => {
@@ -86,6 +89,47 @@ export const generateSeries = async (req: FastifyRequest, reply: FastifyReply) =
 // ============================================
 // GET GENERATION JOBS
 // ============================================
+
+export const startCodexWorkflow = async (
+  req: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  try {
+    const user = (req as any).user;
+    const body = (req.body || {}) as CodexWorkflowRequest;
+    const job = await codexWorkflowService.startWorkflowJob(body, user.id);
+
+    setImmediate(async () => {
+      try {
+        await codexWorkflowService.processWorkflowJob(job.id);
+      } catch (error: any) {
+        console.error(
+          `[Admin Controller] Codex job ${job.id} failed:`,
+          error?.message || error,
+        );
+      }
+    });
+
+    return reply.code(202).send({
+      success: true,
+      message: 'Acao enviada ao Codex',
+      data: {
+        id: job.id,
+        seriesId: job.seriesId,
+        type: job.type,
+        status: job.status,
+        progress: job.progress,
+        createdAt: job.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Admin Controller] Error starting Codex workflow:', error.message);
+    return reply.code(400).send({
+      success: false,
+      message: error.message || 'Nao foi possivel iniciar a acao no Codex',
+    });
+  }
+};
 
 export const getJobs = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
@@ -371,6 +415,7 @@ export const getJobStatus = async (req: FastifyRequest, reply: FastifyReply) => 
   try {
     const { id } = req.params as { id: string };
     const jobId = parseInt(id);
+    const user = (req as any).user;
 
     if (isNaN(jobId)) {
       return reply.code(400).send({
@@ -379,8 +424,8 @@ export const getJobStatus = async (req: FastifyRequest, reply: FastifyReply) => 
       });
     }
 
-    const job = await prisma.aIGenerationJob.findUnique({
-      where: { id: jobId },
+    const job = await prisma.aIGenerationJob.findFirst({
+      where: { id: jobId, createdById: user.id },
     });
 
     if (!job) {
@@ -430,11 +475,23 @@ export const cancelJob = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
     const { id } = req.params as { id: string };
     const jobId = parseInt(id);
+    const user = (req as any).user;
 
     if (isNaN(jobId)) {
       return reply.code(400).send({
         success: false,
         message: 'ID invalido',
+      });
+    }
+
+    const ownedJob = await prisma.aIGenerationJob.findFirst({
+      where: { id: jobId, createdById: user.id },
+      select: { id: true },
+    });
+    if (!ownedJob) {
+      return reply.code(404).send({
+        success: false,
+        message: 'Job nao encontrado',
       });
     }
 
@@ -634,15 +691,66 @@ export const updateUserRole = async (req: FastifyRequest, reply: FastifyReply) =
   }
 };
 
+export const createSeries = async (req: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const user = (req as any).user;
+    const series = await seriesProductionService.createDraftSeries(user.id, req.body || {});
+    return reply.code(201).send({
+      success: true,
+      message: 'Serie criada na API',
+      data: series,
+    });
+  } catch (error: any) {
+    const status = error.message === 'title e obrigatorio' ? 400 : 500;
+    return reply.code(status).send({
+      success: false,
+      message: error.message || 'Erro ao criar serie',
+    });
+  }
+};
+
+export const ingestSeriesReference = async (req: FastifyRequest, reply: FastifyReply) => {
+  try {
+    const { id } = req.params as { id: string };
+    const seriesId = parseInt(id);
+    const user = (req as any).user;
+    if (isNaN(seriesId)) {
+      return reply.code(400).send({
+        success: false,
+        message: 'ID invalido',
+      });
+    }
+    const result = await seriesCatalogService.ingestSeriesReference(
+      seriesId,
+      (req.body || {}) as any,
+      user.id,
+    );
+    return reply.code(201).send({
+      success: true,
+      message: 'Referencia salva no catalogo da serie',
+      data: result,
+    });
+  } catch (error: any) {
+    const status = error.message === 'Serie nao encontrada' ? 404 : 400;
+    return reply.code(status).send({
+      success: false,
+      message: error.message || 'Erro ao salvar referencia',
+    });
+  }
+};
+
 export default {
   generateSeries,
+  startCodexWorkflow,
   getJobs,
   getJobStatus,
   cancelJob,
+  createSeries,
   listAvailableSeries,
   getSeriesProduction,
   saveSeriesProduction,
   syncSeriesCatalogAssets,
+  ingestSeriesReference,
   getSeriesProductionUploadUrl,
   getAnalytics,
   listUsers,

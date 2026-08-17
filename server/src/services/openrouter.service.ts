@@ -13,22 +13,16 @@ const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 // Modelos disponíveis
 export const AVAILABLE_MODELS = {
-  // OpenAI Models
+  DEEPSEEK_V4_FLASH: 'deepseek/deepseek-v4-flash-0731',
   GPT_4O_MINI: 'openai/gpt-4o-mini',
   GPT_OSS_20B: 'openai/gpt-oss-20b',
-
-  // Gemma models
-  GEMMA_3_12B_IT: 'google/gemma-3-12b-it', // Corrigido de 8B para 12B
-  GEMMA_3_4B_IT: 'google/gemma-3-4b-it',   // Corrigido de 2B para 4B
+  GEMMA_3_12B_IT: 'google/gemma-3-12b-it',
+  GEMMA_3_4B_IT: 'google/gemma-3-4b-it',
   GEMMA_3_27B_IT: 'google/gemma-3-27b-it',
-  
-  // Claude models
   CLAUDE_3_OPUS: 'anthropic/claude-3-opus:beta',
   CLAUDE_3_SONNET: 'anthropic/claude-3-sonnet',
   CLAUDE_3_HAIKU: 'anthropic/claude-3-haiku',
-  
-  // Mistral models
-  MISTRAL_SMALL_3_1_24B: 'mistralai/mistral-small-3.1-24b-instruct'
+  MISTRAL_SMALL_3_1_24B: 'mistralai/mistral-small-3.1-24b-instruct',
 };
 
 // Tipos para as mensagens
@@ -230,6 +224,7 @@ export const generateText = async (
     max_tokens?: number;
     model?: string;
     streaming?: boolean;
+    response_format?: { type: 'json_object' | 'text' };
   } = {},
   abortController?: AbortController
 ): Promise<string | Readable> => {
@@ -247,13 +242,16 @@ export const generateText = async (
     }
 
     // Versão simplificada para compatibilidade
-    const request = {
-      model: options.model || AVAILABLE_MODELS.GEMMA_3_27B_IT,
+    const request: Record<string, unknown> = {
+      model: options.model || AVAILABLE_MODELS.DEEPSEEK_V4_FLASH,
       messages: messages,
       temperature: options.temperature,
       max_tokens: options.max_tokens,
       stream: streaming
     };
+    if (options.response_format) {
+      request.response_format = options.response_format;
+    }
 
     console.log(`Enviando requisição para gerar texto com o modelo ${request.model} (streaming: ${streaming}):`, JSON.stringify(request, null, 2));
 

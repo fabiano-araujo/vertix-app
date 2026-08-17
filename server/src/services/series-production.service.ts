@@ -569,6 +569,31 @@ const replaceCurrentRunStoryPoints = async (
   return result.count;
 };
 
+export const createDraftSeries = async (
+  userId: number,
+  body: any,
+) => {
+  const title = String(body?.title || '').trim();
+  if (!title) {
+    throw new Error('title e obrigatorio');
+  }
+
+  return prisma.series.create({
+    data: {
+      title,
+      description: String(body?.description || ''),
+      coverUrl: String(body?.coverUrl || ''),
+      thumbnailUrl: body?.thumbnailUrl || null,
+      genre: String(body?.genre || 'Drama'),
+      tags: Array.isArray(body?.tags) ? JSON.stringify(body.tags) : body?.tags || null,
+      totalEpisodes: Number(body?.totalEpisodes || body?.episodeCount || 0),
+      createdById: userId,
+      status: String(body?.status || 'DRAFT'),
+      isAiGenerated: body?.isAiGenerated !== false,
+    },
+  });
+};
+
 export const saveSeriesProductionPlan = async (
   seriesId: number,
   body: any,
@@ -584,21 +609,24 @@ export const saveSeriesProductionPlan = async (
   }
 
   const payload = sourcePayload(body);
-  const replaceExisting = body?.replaceExisting !== false;
+  const source = body?.source || payload?.source || 'seedance-series-pipeline';
+  const replaceExisting = body?.replaceExisting !== undefined
+    ? body.replaceExisting !== false
+    : source !== 'vertix-app';
   const planFields = serializePlanFields(payload);
 
   const plan = await prisma.seriesProductionPlan.upsert({
     where: { seriesId },
     create: {
       seriesId,
-      source: body?.source || payload?.source || 'seedance-series-pipeline',
+      source,
       ...planFields,
       rawPayload: jsonText(body),
       createdById: userId,
       updatedById: userId,
     },
     update: {
-      source: body?.source || payload?.source || 'seedance-series-pipeline',
+      source,
       ...planFields,
       rawPayload: jsonText(body),
       updatedById: userId,
@@ -713,6 +741,7 @@ export const getSeriesProductionPlan = async (seriesId: number) => {
 };
 
 export default {
+  createDraftSeries,
   saveSeriesProductionPlan,
   getSeriesProductionPlan,
 };

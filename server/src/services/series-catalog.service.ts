@@ -343,6 +343,63 @@ export const syncSeriesCatalogAssets = async (
   return result;
 };
 
+export const ingestSeriesReference = async (
+  seriesId: number,
+  payload: CatalogAssetInput & { replaceExisting?: boolean },
+  userId: number,
+) => {
+  const series = await prisma.series.findUnique({
+    where: { id: seriesId },
+    select: { id: true },
+  });
+  if (!series) {
+    throw new Error('Serie nao encontrada');
+  }
+
+  const plan = await ensureProductionPlan(seriesId, userId);
+  const resolved = await resolveAsset(
+    seriesId,
+    payload,
+    payload.category || 'REFERENCE',
+    payload.label || 'REFERENCE',
+  );
+
+  const created = await prisma.seriesReferenceAsset.create({
+    data: {
+      seriesId,
+      productionPlanId: plan.id,
+      category: resolved.category,
+      label: String(resolved.label).slice(0, 180),
+      sourceUrl: resolved.sourceUrl || resolved.publicUrl,
+      storageKey: resolved.storageKey,
+      publicUrl: resolved.publicUrl,
+      contentType: resolved.contentType,
+      sizeBytes: resolved.sizeBytes,
+      prompt: jsonText(resolved.prompt ?? payload.prompt),
+      metadata: jsonText({
+        ...(typeof payload.metadata === 'object' && payload.metadata !== null
+          ? payload.metadata as Record<string, unknown>
+          : { metadata: payload.metadata }),
+        source: 'vertix-api-reference',
+      }),
+      createdById: userId,
+    },
+  });
+
+  return {
+    id: created.id,
+    seriesId,
+    category: created.category,
+    label: created.label,
+    publicUrl: created.publicUrl,
+    storageKey: created.storageKey,
+    contentType: created.contentType,
+    prompt: payload.prompt,
+    metadata: payload.metadata,
+  };
+};
+
 export default {
   syncSeriesCatalogAssets,
+  ingestSeriesReference,
 };
