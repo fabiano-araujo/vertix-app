@@ -6,6 +6,192 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_service.dart';
 
+int? _asEpisodeNumber(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString().trim() ?? '');
+}
+
+final _genericEpisodeTitlePattern = RegExp(
+  r'^epis[oó]dio\s*\d+$',
+  caseSensitive: false,
+);
+
+final _generatingEpisodeTitlePattern = RegExp(
+  r'^gerando epis[oó]dio',
+  caseSensitive: false,
+);
+
+bool _isPlaceholderEpisodeTitle(String title) {
+  final value = title.trim();
+  if (value.isEmpty) return true;
+  return _genericEpisodeTitlePattern.hasMatch(value) ||
+      _generatingEpisodeTitlePattern.hasMatch(value);
+}
+
+bool _looksLikeJsonBlob(String value) {
+  final text = value.trim();
+  if (text.length < 2) return false;
+  return (text.startsWith('{') && text.contains('}')) ||
+      (text.startsWith('[') && text.contains(']'));
+}
+
+String _humanReadableText(dynamic value) {
+  if (value == null) return '';
+  if (value is Map) {
+    for (final key in const [
+      'summary',
+      'treatment',
+      'story',
+      'text',
+      'description',
+      'cold_open',
+      'logline',
+      'title',
+    ]) {
+      final nested = _humanReadableText(value[key]);
+      if (nested.isNotEmpty) return nested;
+    }
+    return '';
+  }
+  if (value is Iterable && value is! String) {
+    for (final item in value) {
+      final nested = _humanReadableText(item);
+      if (nested.isNotEmpty) return nested;
+    }
+    return '';
+  }
+  final text = value.toString().trim();
+  if (text.isEmpty || text == 'null' || text == 'undefined') return '';
+  if (_looksLikeJsonBlob(text)) {
+    try {
+      return _humanReadableText(jsonDecode(text));
+    } catch (_) {
+      return '';
+    }
+  }
+  return text;
+}
+
+List<Map<String, dynamic>> _asObjectList(dynamic value) {
+  if (value is String && _looksLikeJsonBlob(value)) {
+    try {
+      return _asObjectList(jsonDecode(value));
+    } catch (_) {
+      return const [];
+    }
+  }
+  if (value is! List) return const [];
+  return value
+      .whereType<Map>()
+      .map((item) => Map<String, dynamic>.from(item))
+      .toList();
+}
+
+Map<String, dynamic> _normalizeSceneCard(
+  Map<String, dynamic> scene, {
+  required int fallbackNumber,
+}) {
+  final number =
+      _asEpisodeNumber(scene['scene']) ??
+      _asEpisodeNumber(scene['scene_number']) ??
+      _asEpisodeNumber(scene['sceneNumber']) ??
+      _asEpisodeNumber(scene['number']) ??
+      fallbackNumber;
+  final location = _humanReadableText(
+    scene['location'] ??
+        scene['location_name'] ??
+        scene['locationName'] ??
+        scene['setting'] ??
+        scene['place'] ??
+        scene['time_and_location'] ??
+        scene['environment'],
+  );
+  final castRaw = scene['cast'] ?? scene['characters'] ?? scene['speakers'];
+  final cast = castRaw is List
+      ? castRaw
+            .map(_humanReadableText)
+            .where((item) => item.isNotEmpty)
+            .toList()
+      : [
+          if (_humanReadableText(castRaw).isNotEmpty)
+            _humanReadableText(castRaw),
+        ];
+  final title = _humanReadableText(
+    scene['title'] ?? scene['name'] ?? scene['heading'],
+  );
+  final story = _humanReadableText(
+    scene['story'] ??
+        scene['description'] ??
+        scene['synopsis'] ??
+        scene['beats'] ??
+        scene['action'] ??
+        scene['summary'],
+  );
+  return {
+    ...scene,
+    'scene': number,
+    if (title.isNotEmpty) 'title': title,
+    if (location.isNotEmpty) 'location': location,
+    'cast': cast,
+    if (story.isNotEmpty) 'story': story,
+  };
+}
+
+List<Map<String, dynamic>> _normalizeSceneCards(dynamic value) {
+  final cards = _asObjectList(value);
+  return [
+    for (var index = 0; index < cards.length; index++)
+      _normalizeSceneCard(cards[index], fallbackNumber: index + 1),
+  ];
+}
+
+Map<String, dynamic> _flattenSeriesBible(Map<String, dynamic> bible) {
+  final nested = bible['seriesBible'];
+  if (nested is! Map) return Map<String, dynamic>.from(bible);
+  final flattened = <String, dynamic>{
+    ...Map<String, dynamic>.from(nested),
+    ...bible,
+  };
+  flattened.remove('seriesBible');
+  return flattened;
+}
+
+const _microDramaFormatFamily = 'micro_drama_vertical';
+
+bool _bibleLooksLikeMicroDrama(Map<String, dynamic> bible) {
+  final workflow = bible['creation_workflow']?.toString() ?? '';
+  if (workflow.contains('microdrama') ||
+      workflow.contains('chat_first') ||
+      workflow.contains('openrouter') ||
+      workflow.contains('outline_first')) {
+    return true;
+  }
+  final stage = bible['creation_stage']?.toString() ?? '';
+  if (stage.isNotEmpty) return true;
+  final preset = bible['style_preset_id']?.toString() ?? '';
+  if (preset.contains('microdrama')) return true;
+  if (bible['studio_chat'] != null || bible['studio_ui'] != null) {
+    return true;
+  }
+  if (_asObjectList(bible['episode_scripts']).isNotEmpty) return true;
+  final source = bible['source']?.toString() ?? '';
+  if (source == 'vertix-app') return true;
+  return false;
+}
+
+String _resolvedFormatFamily(
+  String? explicit, {
+  required Map<String, dynamic> bible,
+}) {
+  if (explicit == _microDramaFormatFamily || _bibleLooksLikeMicroDrama(bible)) {
+    return _microDramaFormatFamily;
+  }
+  return (explicit == null || explicit.trim().isEmpty)
+      ? 'vertical_series'
+      : explicit;
+}
+
 bool _readBool(dynamic value, {required bool fallback}) {
   if (value is bool) return value;
   if (value is num) return value != 0;
@@ -26,6 +212,12 @@ bool _readBool(dynamic value, {required bool fallback}) {
   return fallback;
 }
 
+int _readInt(dynamic value, {required int fallback}) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString().trim() ?? '') ?? fallback;
+}
+
 class ProductionCatalogItem {
   final int routeId;
   final String stableKey;
@@ -44,6 +236,7 @@ class ProductionCatalogItem {
   final int referenceCount;
   final double progress;
   final bool isLocal;
+  final DateTime? updatedAt;
   final AdminSeriesSummary? remoteSummary;
 
   const ProductionCatalogItem({
@@ -64,6 +257,7 @@ class ProductionCatalogItem {
     required this.referenceCount,
     required this.progress,
     required this.isLocal,
+    this.updatedAt,
     this.remoteSummary,
   });
 
@@ -91,6 +285,7 @@ class ProductionCatalogItem {
           : takes.fold<double>(0, (sum, take) => sum + take.progress) /
                 takes.length,
       isLocal: true,
+      updatedAt: project.updatedAt,
     );
   }
 
@@ -111,9 +306,36 @@ class ProductionCatalogItem {
       referenceCount: summary.referenceCount,
       progress: summary.hasProductionPlan ? 0.55 : 0.12,
       isLocal: false,
+      updatedAt: summary.updatedAt ?? summary.productionPlan?.updatedAt,
       remoteSummary: summary,
     );
   }
+}
+
+int studioCatalogStatusRank(String status) {
+  switch (status) {
+    case 'IN_PRODUCTION':
+      return 0;
+    case 'PUBLISHED':
+      return 1;
+    case 'DRAFT':
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+int compareStudioCatalogItems(
+  ProductionCatalogItem a,
+  ProductionCatalogItem b,
+) {
+  final rank = studioCatalogStatusRank(
+    a.status,
+  ).compareTo(studioCatalogStatusRank(b.status));
+  if (rank != 0) return rank;
+  final aTime = a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final bTime = b.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  return bTime.compareTo(aTime);
 }
 
 class ProductionReferenceItem {
@@ -205,9 +427,9 @@ class ProductionTakeItem {
   factory ProductionTakeItem.fromJson(Map<String, dynamic> json) =>
       ProductionTakeItem(
         id: json['id'] as String? ?? '',
-        number: json['number'] as int? ?? 1,
+        number: _readInt(json['number'], fallback: 1),
         title: json['title'] as String? ?? 'Take',
-        durationSeconds: json['durationSeconds'] as int? ?? 10,
+        durationSeconds: _readInt(json['durationSeconds'], fallback: 10),
         status: json['status'] as String? ?? 'READY',
         progress: (json['progress'] as num?)?.toDouble() ?? 0,
         aiShortCore: json['aiShortCore'] as String? ?? '',
@@ -327,11 +549,11 @@ class ProductionEpisodeItem {
 
   factory ProductionEpisodeItem.fromJson(Map<String, dynamic> json) =>
       ProductionEpisodeItem(
-        number: json['number'] as int? ?? 1,
+        number: _readInt(json['number'], fallback: 1),
         title: json['title'] as String? ?? 'Episodio',
         summary: json['summary'] as String? ?? '',
         cliffhanger: json['cliffhanger'] as String? ?? '',
-        durationSeconds: json['durationSeconds'] as int? ?? 60,
+        durationSeconds: _readInt(json['durationSeconds'], fallback: 60),
         status: json['status'] as String? ?? 'IN_PROGRESS',
         takes: (json['takes'] as List<dynamic>? ?? const [])
             .map(
@@ -442,16 +664,21 @@ class ProductionProject {
   factory ProductionProject.fromJson(Map<String, dynamic> json) =>
       ProductionProject(
         id: json['id'] as String? ?? '',
-        virtualId: json['virtualId'] as int? ?? -9999,
+        virtualId: _readInt(json['virtualId'], fallback: -9999),
         title: json['title'] as String? ?? 'Obra sem titulo',
         description: json['description'] as String? ?? '',
         genre: json['genre'] as String? ?? 'vertical',
-        formatFamily: json['formatFamily'] as String? ?? 'vertical_series',
+        formatFamily: _resolvedFormatFamily(
+          json['formatFamily'] as String?,
+          bible: Map<String, dynamic>.from(
+            json['seriesBible'] as Map? ?? const {},
+          ),
+        ),
         status: json['status'] as String? ?? 'DRAFT',
         sourcePath: json['sourcePath'] as String? ?? 'Local',
         coverAssetPath: json['coverAssetPath'] as String?,
         coverUrl: json['coverUrl'] as String?,
-        targetEpisodeCount: json['targetEpisodeCount'] as int? ?? 12,
+        targetEpisodeCount: _readInt(json['targetEpisodeCount'], fallback: 12),
         isLocal: _readBool(json['isLocal'], fallback: true),
         updatedAt:
             DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
@@ -476,6 +703,8 @@ class ProductionProject {
       );
 
   ProductionProject copyWith({
+    String? id,
+    int? virtualId,
     String? title,
     String? description,
     String? genre,
@@ -491,8 +720,8 @@ class ProductionProject {
     List<ProductionEpisodeItem>? episodes,
     List<ProductionReferenceItem>? references,
   }) => ProductionProject(
-    id: id,
-    virtualId: virtualId,
+    id: id ?? this.id,
+    virtualId: virtualId ?? this.virtualId,
     title: title ?? this.title,
     description: description ?? this.description,
     genre: genre ?? this.genre,
@@ -1000,37 +1229,420 @@ class LocalProductionWorkspaceService {
       return (await getLocalProjectByVirtualId(item.routeId)) ??
           _blankProjectFromCatalog(item);
     }
+    ProductionProject? fromApi;
+    final snapshot = _projectFromEditorSnapshot(item, remotePlan);
+    if (snapshot != null) {
+      fromApi = _hydrateRemoteProject(snapshot, remotePlan);
+    }
+    ProductionProject? overlay;
     final preferences = await SharedPreferences.getInstance();
     final saved = preferences.getString('$_remoteOverlayPrefix${item.routeId}');
     if (saved != null && saved.isNotEmpty) {
       try {
-        return ProductionProject.fromJson(
-          Map<String, dynamic>.from(jsonDecode(saved) as Map),
+        overlay = _hydrateRemoteProject(
+          ProductionProject.fromJson(
+            Map<String, dynamic>.from(jsonDecode(saved) as Map),
+          ),
+          remotePlan,
         );
       } catch (_) {}
     }
-    return _projectFromRemote(item, remotePlan);
+    final remote = _hydrateRemoteProject(
+      _projectFromRemote(item, remotePlan),
+      remotePlan,
+    );
+    return selectPersistedProject(
+      apiProject: fromApi,
+      overlayProject: overlay,
+      remoteProject: remote,
+    );
   }
 
-  Future<void> saveProject(ProductionProject project) async {
-    final updated = project.copyWith(updatedAt: DateTime.now());
-    if (updated.isLocal) {
-      final projects = (await getProjects()).toList();
-      final index = projects.indexWhere((item) => item.id == updated.id);
-      if (index >= 0) {
-        projects[index] = updated;
-      } else {
-        projects.add(updated);
-      }
-      _cache = projects;
-      await _persistLocalProjects();
-      return;
+  @visibleForTesting
+  ProductionProject hydrateRemoteProjectForTesting(
+    ProductionProject project, [
+    AdminSeriesProductionPlan? plan,
+  ]) => _hydrateRemoteProject(project, plan);
+
+  @visibleForTesting
+  ProductionProject projectFromRemoteForTesting(
+    ProductionCatalogItem item, [
+    AdminSeriesProductionPlan? plan,
+  ]) => _hydrateRemoteProject(_projectFromRemote(item, plan), plan);
+
+  Future<ProductionProject> saveProject(ProductionProject project) async {
+    var updated = _withSyncedEpisodeCards(
+      project.copyWith(updatedAt: DateTime.now()),
+    );
+    try {
+      await _persistLocalCopy(updated);
+    } catch (error) {
+      debugPrint('Falha ao persistir a producao localmente: $error');
     }
+    updated = await persistProjectToApi(updated);
+    try {
+      await _persistLocalCopy(updated);
+    } catch (error) {
+      debugPrint('Falha ao atualizar a copia local da producao: $error');
+    }
+    return updated;
+  }
+
+  Future<void> _persistLocalCopy(ProductionProject project) async {
+    if (project.isLocal || project.virtualId <= 0) {
+      await _upsertLocalProject(project);
+    }
+    if (project.virtualId <= 0) return;
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
-      '$_remoteOverlayPrefix${updated.virtualId}',
-      jsonEncode(updated.toJson()),
+      '$_remoteOverlayPrefix${project.virtualId}',
+      jsonEncode(project.toJson()),
     );
+  }
+
+  @visibleForTesting
+  bool shouldPersistProjectToApi(ProductionProject project) {
+    final title = project.title.trim();
+    if (title.isEmpty) return false;
+    final emptyBrief =
+        isMicroDramaChatBrief(project) &&
+        project.episodes.isEmpty &&
+        title == 'Novo microdrama';
+    return !emptyBrief;
+  }
+
+  @visibleForTesting
+  Map<String, dynamic> productionApiPayload(ProductionProject project) {
+    final synced = _withSyncedEpisodeCards(project);
+    final bible = Map<String, dynamic>.from(synced.seriesBible)
+      ..remove('editor_project');
+    final editor = synced
+        .copyWith(seriesBible: Map<String, dynamic>.from(bible))
+        .toJson();
+    bible['editor_project'] = editor;
+    final episodeCards = _asObjectList(bible['episode_cards']);
+    return {
+      'source': 'vertix-app',
+      'replaceExisting': false,
+      'collectImplicitReferences': false,
+      'pipelineData': {
+        'seriesBible': bible,
+        'characterBible':
+            bible['characters'] ?? bible['character_bible'] ?? const [],
+        'locationBible':
+            bible['environments'] ?? bible['location_bible'] ?? const [],
+        'objectBible': bible['props'] ?? bible['object_bible'] ?? const [],
+        'episodeMap': episodeCards.isNotEmpty
+            ? episodeCards
+            : bible['episodeMap'] ?? const [],
+        'episodeTreatments': synced.episodes
+            .map((episode) => episode.toJson())
+            .toList(),
+        'sceneCards': bible['scene_cards'] ?? const [],
+        'generationPlan': bible['generation_plan'] ?? const [],
+        'seedanceNotes': bible['seedance_notes'] ?? const {},
+        'editor_project': Map<String, dynamic>.from(editor),
+      },
+    };
+  }
+
+  ProductionProject attachStudioSession(
+    ProductionProject project, {
+    required List<Map<String, dynamic>> chat,
+    Map<String, dynamic> ui = const {},
+  }) {
+    final trimmedChat = chat.length <= 120
+        ? chat
+        : chat.sublist(chat.length - 120);
+    return _withSyncedEpisodeCards(
+      project.copyWith(
+        seriesBible: {
+          ...project.seriesBible,
+          'studio_chat': trimmedChat,
+          'studio_ui': ui,
+        },
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> studioChatOf(ProductionProject project) =>
+      _asObjectList(project.seriesBible['studio_chat']);
+
+  Map<String, dynamic> studioUiOf(ProductionProject project) {
+    final raw = project.seriesBible['studio_ui'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return const {};
+  }
+
+  @visibleForTesting
+  ProductionProject adoptSavedProject({
+    required ProductionProject current,
+    required ProductionProject saved,
+  }) {
+    final seriesId = saved.virtualId > 0 ? saved.virtualId : current.virtualId;
+    final currentWithIds = current.copyWith(
+      id: seriesId > 0 ? 'remote-$seriesId' : current.id,
+      virtualId: seriesId > 0 ? seriesId : current.virtualId,
+      isLocal: seriesId > 0 ? false : current.isLocal,
+      sourcePath: saved.sourcePath.isNotEmpty
+          ? saved.sourcePath
+          : current.sourcePath,
+      seriesBible: {
+        ...current.seriesBible,
+        if (seriesId > 0) 'api_series_id': seriesId,
+      },
+    );
+    return selectPersistedProject(
+      apiProject: saved,
+      overlayProject: currentWithIds,
+      remoteProject: currentWithIds,
+    );
+  }
+
+  @visibleForTesting
+  ProductionProject selectPersistedProject({
+    ProductionProject? apiProject,
+    ProductionProject? overlayProject,
+    required ProductionProject remoteProject,
+  }) {
+    var best = remoteProject;
+    var bestScore = _projectPersistenceScore(remoteProject);
+    for (final candidate in [apiProject, overlayProject]) {
+      if (candidate == null) continue;
+      final score = _projectPersistenceScore(candidate);
+      final newer = candidate.updatedAt.isAfter(best.updatedAt);
+      if (score > bestScore || (score == bestScore && newer)) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  int _projectPersistenceScore(ProductionProject project) {
+    final outlined = project.episodes
+        .where((episode) => episode.summary.trim().isNotEmpty)
+        .length;
+    final generating = project.episodes
+        .where((episode) => episode.status == 'GENERATING')
+        .length;
+    final takes = project.episodes.fold<int>(
+      0,
+      (sum, episode) => sum + episode.takes.length,
+    );
+    var scriptScenes = 0;
+    var scriptShots = 0;
+    for (final script in _asObjectList(project.seriesBible['episode_scripts'])) {
+      scriptScenes += _scriptSceneCount(script);
+      scriptShots += _scriptShotCount(script);
+    }
+    return project.episodes.length * 10 +
+        outlined * 25 +
+        _asObjectList(project.seriesBible['episode_scripts']).length * 40 +
+        scriptScenes * 20 +
+        scriptShots * 4 +
+        _asObjectList(project.seriesBible['episode_cards']).length * 8 +
+        studioChatOf(project).length * 2 +
+        takes * 6 -
+        generating * 30 +
+        (project.description.trim().isNotEmpty ? 4 : 0) +
+        ((project.seriesBible['logline']?.toString().trim().isNotEmpty ??
+                false)
+            ? 4
+            : 0);
+  }
+
+  int _scriptSceneCount(Map<String, dynamic> script) =>
+      _asObjectList(script['scenes']).length;
+
+  int _scriptShotCount(Map<String, dynamic> script) => _asObjectList(
+    script['scenes'],
+  ).fold<int>(0, (total, scene) => total + _asObjectList(scene['shots']).length);
+
+  ProductionProject _withSyncedEpisodeCards(ProductionProject project) {
+    final cards = _syncedEpisodeCards(
+      episodes: project.episodes,
+      existing: _asObjectList(project.seriesBible['episode_cards']),
+      generated: const [],
+    );
+    if (_sameEpisodeCards(project.seriesBible['episode_cards'], cards)) {
+      return project;
+    }
+    return project.copyWith(
+      seriesBible: {...project.seriesBible, 'episode_cards': cards},
+    );
+  }
+
+  bool _sameEpisodeCards(dynamic current, List<Map<String, dynamic>> next) {
+    final existing = _asObjectList(current);
+    if (existing.length != next.length) return false;
+    for (var index = 0; index < existing.length; index++) {
+      if (existing[index]['episode'] != next[index]['episode'] ||
+          existing[index]['title'] != next[index]['title'] ||
+          existing[index]['summary'] != next[index]['summary'] ||
+          existing[index]['treatment'] != next[index]['treatment'] ||
+          existing[index]['cliffhanger'] != next[index]['cliffhanger']) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<Map<String, dynamic>> _syncedEpisodeCards({
+    required List<ProductionEpisodeItem> episodes,
+    required List<Map<String, dynamic>> existing,
+    required List<Map<String, dynamic>> generated,
+  }) {
+    final byNumber = <int, Map<String, dynamic>>{};
+    for (final card in [...existing, ...generated]) {
+      final number =
+          _asEpisodeNumber(card['episode']) ?? _asEpisodeNumber(card['number']);
+      if (number == null) continue;
+      byNumber[number] = {...?byNumber[number], ...card, 'episode': number};
+    }
+    for (final episode in episodes) {
+      final current =
+          byNumber[episode.number] ??
+          <String, dynamic>{'episode': episode.number};
+      byNumber[episode.number] = {
+        ...current,
+        'title': episode.title,
+        if (episode.summary.trim().isNotEmpty) 'summary': episode.summary,
+        if (episode.summary.trim().isNotEmpty)
+          'treatment': current['treatment'] ?? episode.summary,
+        if (episode.cliffhanger.trim().isNotEmpty)
+          'cliffhanger': episode.cliffhanger,
+        if (episode.cliffhanger.trim().isNotEmpty)
+          'peak_action': current['peak_action'] ?? episode.cliffhanger,
+        'duration_seconds': episode.durationSeconds,
+        'status': episode.status,
+        'script_status':
+            current['script_status'] ??
+            (episode.takes.isEmpty ? 'NOT_STARTED' : 'DRAFT_REVIEW_REQUIRED'),
+      };
+    }
+    final numbers = byNumber.keys.toList()..sort();
+    return [for (final number in numbers) byNumber[number]!];
+  }
+
+  final Map<String, int> _knownApiIds = {};
+  final Map<String, Future<ProductionProject>> _persistInFlight = {};
+
+  Future<ProductionProject> persistProjectToApi(
+    ProductionProject project,
+  ) async {
+    if (!shouldPersistProjectToApi(project)) return project;
+    final key = project.id;
+    final inFlight = _persistInFlight[key];
+    if (inFlight != null) {
+      final promoted = await inFlight;
+      project = project.copyWith(
+        id: promoted.id,
+        virtualId: promoted.virtualId,
+        isLocal: false,
+        sourcePath: promoted.sourcePath,
+        seriesBible: {
+          ...project.seriesBible,
+          'api_series_id': promoted.virtualId,
+        },
+      );
+    }
+    final run = _persistProjectToApiBody(project);
+    _persistInFlight[key] = run;
+    try {
+      return await run;
+    } finally {
+      if (identical(_persistInFlight[key], run)) {
+        _persistInFlight.remove(key);
+      }
+    }
+  }
+
+  Future<ProductionProject> _persistProjectToApiBody(
+    ProductionProject project,
+  ) async {
+    final admin = AdminService();
+    var seriesId = project.virtualId > 0
+        ? project.virtualId
+        : _apiSeriesId(project) ?? _knownApiIds[project.id];
+    final previousId = project.id;
+    final previousVirtualId = project.virtualId;
+    final wasLocal = project.isLocal || previousVirtualId <= 0;
+
+    if (seriesId == null || seriesId <= 0) {
+      final created = await admin.createSeries(
+        title: project.title,
+        description: project.description,
+        genre: project.genre,
+        totalEpisodes: project.targetEpisodeCount,
+        status: project.status,
+      );
+      seriesId = _readSeriesId(created);
+      if (seriesId == null) {
+        throw StateError('A API nao devolveu o id da serie.');
+      }
+    } else {
+      await admin.updateSeries(
+        seriesId: seriesId,
+        title: project.title,
+        description: project.description,
+        genre: project.genre,
+        status: project.status,
+        coverUrl: project.coverUrl,
+      );
+    }
+
+    _knownApiIds[previousId] = seriesId;
+    _knownApiIds['remote-$seriesId'] = seriesId;
+
+    await admin.saveSeriesProduction(
+      seriesId: seriesId,
+      payload: productionApiPayload(project),
+    );
+
+    final remote = project.copyWith(
+      id: 'remote-$seriesId',
+      virtualId: seriesId,
+      isLocal: false,
+      sourcePath: 'Vertix API / serie $seriesId',
+      seriesBible: {...project.seriesBible, 'api_series_id': seriesId},
+    );
+    if (wasLocal) {
+      await _upsertLocalProject(
+        remote.copyWith(id: previousId, virtualId: previousVirtualId),
+      );
+    }
+    return remote;
+  }
+
+  int? _apiSeriesId(ProductionProject project) {
+    final raw = project.seriesBible['api_series_id'];
+    if (raw is int) return raw;
+    if (raw is num) return raw.toInt();
+    return int.tryParse(raw?.toString() ?? '');
+  }
+
+  int? _readSeriesId(Map<String, dynamic> payload) {
+    final data = payload['data'];
+    if (data is Map) {
+      final id = data['id'];
+      if (id is int) return id;
+      if (id is num) return id.toInt();
+      return int.tryParse(id?.toString() ?? '');
+    }
+    return null;
+  }
+
+  Future<void> _upsertLocalProject(ProductionProject project) async {
+    final projects = (await getProjects()).toList();
+    final index = projects.indexWhere((item) => item.id == project.id);
+    if (index >= 0) {
+      projects[index] = project;
+    } else {
+      projects.add(project);
+    }
+    _cache = projects;
+    await _persistLocalProjects();
   }
 
   Future<ProductionProject> createProject({
@@ -1230,8 +1842,18 @@ class LocalProductionWorkspaceService {
     );
   }
 
+  static bool isMicroDramaVertical(ProductionProject project) =>
+      project.formatFamily == _microDramaFormatFamily ||
+      _bibleLooksLikeMicroDrama(project.seriesBible);
+
+  static ProductionProject _ensureMicroDramaFormat(ProductionProject project) {
+    if (project.formatFamily == _microDramaFormatFamily) return project;
+    if (!isMicroDramaVertical(project)) return project;
+    return project.copyWith(formatFamily: _microDramaFormatFamily);
+  }
+
   static bool isMicroDramaChatBrief(ProductionProject project) {
-    if (project.formatFamily != 'micro_drama_vertical') return false;
+    if (!isMicroDramaVertical(project)) return false;
     final stage = project.seriesBible['creation_stage']?.toString();
     return stage == 'chat_brief' || project.episodes.isEmpty;
   }
@@ -1282,7 +1904,8 @@ class LocalProductionWorkspaceService {
     ProductionProject project, {
     required int episodeNumber,
   }) {
-    if (project.formatFamily != 'micro_drama_vertical') {
+    project = _ensureMicroDramaFormat(project);
+    if (project.formatFamily != _microDramaFormatFamily) {
       throw ArgumentError('O projeto não é um microdrama vertical.');
     }
     final episodeIndex = project.episodes.indexWhere(
@@ -1432,6 +2055,7 @@ class LocalProductionWorkspaceService {
     ProductionProject project,
     Map<String, dynamic> output, {
     bool allowPartial = false,
+    bool fillMissingSlots = false,
   }) {
     final result = _codexResult(output);
     final biblePatch = Map<String, dynamic>.from(
@@ -1448,43 +2072,48 @@ class LocalProductionWorkspaceService {
     final existingByNumber = {
       for (final episode in project.episodes) episode.number: episode,
     };
-    var episodes = generatedEpisodes
-        .where((item) => ((item['number'] as num?)?.toInt() ?? 0) > 0)
-        .map((item) {
-      final number = (item['number'] as num?)?.toInt() ?? 0;
-      if (number <= 0) throw StateError('Número de episódio inválido.');
-      final existing = existingByNumber[number];
-      if (existing != null &&
-          (existing.takes.isNotEmpty ||
-              existing.status.contains('PRODUCTION') ||
-              existing.status.contains('LOCKED'))) {
-        return existing;
-      }
-      return ProductionEpisodeItem(
-        number: number,
-        title: item['title']?.toString().trim().isNotEmpty == true
-            ? item['title'].toString().trim()
-            : existing?.title ?? 'Episódio $number',
-        summary: item['summary']?.toString() ?? existing?.summary ?? '',
-        cliffhanger:
-            item['cliffhanger']?.toString() ?? existing?.cliffhanger ?? '',
-        durationSeconds:
-            (item['durationSeconds'] as num?)?.toInt() ??
-            existing?.durationSeconds ??
-            60,
-        status: 'OUTLINE_REVIEW_REQUIRED',
-        takes: const [],
-        externalMusic: existing?.externalMusic ?? true,
-        musicProvider: existing?.musicProvider ?? 'API externa',
-        musicPrompt: existing?.musicPrompt ?? '',
-        musicStatus: existing?.musicStatus ?? 'DRAFT',
-        musicVolume: existing?.musicVolume ?? 0.36,
-        dialogueVolume: existing?.dialogueVolume ?? 0.9,
-        ambienceVolume: existing?.ambienceVolume ?? 0.48,
-      );
-    }).toList()..sort((a, b) => a.number.compareTo(b.number));
+    var episodes =
+        generatedEpisodes
+            .where((item) => ((item['number'] as num?)?.toInt() ?? 0) > 0)
+            .map((item) {
+              final number = (item['number'] as num?)?.toInt() ?? 0;
+              if (number <= 0) throw StateError('Número de episódio inválido.');
+              final existing = existingByNumber[number];
+              if (existing != null &&
+                  (existing.takes.isNotEmpty ||
+                      existing.status.contains('PRODUCTION') ||
+                      existing.status.contains('LOCKED'))) {
+                return existing;
+              }
+              return ProductionEpisodeItem(
+                number: number,
+                title: item['title']?.toString().trim().isNotEmpty == true
+                    ? item['title'].toString().trim()
+                    : existing?.title ?? 'Episódio $number',
+                summary: item['summary']?.toString() ?? existing?.summary ?? '',
+                cliffhanger:
+                    item['cliffhanger']?.toString() ??
+                    existing?.cliffhanger ??
+                    '',
+                durationSeconds:
+                    (item['durationSeconds'] as num?)?.toInt() ??
+                    existing?.durationSeconds ??
+                    60,
+                status: 'OUTLINE_REVIEW_REQUIRED',
+                takes: const [],
+                externalMusic: existing?.externalMusic ?? true,
+                musicProvider: existing?.musicProvider ?? 'API externa',
+                musicPrompt: existing?.musicPrompt ?? '',
+                musicStatus: existing?.musicStatus ?? 'DRAFT',
+                musicVolume: existing?.musicVolume ?? 0.36,
+                dialogueVolume: existing?.dialogueVolume ?? 0.9,
+                ambienceVolume: existing?.ambienceVolume ?? 0.48,
+              );
+            })
+            .toList()
+          ..sort((a, b) => a.number.compareTo(b.number));
 
-    if (allowPartial) {
+    if (fillMissingSlots) {
       final firstDuration =
           (project.seriesBible['first_episode_duration_seconds'] as num?)
               ?.toInt() ??
@@ -1492,7 +2121,9 @@ class LocalProductionWorkspaceService {
       final otherDuration =
           (project.seriesBible['episode_duration_seconds'] as num?)?.toInt() ??
           60;
-      final byNumber = {for (final episode in episodes) episode.number: episode};
+      final byNumber = {
+        for (final episode in episodes) episode.number: episode,
+      };
       for (var number = 1; number <= project.targetEpisodeCount; number++) {
         if (byNumber.containsKey(number)) continue;
         final existing = existingByNumber[number];
@@ -1524,7 +2155,8 @@ class LocalProductionWorkspaceService {
       }
       episodes = byNumber.values.toList()
         ..sort((a, b) => a.number.compareTo(b.number));
-    } else if (episodes.length != project.targetEpisodeCount) {
+    } else if (!allowPartial &&
+        episodes.length != project.targetEpisodeCount) {
       throw StateError(
         'O Codex retornou ${episodes.length} episódios; o projeto exige ${project.targetEpisodeCount}.',
       );
@@ -1567,6 +2199,11 @@ class LocalProductionWorkspaceService {
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
+    final generatedEpisodeCards =
+        (biblePatch['episode_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
     final mergedBible = <String, dynamic>{
       ...project.seriesBible,
       ...biblePatch,
@@ -1594,18 +2231,47 @@ class LocalProductionWorkspaceService {
       centralQuestion: mergedBible['central_question']?.toString() ?? '',
       language: mergedBible['language']?.toString() ?? 'Português (Brasil)',
     );
+    mergedBible['episode_cards'] = _syncedEpisodeCards(
+      episodes: episodes,
+      existing: _asObjectList(project.seriesBible['episode_cards']),
+      generated: generatedEpisodeCards,
+    );
 
-    final generatedTitle = [
-      result['title'],
-      biblePatch['title'],
-    ]
+    final generatedTitle = [result['title'], biblePatch['title']]
         .map((value) => value?.toString().trim() ?? '')
         .firstWhere((value) => value.isNotEmpty, orElse: () => '');
     if (generatedTitle.isNotEmpty) {
       mergedBible['title'] = generatedTitle;
     }
 
-    return project.copyWith(
+    final lockedNumbers = {
+      for (final episode in episodes)
+        if (episode.takes.isNotEmpty ||
+            episode.status.contains('PRODUCTION') ||
+            episode.status.contains('LOCKED'))
+          episode.number,
+    };
+    mergedBible['episode_scripts'] =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) =>
+                  lockedNumbers.contains(_asEpisodeNumber(item['episode'])),
+            )
+            .toList();
+    mergedBible['scene_cards'] =
+        (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) =>
+                  lockedNumbers.contains(_asEpisodeNumber(item['episode'])),
+            )
+            .toList();
+
+    return _ensureMicroDramaFormat(project).copyWith(
+      formatFamily: _microDramaFormatFamily,
       title: generatedTitle.isNotEmpty ? generatedTitle : project.title,
       description: biblePatch['logline']?.toString() ?? project.description,
       updatedAt: DateTime.now(),
@@ -1621,16 +2287,76 @@ class LocalProductionWorkspaceService {
     ProductionProject project,
     Map<String, dynamic> output, {
     required int episodeNumber,
+    bool allowPartial = false,
   }) {
     final result = _codexResult(output);
     final script = Map<String, dynamic>.from(
       result['episodeScript'] as Map? ?? const {},
     );
-    if (script.isEmpty ||
-        (script['episode'] as num?)?.toInt() != episodeNumber) {
+    if (script.isEmpty) {
       throw StateError('O Codex não retornou o roteiro do EP$episodeNumber.');
     }
-    _validateCodexEpisodeScript(project, script, episodeNumber);
+    final returnedEpisode = _asEpisodeNumber(script['episode']);
+    if (!allowPartial &&
+        returnedEpisode != null &&
+        returnedEpisode != episodeNumber) {
+      throw StateError('O Codex não retornou o roteiro do EP$episodeNumber.');
+    }
+    script['episode'] = episodeNumber;
+    final scenes = (script['scenes'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) {
+          final scene = Map<String, dynamic>.from(item);
+          scene['episode'] = episodeNumber;
+          return scene;
+        })
+        .toList();
+    script['scenes'] = scenes;
+    if (scenes.isEmpty && !allowPartial) {
+      throw StateError('O roteiro não contém cenas.');
+    }
+    final existingScript =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .cast<Map<String, dynamic>?>()
+            .firstWhere(
+              (item) => _asEpisodeNumber(item?['episode']) == episodeNumber,
+              orElse: () => null,
+            );
+    final existingSceneCount = existingScript == null
+        ? 0
+        : _scriptSceneCount(existingScript);
+    final existingShotCount = existingScript == null
+        ? 0
+        : _scriptShotCount(existingScript);
+    final incomingShotCount = _scriptShotCount(script);
+    if (allowPartial &&
+        (scenes.length < existingSceneCount ||
+            (scenes.length == existingSceneCount &&
+                incomingShotCount < existingShotCount))) {
+      return project;
+    }
+    if (allowPartial && scenes.isEmpty) {
+      return project;
+    }
+    if (scenes.isNotEmpty) {
+      try {
+        _validateCodexEpisodeScript(project, script, episodeNumber);
+      } catch (error) {
+        if (!allowPartial) {
+          final gate = Map<String, dynamic>.from(
+            script['quality_gate'] as Map? ?? const {},
+          );
+          script['quality_gate'] = {
+            ...gate,
+            'decision': 'PASS_HUMAN_REVIEW_REQUIRED',
+            'duration_sums': 'NEEDS_HUMAN_FIX',
+            'persist_warning': error.toString(),
+          };
+        }
+      }
+    }
 
     final episodeIndex = project.episodes.indexWhere(
       (episode) => episode.number == episodeNumber,
@@ -1640,52 +2366,54 @@ class LocalProductionWorkspaceService {
       result['episode'] as Map? ?? const {},
     );
     final currentEpisode = project.episodes[episodeIndex];
+    final patchTitle = episodePatch['title']?.toString().trim() ?? '';
+    final nextTitle = patchTitle.isNotEmpty && !_isPlaceholderEpisodeTitle(patchTitle)
+        ? patchTitle
+        : currentEpisode.title;
+    final patchSummary = episodePatch['summary']?.toString().trim() ?? '';
+    final patchCliffhanger =
+        episodePatch['cliffhanger']?.toString().trim() ?? '';
     final episodes = project.episodes.toList();
     episodes[episodeIndex] = currentEpisode.copyWith(
-      title: episodePatch['title']?.toString() ?? currentEpisode.title,
-      summary: episodePatch['summary']?.toString() ?? currentEpisode.summary,
-      cliffhanger:
-          episodePatch['cliffhanger']?.toString() ?? currentEpisode.cliffhanger,
-      status: 'SCRIPT_DRAFT_REVIEW_REQUIRED',
-      takes: const [],
+      title: nextTitle,
+      summary: patchSummary.isNotEmpty ? patchSummary : currentEpisode.summary,
+      cliffhanger: patchCliffhanger.isNotEmpty
+          ? patchCliffhanger
+          : currentEpisode.cliffhanger,
+      status: scenes.isEmpty ? currentEpisode.status : 'SCRIPT_DRAFT_REVIEW_REQUIRED',
+      takes: currentEpisode.takes,
     );
 
     final scripts =
         (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
-            .where(
-              (item) => (item['episode'] as num?)?.toInt() != episodeNumber,
-            )
+            .where((item) => _asEpisodeNumber(item['episode']) != episodeNumber)
             .toList()
           ..add(script);
     scripts.sort(
-      (a, b) => ((a['episode'] as num?)?.toInt() ?? 0).compareTo(
-        (b['episode'] as num?)?.toInt() ?? 0,
+      (a, b) => (_asEpisodeNumber(a['episode']) ?? 0).compareTo(
+        _asEpisodeNumber(b['episode']) ?? 0,
       ),
     );
-    final scenes =
+    final sceneCards =
         (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
-            .where(
-              (item) => (item['episode'] as num?)?.toInt() != episodeNumber,
-            )
+            .where((item) => _asEpisodeNumber(item['episode']) != episodeNumber)
             .toList()
-          ..addAll(
-            (script['scenes'] as List<dynamic>? ?? const [])
-                .whereType<Map>()
-                .map((item) => Map<String, dynamic>.from(item)),
-          );
+          ..addAll(scenes);
     final episodeCards =
         (project.seriesBible['episode_cards'] as List<dynamic>? ?? const [])
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
             .map(
-              (item) => (item['episode'] as num?)?.toInt() == episodeNumber
+              (item) => _asEpisodeNumber(item['episode']) == episodeNumber
                   ? {
                       ...item,
-                      'script_status': 'DRAFT_REVIEW_REQUIRED',
+                      'script_status': scenes.isEmpty
+                          ? 'GENERATING'
+                          : 'DRAFT_REVIEW_REQUIRED',
                       'production_status': 'BLOCKED_BY_SCRIPT_APPROVAL',
                     }
                   : item,
@@ -1699,7 +2427,7 @@ class LocalProductionWorkspaceService {
         ...project.seriesBible,
         'episode_cards': episodeCards,
         'episode_scripts': scripts,
-        'scene_cards': scenes,
+        'scene_cards': sceneCards,
         'workflow': {
           ...Map<String, dynamic>.from(
             project.seriesBible['workflow'] as Map? ?? const {},
@@ -1723,7 +2451,7 @@ class LocalProductionWorkspaceService {
     required int episodeNumber,
   }) {
     final locked = approveMicroDramaEpisodeScriptForProduction(
-      project,
+      _ensureMicroDramaFormat(project),
       episodeNumber: episodeNumber,
     );
     final result = _codexResult(output);
@@ -2026,7 +2754,8 @@ class LocalProductionWorkspaceService {
     ProductionProject project, {
     required int episodeNumber,
   }) {
-    if (project.formatFamily != 'micro_drama_vertical') {
+    project = _ensureMicroDramaFormat(project);
+    if (project.formatFamily != _microDramaFormatFamily) {
       throw ArgumentError('O projeto não é um microdrama vertical.');
     }
     final episodeIndex = project.episodes.indexWhere(
@@ -2041,7 +2770,7 @@ class LocalProductionWorkspaceService {
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
     final scriptIndex = episodeScripts.indexWhere(
-      (script) => script['episode'] == episodeNumber,
+      (script) => _asEpisodeNumber(script['episode']) == episodeNumber,
     );
     if (scriptIndex < 0) {
       throw StateError('Gere o roteiro detalhado antes da produção.');
@@ -2088,7 +2817,7 @@ class LocalProductionWorkspaceService {
             .map((item) => Map<String, dynamic>.from(item))
             .toList();
     final cardIndex = episodeCards.indexWhere(
-      (card) => card['episode'] == episodeNumber,
+      (card) => _asEpisodeNumber(card['episode']) == episodeNumber,
     );
     if (cardIndex >= 0) {
       episodeCards[cardIndex] = {
@@ -3946,7 +4675,8 @@ class LocalProductionWorkspaceService {
   static ProductionProject _ensureMicroDramaCreativePackage(
     ProductionProject project,
   ) {
-    if (project.formatFamily != 'micro_drama_vertical') return project;
+    project = _ensureMicroDramaFormat(project);
+    if (project.formatFamily != _microDramaFormatFamily) return project;
     final bible = project.seriesBible;
     final hasCharacters =
         bible['characters'] is List && (bible['characters'] as List).isNotEmpty;
@@ -3958,10 +4688,12 @@ class LocalProductionWorkspaceService {
     final hasScenes =
         bible['scene_cards'] is List &&
         (bible['scene_cards'] as List).isNotEmpty;
+    final workflowName = bible['creation_workflow']?.toString() ?? '';
     if (hasCharacters &&
         hasEnvironments &&
         hasProps &&
-        bible['creation_workflow'] == 'guided_microdrama_v3_outline_first') {
+        (workflowName == 'guided_microdrama_v3_outline_first' ||
+            workflowName.startsWith('openrouter_'))) {
       return project;
     }
 
@@ -4139,6 +4871,296 @@ class LocalProductionWorkspaceService {
         targetEpisodeCount: item.targetEpisodeCount,
       );
 
+  ProductionProject? _projectFromEditorSnapshot(
+    ProductionCatalogItem item,
+    AdminSeriesProductionPlan? plan,
+  ) {
+    Map<String, dynamic>? snapshot;
+    final bible = plan?.seriesBible;
+    if (bible is Map && bible['editor_project'] is Map) {
+      snapshot = Map<String, dynamic>.from(bible['editor_project'] as Map);
+    }
+    if (snapshot == null && plan?.rawPayload is Map) {
+      final raw = Map<String, dynamic>.from(plan!.rawPayload as Map);
+      final pipeline = raw['pipelineData'];
+      if (pipeline is Map && pipeline['editor_project'] is Map) {
+        snapshot = Map<String, dynamic>.from(pipeline['editor_project'] as Map);
+      }
+    }
+    if (snapshot == null) return null;
+    try {
+      final project = ProductionProject.fromJson(snapshot);
+      return project.copyWith(
+        id: 'remote-${item.routeId}',
+        virtualId: item.routeId,
+        isLocal: false,
+        sourcePath: 'Vertix API / serie ${item.routeId}',
+        title: project.title.trim().isEmpty ? item.title : project.title,
+        status: item.status,
+        coverUrl: item.coverUrl ?? project.coverUrl,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ProductionProject _hydrateRemoteProject(
+    ProductionProject project, [
+    AdminSeriesProductionPlan? plan,
+  ]) {
+    var bible = _flattenSeriesBible(
+      Map<String, dynamic>.from(project.seriesBible),
+    );
+    if (plan != null) {
+      final extras = _bibleFromRemotePlan(plan);
+      for (final entry in extras.entries) {
+        final current = bible[entry.key];
+        final empty =
+            current == null ||
+            (current is String && current.trim().isEmpty) ||
+            (current is List && current.isEmpty) ||
+            (current is Map && current.isEmpty);
+        if (empty) bible[entry.key] = entry.value;
+      }
+    }
+    bible['scene_cards'] = _normalizeSceneCards(
+      bible['scene_cards'] ?? plan?.sceneCards,
+    );
+    final fromRecords = _episodesFromRemoteSources(
+      current: project.episodes,
+      bible: bible,
+      plan: plan,
+    );
+    final episodes = _mergeEpisodeLists(project.episodes, fromRecords);
+    return project.copyWith(
+      formatFamily: _resolvedFormatFamily(project.formatFamily, bible: bible),
+      seriesBible: bible,
+      episodes: episodes.isEmpty ? project.episodes : episodes,
+    );
+  }
+
+  Map<String, dynamic> _bibleFromRemotePlan(AdminSeriesProductionPlan plan) {
+    final fromPlan = plan.seriesBible is Map
+        ? Map<String, dynamic>.from(plan.seriesBible as Map)
+        : <String, dynamic>{};
+    final bible = _flattenSeriesBible({
+      ...fromPlan,
+      'source': plan.source,
+      if (plan.characterBible != null) 'character_bible': plan.characterBible,
+      if (plan.locationBible != null) 'location_bible': plan.locationBible,
+      if (plan.objectBible != null) 'object_bible': plan.objectBible,
+      if (plan.seasonArc != null) 'seasonArc': plan.seasonArc,
+      if (plan.episodeMap != null) 'episodeMap': plan.episodeMap,
+      if (plan.generationPlan != null) 'generation_plan': plan.generationPlan,
+      if (plan.seedanceNotes != null) 'seedance_notes': plan.seedanceNotes,
+    });
+    if (bible['scene_cards'] == null && plan.sceneCards != null) {
+      bible['scene_cards'] = plan.sceneCards;
+    }
+    if (bible['episode_cards'] == null) {
+      final cards = _asObjectList(plan.episodeMap);
+      if (cards.isNotEmpty) bible['episode_cards'] = cards;
+    }
+    return bible;
+  }
+
+  String _displayEpisodeTitle(ProductionEpisodeItem episode) {
+    final title = _humanReadableText(episode.title);
+    return title.isEmpty ? episode.title : title;
+  }
+
+  String _displayEpisodeSummary(ProductionEpisodeItem episode) {
+    final summary = _humanReadableText(episode.summary);
+    return summary;
+  }
+
+  String _displayEpisodeCliffhanger(ProductionEpisodeItem episode) {
+    final cliffhanger = _humanReadableText(episode.cliffhanger);
+    return cliffhanger;
+  }
+
+  List<ProductionEpisodeItem> _mergeEpisodeLists(
+    List<ProductionEpisodeItem> current,
+    List<ProductionEpisodeItem> incoming,
+  ) {
+    final byNumber = <int, ProductionEpisodeItem>{};
+    for (final episode in [...current, ...incoming]) {
+      final existing = byNumber[episode.number];
+      byNumber[episode.number] = existing == null
+          ? episode.copyWith(
+              title: _displayEpisodeTitle(episode),
+              summary: _displayEpisodeSummary(episode),
+              cliffhanger: _displayEpisodeCliffhanger(episode),
+            )
+          : _richerEpisode(existing, episode);
+    }
+    if (byNumber.isEmpty) return current;
+    final numbers = byNumber.keys.toList()..sort();
+    return [for (final number in numbers) byNumber[number]!];
+  }
+
+  ProductionEpisodeItem _richerEpisode(
+    ProductionEpisodeItem current,
+    ProductionEpisodeItem incoming,
+  ) {
+    final currentTitle = _displayEpisodeTitle(current);
+    final incomingTitle = _displayEpisodeTitle(incoming);
+    final currentSummary = _displayEpisodeSummary(current);
+    final incomingSummary = _displayEpisodeSummary(incoming);
+    final currentCliffhanger = _displayEpisodeCliffhanger(current);
+    final incomingCliffhanger = _displayEpisodeCliffhanger(incoming);
+    final preferIncomingTitle =
+        incomingTitle.isNotEmpty &&
+        !_genericEpisodeTitlePattern.hasMatch(incomingTitle) &&
+        (currentTitle.isEmpty ||
+            _genericEpisodeTitlePattern.hasMatch(currentTitle) ||
+            incomingTitle.length > currentTitle.length);
+    return ProductionEpisodeItem(
+      number: current.number,
+      title: preferIncomingTitle
+          ? incomingTitle
+          : (currentTitle.isNotEmpty ? currentTitle : incomingTitle),
+      summary: incomingSummary.trim().length > currentSummary.trim().length
+          ? incomingSummary
+          : currentSummary,
+      cliffhanger:
+          incomingCliffhanger.trim().length > currentCliffhanger.trim().length
+          ? incomingCliffhanger
+          : currentCliffhanger,
+      durationSeconds: incoming.durationSeconds > current.durationSeconds
+          ? incoming.durationSeconds
+          : current.durationSeconds,
+      status: incoming.takes.length >= current.takes.length
+          ? incoming.status
+          : current.status,
+      takes: incoming.takes.length >= current.takes.length
+          ? incoming.takes
+          : current.takes,
+      externalMusic: current.externalMusic,
+      musicProvider: current.musicProvider,
+      musicPrompt: incoming.musicPrompt.trim().isNotEmpty
+          ? incoming.musicPrompt
+          : current.musicPrompt,
+      musicStatus: incoming.musicStatus != 'DRAFT'
+          ? incoming.musicStatus
+          : current.musicStatus,
+      musicVolume: current.musicVolume,
+      dialogueVolume: current.dialogueVolume,
+      ambienceVolume: current.ambienceVolume,
+      assembledOutputUrl:
+          incoming.assembledOutputUrl ?? current.assembledOutputUrl,
+    );
+  }
+
+  List<ProductionEpisodeItem> _episodesFromRemoteSources({
+    required List<ProductionEpisodeItem> current,
+    required Map<String, dynamic> bible,
+    AdminSeriesProductionPlan? plan,
+  }) {
+    final records = <Map<String, dynamic>>[
+      ..._asObjectList(plan?.episodeTreatments),
+      ..._asObjectList(bible['episode_cards']),
+      ..._asObjectList(plan?.episodeMap),
+      ..._asObjectList(bible['episodeMap']),
+    ];
+    if (records.isEmpty) {
+      return [
+        for (final episode in current)
+          episode.copyWith(
+            title: _displayEpisodeTitle(episode),
+            summary: _displayEpisodeSummary(episode),
+            cliffhanger: _displayEpisodeCliffhanger(episode),
+          ),
+      ];
+    }
+    final byNumber = <int, Map<String, dynamic>>{};
+    for (final record in records) {
+      final number =
+          _asEpisodeNumber(record['episode']) ??
+          _asEpisodeNumber(record['number']);
+      if (number == null) continue;
+      final existing = byNumber[number];
+      byNumber[number] = existing == null
+          ? record
+          : {...existing, ...record, 'episode': number};
+    }
+    if (byNumber.isEmpty) return current;
+    final existingByNumber = {
+      for (final episode in current) episode.number: episode,
+    };
+    final numbers = byNumber.keys.toList()..sort();
+    return [
+      for (final number in numbers)
+        _episodeFromRecord(
+          byNumber[number]!,
+          fallbackNumber: number,
+          existing: existingByNumber[number],
+        ),
+    ];
+  }
+
+  ProductionEpisodeItem _episodeFromRecord(
+    Map<String, dynamic> item, {
+    required int fallbackNumber,
+    ProductionEpisodeItem? existing,
+  }) {
+    final number =
+        _asEpisodeNumber(item['episode']) ??
+        _asEpisodeNumber(item['number']) ??
+        fallbackNumber;
+    final title = _humanReadableText(item['title']);
+    final summary = _humanReadableText(
+      item['summary'] ??
+          item['treatment'] ??
+          item['cold_open'] ??
+          item['story'] ??
+          item['description'],
+    );
+    final cliffhanger = _humanReadableText(
+      item['cliffhanger'] ?? item['peak_action'] ?? item['hook'],
+    );
+    final duration =
+        _asEpisodeNumber(item['durationSeconds']) ??
+        _asEpisodeNumber(item['duration_seconds']) ??
+        _asEpisodeNumber(item['duration']) ??
+        existing?.durationSeconds ??
+        60;
+    final existingSummary = existing == null
+        ? ''
+        : _displayEpisodeSummary(existing);
+    final existingCliffhanger = existing == null
+        ? ''
+        : _displayEpisodeCliffhanger(existing);
+    final existingTitle = existing == null
+        ? ''
+        : _displayEpisodeTitle(existing);
+    return ProductionEpisodeItem(
+      number: number,
+      title: title.isNotEmpty
+          ? title
+          : existingTitle.isNotEmpty &&
+                !_genericEpisodeTitlePattern.hasMatch(existingTitle)
+          ? existingTitle
+          : 'Episódio $number',
+      summary: summary.isNotEmpty ? summary : existingSummary,
+      cliffhanger: cliffhanger.isNotEmpty ? cliffhanger : existingCliffhanger,
+      durationSeconds: duration <= 0 ? 60 : duration,
+      status:
+          existing?.status ??
+          item['status']?.toString() ??
+          'OUTLINE_REVIEW_REQUIRED',
+      takes: existing?.takes ?? const [],
+      externalMusic: existing?.externalMusic ?? true,
+      musicProvider: existing?.musicProvider ?? 'API externa',
+      musicPrompt: existing?.musicPrompt ?? '',
+      musicStatus: existing?.musicStatus ?? 'DRAFT',
+      musicVolume: existing?.musicVolume ?? 0.36,
+      dialogueVolume: existing?.dialogueVolume ?? 0.9,
+      ambienceVolume: existing?.ambienceVolume ?? 0.48,
+      assembledOutputUrl: existing?.assembledOutputUrl,
+    );
+  }
+
   ProductionProject _projectFromRemote(
     ProductionCatalogItem item,
     AdminSeriesProductionPlan? plan,
@@ -4150,7 +5172,9 @@ class LocalProductionWorkspaceService {
             label: asset.label,
             category: asset.category,
             publicUrl: asset.publicUrl,
-            description: _stringify(asset.metadata),
+            description: _humanReadableText(asset.metadata).isNotEmpty
+                ? _humanReadableText(asset.metadata)
+                : _stringify(asset.metadata),
             canonical:
                 _stringify(asset.metadata).contains('LOCATION_MASTER') ||
                 _stringify(asset.metadata).contains('WORLD_ENVIRONMENT_MASTER'),
@@ -4179,47 +5203,72 @@ class LocalProductionWorkspaceService {
         ),
       );
     }
-    final safeTakes = takes.isEmpty
-        ? _defaultTakes(item.title, count: 4)
-        : takes;
+    final bible = plan == null
+        ? <String, dynamic>{'source': item.sourceLabel}
+        : _bibleFromRemotePlan(plan);
+    bible['scene_cards'] = _normalizeSceneCards(
+      bible['scene_cards'] ?? plan?.sceneCards,
+    );
+    var episodes = _episodesFromRemoteSources(
+      current: const [],
+      bible: bible,
+      plan: plan,
+    );
+    if (episodes.isEmpty) {
+      episodes = [
+        ProductionEpisodeItem(
+          number: 1,
+          title: 'Episódio 1',
+          summary: '',
+          cliffhanger: '',
+          durationSeconds: takes.fold<int>(
+            0,
+            (sum, take) => sum + take.durationSeconds,
+          ),
+          takes: takes,
+          musicPrompt:
+              'Cama musical continua para o episódio, sem competir com as falas.',
+        ),
+      ];
+    } else if (takes.isNotEmpty && episodes.first.takes.isEmpty) {
+      episodes = [
+        ProductionEpisodeItem(
+          number: episodes.first.number,
+          title: episodes.first.title,
+          summary: episodes.first.summary,
+          cliffhanger: episodes.first.cliffhanger,
+          durationSeconds: episodes.first.durationSeconds,
+          status: episodes.first.status,
+          takes: takes,
+          externalMusic: episodes.first.externalMusic,
+          musicProvider: episodes.first.musicProvider,
+          musicPrompt: episodes.first.musicPrompt,
+          musicStatus: episodes.first.musicStatus,
+          musicVolume: episodes.first.musicVolume,
+          dialogueVolume: episodes.first.dialogueVolume,
+          ambienceVolume: episodes.first.ambienceVolume,
+          assembledOutputUrl: episodes.first.assembledOutputUrl,
+        ),
+        ...episodes.skip(1),
+      ];
+    }
     return ProductionProject(
       id: 'remote-${item.routeId}',
       virtualId: item.routeId,
       title: item.title,
       description: item.description,
       genre: item.genre,
-      formatFamily: 'vertical_series',
+      formatFamily: _resolvedFormatFamily(null, bible: bible),
       status: item.status,
       sourcePath: 'Vertix API / serie ${item.routeId}',
       coverUrl: item.coverUrl,
-      targetEpisodeCount: item.targetEpisodeCount,
+      targetEpisodeCount: item.targetEpisodeCount < 1
+          ? episodes.length
+          : item.targetEpisodeCount,
       isLocal: false,
       updatedAt: DateTime.now(),
-      seriesBible: {
-        'source': plan?.source ?? 'Vertix API',
-        'seriesBible': plan?.seriesBible,
-        'character_bible': plan?.characterBible,
-        'location_bible': plan?.locationBible,
-        'object_bible': plan?.objectBible,
-        'seasonArc': plan?.seasonArc,
-        'episodeMap': plan?.episodeMap,
-        'scene_cards': plan?.sceneCards,
-      },
-      episodes: [
-        ProductionEpisodeItem(
-          number: 1,
-          title: 'Episodio 1',
-          summary: _stringify(plan?.episodeTreatments),
-          cliffhanger: 'Defina o cliffhanger do episodio.',
-          durationSeconds: safeTakes.fold(
-            0,
-            (sum, take) => sum + take.durationSeconds,
-          ),
-          takes: safeTakes,
-          musicPrompt:
-              'Cama musical continua para o episodio, sem competir com as falas.',
-        ),
-      ],
+      seriesBible: bible,
+      episodes: episodes,
       references: references,
     );
   }

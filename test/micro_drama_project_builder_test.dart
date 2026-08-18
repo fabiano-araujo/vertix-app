@@ -473,6 +473,55 @@ void main() {
     },
   );
 
+  test(
+    'approves production when a studio series was reloaded as vertical_series',
+    () {
+      final service = LocalProductionWorkspaceService();
+      final outline = service.buildMicroDramaProjectForTesting(_config);
+      final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+        outline,
+        episodeNumber: 1,
+      );
+      final mislabeled = scripted.copyWith(formatFamily: 'vertical_series');
+
+      final production = service
+          .approveMicroDramaEpisodeScriptForProductionForTesting(
+            mislabeled,
+            episodeNumber: 1,
+          );
+
+      expect(production.formatFamily, 'micro_drama_vertical');
+      expect(production.episodes.first.status, 'PRODUCTION_READY');
+      expect(production.episodes.first.takes, isNotEmpty);
+    },
+  );
+
+  test('fromJson recovers microdrama format from the studio bible', () {
+    final project = ProductionProject.fromJson({
+      'id': 'remote-1',
+      'virtualId': 1,
+      'title': 'Laços Invisíveis',
+      'description': 'Uma família descobre um pendrive.',
+      'genre': 'drama',
+      'formatFamily': 'vertical_series',
+      'status': 'DRAFT',
+      'sourcePath': 'Vertix API / serie 1',
+      'targetEpisodeCount': 8,
+      'isLocal': false,
+      'updatedAt': '2026-08-18T00:00:00.000',
+      'seriesBible': {
+        'creation_workflow': 'openrouter_outline_first_v1',
+        'episode_scripts': [
+          {'episode': 1, 'scenes': const []},
+        ],
+      },
+      'episodes': const [],
+      'references': const [],
+    });
+
+    expect(project.formatFamily, 'micro_drama_vertical');
+  });
+
   test('Codex outline and GPT Image 2 reference merge into the project', () {
     final service = LocalProductionWorkspaceService();
     final outline = service.buildMicroDramaProjectForTesting(_config);
@@ -691,5 +740,131 @@ void main() {
     expect(applied.seriesBible['creation_idea'], contains('chef'));
     expect(applied.seriesBible['visual_style'], 'K-drama moderno');
     expect(applied.seriesBible['automatic_preparation_requested'], isTrue);
+  });
+
+  test('Codex episode script persists even with duration drift and string episode', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final localScripted = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    final generatedScript = Map<String, dynamic>.from(
+      (localScripted.seriesBible['episode_scripts'] as List<dynamic>).first
+          as Map,
+    );
+    generatedScript['episode'] = '1';
+    final scenes = (generatedScript['scenes'] as List<dynamic>)
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final firstScene = Map<String, dynamic>.from(scenes.first);
+    final shots = (firstScene['shots'] as List<dynamic>)
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final firstShot = Map<String, dynamic>.from(shots.first);
+    firstShot['duration_seconds'] =
+        (firstShot['duration_seconds'] as num).toInt() + 1;
+    shots[0] = firstShot;
+    firstScene['shots'] = shots;
+    scenes[0] = firstScene;
+    generatedScript['scenes'] = scenes;
+
+    final scripted = service.applyCodexEpisodeScript(outline, {
+      'summary': 'Roteiro com duração irregular',
+      'result': {
+        'episode': {'number': 1, 'title': outline.episodes.first.title},
+        'episodeScript': generatedScript,
+      },
+    }, episodeNumber: 1);
+
+    final saved =
+        (scripted.seriesBible['episode_scripts'] as List<dynamic>).first as Map;
+    expect(saved['episode'], 1);
+    expect((saved['scenes'] as List).length, greaterThan(0));
+    expect(saved['quality_gate']['duration_sums'], 'NEEDS_HUMAN_FIX');
+    expect(scripted.episodes.first.takes, isEmpty);
+  });
+
+  test('partial Codex script keeps the richer draft instead of shrinking it', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final rich = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    final richScenes =
+        ((rich.seriesBible['episode_scripts'] as List).first as Map)['scenes']
+            as List;
+    expect(richScenes.length, greaterThan(1));
+
+    final poorer = service.applyCodexEpisodeScript(
+      rich,
+      {
+        'result': {
+          'episodeScript': {
+            'episode': 1,
+            'scenes': [
+              {'episode': 1, 'scene': 1, 'title': 'Só o começo', 'shots': []},
+            ],
+          },
+        },
+      },
+      episodeNumber: 1,
+      allowPartial: true,
+    );
+
+    final scenes =
+        ((poorer.seriesBible['episode_scripts'] as List).first as Map)['scenes']
+            as List;
+    expect(scenes.length, richScenes.length);
+  });
+
+  test('new outline drops unlocked leftover episode scripts', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    expect(
+      (scripted.seriesBible['episode_scripts'] as List).length,
+      greaterThan(0),
+    );
+
+    final refreshed = service.applyCodexSeriesOutline(scripted, {
+      'summary': 'Novo esboço',
+      'result': {
+        'title': 'Café da Esquina',
+        'seriesBiblePatch': {
+          'title': 'Café da Esquina',
+          'logline': 'Laura reencontra Pedro na cafeteria.',
+          'episode_cards': [
+            for (var number = 1; number <= 8; number++)
+              {'episode': number, 'title': 'EP$number'},
+          ],
+          'hook_chain': [
+            for (var number = 1; number <= 8; number++)
+              {'episode': number, 'final_hook': 'gancho $number'},
+          ],
+        },
+        'episodes': [
+          for (var number = 1; number <= 8; number++)
+            {
+              'number': number,
+              'title': number == 1 ? 'O Reencontro' : 'Episódio $number',
+              'summary': 'Laura e Pedro na cafeteria.',
+              'cliffhanger': 'Alguém entra na porta.',
+              'durationSeconds': number == 1 ? 120 : 60,
+            },
+        ],
+        'references': const [],
+      },
+    });
+
+    expect(refreshed.episodes.first.title, 'O Reencontro');
+    expect(refreshed.seriesBible['episode_scripts'], isEmpty);
+    expect(refreshed.seriesBible['scene_cards'], isEmpty);
   });
 }

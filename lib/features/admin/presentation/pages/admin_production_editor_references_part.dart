@@ -478,5 +478,6 @@ extension _AdminProductionEditorReferencesExtension
         references: [...project.references, reference],
       ),
     );
+    _schedulePersist();
   }
 }

@@ -24,8 +24,8 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
 
   List<ProductionCatalogItem> _series = [];
   bool _isLoading = true;
+  String _scopeFilter = 'API';
   String _statusFilter = 'ALL';
-  String _sourceFilter = 'ALL';
   String? _error;
   bool _remoteUnavailable = false;
 
@@ -59,45 +59,37 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
       _error = null;
     });
 
-    final localFuture = _localService.getLocalCatalog();
-    final remoteFuture = _adminService.getAvailableSeries(
-      status: _statusFilter,
+    final remoteResponse = await _adminService.getAvailableSeries(
+      status: _statusFilter == 'ALL' ? 'ALL' : _statusFilter,
       search: _searchController.text,
+      limit: 100,
     );
-    final localItems = await localFuture;
-    final remoteResponse = await remoteFuture;
-
     final query = _searchController.text.trim().toLowerCase();
-    final filteredLocal = localItems.where((item) {
-      final statusMatches =
-          _statusFilter == 'ALL' || item.status == _statusFilter;
-      final searchMatches =
-          query.isEmpty ||
-          item.title.toLowerCase().contains(query) ||
-          item.description.toLowerCase().contains(query) ||
-          item.genre.toLowerCase().contains(query) ||
-          (item.sourcePath?.toLowerCase().contains(query) ?? false);
-      return statusMatches && searchMatches;
-    });
-    final remoteItems = remoteResponse.data.map(
-      ProductionCatalogItem.fromRemote,
-    );
-    final merged =
-        <ProductionCatalogItem>[
-          if (_sourceFilter != 'REMOTE') ...filteredLocal,
-          if (_sourceFilter != 'LOCAL') ...remoteItems,
-        ]..sort((a, b) {
-          if (a.isLocal != b.isLocal) return a.isLocal ? -1 : 1;
-          return a.title.compareTo(b.title);
-        });
+    final items =
+        remoteResponse.data
+            .map(ProductionCatalogItem.fromRemote)
+            .where((item) {
+              if (_scopeFilter == 'API' && item.status == 'ARCHIVED') {
+                return false;
+              }
+              if (_statusFilter != 'ALL' && item.status != _statusFilter) {
+                return false;
+              }
+              if (query.isEmpty) return true;
+              return item.title.toLowerCase().contains(query) ||
+                  item.description.toLowerCase().contains(query) ||
+                  item.genre.toLowerCase().contains(query);
+            })
+            .toList()
+          ..sort(compareStudioCatalogItems);
 
     if (!mounted) return;
     setState(() {
-      _series = merged;
+      _series = items;
       _isLoading = false;
       _remoteUnavailable = !remoteResponse.success;
-      _error = merged.isEmpty && !remoteResponse.success
-          ? 'Nao foi possivel carregar producoes'
+      _error = items.isEmpty && !remoteResponse.success
+          ? 'Nao foi possivel carregar as series da API'
           : null;
     });
   }
@@ -179,10 +171,7 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
                             width: width,
                             child: _ProductionSeriesCard(
                               series: series,
-                              onTap: () => context.push(
-                                '/admin-production/${series.routeId}',
-                                extra: series,
-                              ),
+                              onTap: () => _openSeries(series),
                             ),
                           ),
                         )
@@ -324,51 +313,57 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
           ),
         ),
         const SizedBox(height: 12),
-        _buildPillRow([
-          _FilterOption('ALL', 'Tudo', Icons.layers_outlined),
-          _FilterOption('LOCAL', 'Workspace local', Icons.computer),
-          _FilterOption('REMOTE', 'Vertix API', Icons.cloud_outlined),
-        ], isSource: true),
+        _buildFilterButtons(
+          options: const [
+            _FilterOption('ALL', 'Todas'),
+            _FilterOption('API', 'Na API'),
+          ],
+          selected: _scopeFilter,
+          onSelected: (value) {
+            setState(() => _scopeFilter = value);
+            _loadSeries();
+          },
+        ),
         const SizedBox(height: 8),
-        _buildPillRow([
-          _FilterOption('ALL', 'Todos', Icons.tune),
-          _FilterOption(
-            'IN_PRODUCTION',
-            'Em producao',
-            Icons.play_circle_outline,
-          ),
-          _FilterOption('DRAFT', 'Rascunhos', Icons.edit_outlined),
-          _FilterOption('PUBLISHED', 'Publicadas', Icons.check_circle_outline),
-          _FilterOption('ARCHIVED', 'Arquivadas', Icons.inventory_2_outlined),
-        ], isSource: false),
+        _buildFilterButtons(
+          options: const [
+            _FilterOption('IN_PRODUCTION', 'Em produção'),
+            _FilterOption('DRAFT', 'Rascunhos'),
+          ],
+          selected: _statusFilter,
+          allowDeselect: true,
+          onSelected: (value) {
+            setState(() => _statusFilter = value);
+            _loadSeries();
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildPillRow(List<_FilterOption> options, {required bool isSource}) {
+  Widget _buildFilterButtons({
+    required List<_FilterOption> options,
+    required String selected,
+    required ValueChanged<String> onSelected,
+    bool allowDeselect = false,
+  }) {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: options.map((option) {
-        final selected = isSource
-            ? _sourceFilter == option.value
-            : _statusFilter == option.value;
-        return _StudioFilterPill(
-          label: option.label,
-          icon: option.icon,
-          selected: selected,
-          onTap: () {
-            setState(() {
-              if (isSource) {
-                _sourceFilter = option.value;
+      children: [
+        for (final option in options)
+          _StudioFilterButton(
+            label: option.label,
+            selected: selected == option.value,
+            onTap: () {
+              if (allowDeselect && selected == option.value) {
+                onSelected('ALL');
               } else {
-                _statusFilter = option.value;
+                onSelected(option.value);
               }
-            });
-            _loadSeries();
-          },
-        );
-      }).toList(),
+            },
+          ),
+      ],
     );
   }
 
@@ -386,7 +381,7 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'A API nao respondeu. Os projetos e as edicoes locais continuam disponiveis.',
+              'A API nao respondeu. Atualize para carregar as series do catalogo.',
               style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
@@ -395,13 +390,22 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
     );
   }
 
+  Future<void> _openSeries(ProductionCatalogItem series) async {
+    await context.push(
+      '/admin-production/${series.routeId}',
+      extra: series,
+    );
+    if (mounted) await _loadSeries();
+  }
+
   Future<void> _openNewMicroDramaStudio() async {
     final project = await _localService.createMicroDramaChatDraft();
     if (!mounted) return;
-    context.push(
+    await context.push(
       '/admin-production/${project.virtualId}',
       extra: ProductionCatalogItem.fromLocal(project),
     );
+    if (mounted) await _loadSeries();
   }
 
   Widget _buildMessage(IconData icon, String message) {
@@ -421,60 +425,40 @@ class _AdminProductionPageState extends State<AdminProductionPage> {
 class _FilterOption {
   final String value;
   final String label;
-  final IconData icon;
 
-  const _FilterOption(this.value, this.label, this.icon);
+  const _FilterOption(this.value, this.label);
 }
 
-class _StudioFilterPill extends StatelessWidget {
+class _StudioFilterButton extends StatelessWidget {
   final String label;
-  final IconData icon;
   final bool selected;
   final VoidCallback onTap;
 
-  const _StudioFilterPill({
+  const _StudioFilterButton({
     required this.label,
-    required this.icon,
     required this.selected,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.primary : AppColors.surface,
-      borderRadius: BorderRadius.circular(999),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: selected ? AppColors.primary : AppColors.surfaceLighter,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 15,
-                color: selected ? Colors.white : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
+    return FilledButton(
+      onPressed: onTap,
+      style: FilledButton.styleFrom(
+        elevation: 0,
+        backgroundColor: selected ? AppColors.primary : AppColors.surface,
+        foregroundColor: selected ? Colors.white : AppColors.textSecondary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+          side: BorderSide(
+            color: selected ? AppColors.primary : AppColors.surfaceLighter,
           ),
         ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
       ),
     );
   }
@@ -658,28 +642,6 @@ class _ProductionSeriesCardState extends State<_ProductionSeriesCard> {
               )
             else
               _CoverFallback(series: series),
-            Positioned(
-              left: 6,
-              top: 6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(170),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  series.isLocal ? 'LOCAL' : 'API',
-                  style: TextStyle(
-                    color: series.isLocal
-                        ? AppColors.success
-                        : AppColors.primaryLight,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.4,
-                  ),
-                ),
-              ),
-            ),
           ],
         ),
       ),

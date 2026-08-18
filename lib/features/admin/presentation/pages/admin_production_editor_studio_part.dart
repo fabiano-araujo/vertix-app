@@ -18,10 +18,12 @@ extension _AdminProductionEditorStudioExtension
         ),
         title: Text(
           'EP${episode.number} · ${episode.title} · Produção de vídeo',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(
-            tooltip: 'Salvar localmente',
+            tooltip: 'Salvar na API',
             onPressed: _isSaving ? null : _saveProject,
             icon: _isSaving
                 ? const SizedBox(
@@ -37,9 +39,15 @@ extension _AdminProductionEditorStudioExtension
     );
   }
 
-  Widget _buildEpisodeScriptScaffold() {
+  Widget _buildInlineEpisodeScriptPane() {
     final project = _project!;
-    final episode = _episode!;
+    final episode = _episode;
+    if (episode == null) {
+      return const ColoredBox(
+        color: Color(0xFF121418),
+        child: Center(child: Text('Selecione um episódio.')),
+      );
+    }
     final script = _episodeScriptFor(project, episode.number);
     final scenes = (script['scenes'] as List<dynamic>? ?? const [])
         .whereType<Map>()
@@ -47,108 +55,185 @@ extension _AdminProductionEditorStudioExtension
         .toList();
     final scriptLocked = script['status'] == 'LOCKED_FOR_PRODUCTION';
     final productionReady = episode.takes.isNotEmpty;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
-          tooltip: 'Voltar aos episódios',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => setState(() => _showEpisodeScriptEditor = false),
-        ),
-        title: Text(
-          'EP${episode.number} · ${episode.title} · Roteiro por cenas',
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: _isSaving ? null : _saveProject,
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Salvar rascunho'),
-          ),
-          const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton.icon(
-              onPressed: productionReady
-                  ? () => setState(() {
-                      _showEpisodeScriptEditor = false;
-                      _episodeProductionMode = true;
-                      _sectionIndex = 2;
-                    })
-                  : _isApprovingScript || scenes.isEmpty
-                  ? null
-                  : _approveEpisodeScriptForProduction,
-              icon: _isApprovingScript
-                  ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
+    final generating = _generatingScriptEpisodeNumber == episode.number;
+    final displayTitle = _episodeDisplayTitle(
+      episode,
+      _episodeCardFor(project, episode.number),
+    );
+    final durationWarning = (script['quality_gate'] as Map?)?['persist_warning']
+        ?.toString();
+    return ColoredBox(
+      color: const Color(0xFF121418),
+      child: Column(
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 720;
+              final approveButton = FilledButton.icon(
+                onPressed: productionReady
+                    ? () => _openEpisodeProduction()
+                    : generating || _isApprovingScript || scenes.isEmpty
+                    ? null
+                    : _approveEpisodeScriptForProduction,
+                icon: _isApprovingScript
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(
+                        productionReady
+                            ? Icons.movie_filter_outlined
+                            : Icons.lock_outline,
+                        size: 18,
                       ),
-                    )
-                  : Icon(
-                      productionReady
-                          ? Icons.movie_filter_outlined
-                          : Icons.lock_outline,
+                label: Text(
+                  productionReady
+                      ? (compact ? 'Produção' : 'Produção de vídeo')
+                      : _isApprovingScript
+                      ? 'Preparando...'
+                      : (compact ? 'Aprovar' : 'Aprovar produção'),
+                ),
+              );
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
+                child: compact
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              IconButton(
+                                tooltip: 'Voltar ao esboço',
+                                onPressed: () => setState(
+                                  () => _showEpisodeScriptEditor = false,
+                                ),
+                                icon: const Icon(Icons.arrow_back),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'EP${episode.number} · $displayTitle',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Salvar',
+                                onPressed: _isSaving ? null : _saveProject,
+                                icon: const Icon(Icons.save_outlined),
+                              ),
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 4, 6),
+                            child: approveButton,
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Voltar ao esboço',
+                            onPressed: () => setState(
+                              () => _showEpisodeScriptEditor = false,
+                            ),
+                            icon: const Icon(Icons.arrow_back),
+                          ),
+                          Expanded(
+                            child: Text(
+                              'EP${episode.number} · $displayTitle · Roteiro',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _isSaving ? null : _saveProject,
+                            icon: const Icon(Icons.save_outlined, size: 18),
+                            label: const Text('Salvar'),
+                          ),
+                          const SizedBox(width: 8),
+                          approveButton,
+                        ],
+                      ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: scenes.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        generating
+                            ? 'A IA está escrevendo o roteiro deste episódio...'
+                            : 'Ainda não há cenas. Gere o roteiro para editar.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
                     ),
-              label: Text(
-                productionReady
-                    ? 'Entrar na produção de vídeo'
-                    : _isApprovingScript
-                    ? 'Preparando produção...'
-                    : 'Aprovar e liberar produção',
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: scenes.isEmpty
-          ? Center(
-              child: FilledButton.icon(
-                onPressed: () => _generateEpisodeScript(_episodeIndex),
-                icon: const Icon(Icons.description_outlined),
-                label: const Text('Gerar roteiro detalhado'),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 110),
-              children: [
-                _panel(
-                  title: 'Roteiro do episódio',
-                  icon: Icons.description_outlined,
-                  trailing: Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
                     children: [
-                      _pill('${scenes.length} cenas'),
-                      _pill('${script['shot_count'] ?? 0} shots'),
-                      _pill(
-                        'até ${script['max_shot_duration_seconds'] ?? 10}s por shot',
+                      _panel(
+                        title: 'Roteiro do episódio',
+                        icon: Icons.description_outlined,
+                        trailing: Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            _pill('${scenes.length} cenas'),
+                            _pill('${script['shot_count'] ?? 0} shots'),
+                            _pill(_timecode(episode.durationSeconds)),
+                            _pill(
+                              scriptLocked ? 'BLOQUEADO' : 'EDITÁVEL',
+                              scriptLocked
+                                  ? AppColors.success
+                                  : AppColors.warning,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          durationWarning == null || durationWarning.isEmpty
+                              ? 'Revise falas, ações e durações à direita. O progresso da geração aparece no chat.'
+                              : 'Roteiro salvo para revisão. Ajuste as durações se necessário: $durationWarning',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            height: 1.45,
+                          ),
+                        ),
                       ),
-                      _pill(_timecode(episode.durationSeconds)),
-                      _pill(
-                        scriptLocked ? 'ROTEIRO BLOQUEADO' : 'EM REVISÃO',
-                        scriptLocked ? AppColors.success : AppColors.warning,
+                      const SizedBox(height: 14),
+                      ...scenes.asMap().entries.map(
+                        (entry) => _buildEditableScriptSceneCard(
+                          entry.value,
+                          sceneIndex: entry.key,
+                          locked: scriptLocked,
+                        ),
                       ),
                     ],
                   ),
-                  child: const Text(
-                    'Revise cenas, falas, ações e durações. Ao aprovar, o texto e a ordem causal ficam bloqueados e cada Shot passa para a produção como um prompt independente.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ...scenes.map(_buildScriptSceneCard),
-              ],
-            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildScriptSceneCard(Map<String, dynamic> scene) {
+  Widget _buildEditableScriptSceneCard(
+    Map<String, dynamic> scene, {
+    required int sceneIndex,
+    required bool locked,
+  }) {
     final shots = (scene['shots'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -171,14 +256,14 @@ extension _AdminProductionEditorStudioExtension
               children: [
                 Expanded(
                   child: Text(
-                    'Cena ${scene['scene']} · ${scene['title']}',
+                    'Cena ${_sceneNumber(scene, fallback: sceneIndex + 1)} · ${_sceneTitle(scene)}',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-                _pill('${shots.length} shots'),
+                _pill('${shots.length} planos'),
               ],
             ),
           ),
@@ -187,33 +272,38 @@ extension _AdminProductionEditorStudioExtension
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  '[Episode ${scene['episode']} - Scene ${scene['scene']} | ${scene['location']} | ${scene['time_of_day']} ${scene['interior_exterior']} | ${scene['dramatic_beat']}]',
-                  style: const TextStyle(fontSize: 14, height: 1.5),
+                Text(
+                  [
+                    _sceneLocation(scene),
+                    scene['time_of_day'],
+                    scene['interior_exterior'],
+                  ].where((item) => _visibleText(item).isNotEmpty).join(' · '),
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 8),
-                SelectableText(
-                  'Cast: ${(scene['cast'] as List<dynamic>? ?? const []).join(', ')}',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
+                TextFormField(
+                  initialValue: scene['story']?.toString() ?? '',
+                  minLines: 2,
+                  maxLines: 5,
+                  enabled: !locked,
+                  decoration: const InputDecoration(
+                    labelText: 'Beats da cena',
+                    alignLabelWithHint: true,
+                  ),
+                  onChanged: (value) => _patchEpisodeScriptField(
+                    sceneIndex: sceneIndex,
+                    updater: (current) => {...current, 'story': value},
                   ),
                 ),
-                const SizedBox(height: 18),
-                const Text(
-                  'Story:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                SelectableText(
-                  scene['story']?.toString() ?? '',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    height: 1.5,
+                const SizedBox(height: 16),
+                ...shots.asMap().entries.map(
+                  (entry) => _buildEditableScriptShot(
+                    entry.value,
+                    sceneIndex: sceneIndex,
+                    shotIndex: entry.key,
+                    locked: locked,
                   ),
                 ),
-                const Divider(height: 32),
-                ...shots.map(_buildScriptShot),
               ],
             ),
           ),
@@ -222,50 +312,168 @@ extension _AdminProductionEditorStudioExtension
     );
   }
 
-  Widget _buildScriptShot(Map<String, dynamic> shot) {
+  Widget _buildEditableScriptShot(
+    Map<String, dynamic> shot, {
+    required int sceneIndex,
+    required int shotIndex,
+    required bool locked,
+  }) {
     final rows = (shot['rows'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Shot ${shot['number']}',
+            'Plano ${shot['number']} · ${shot['duration_seconds']}s',
             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
-          ...rows.map((row) {
+          ...rows.asMap().entries.map((entry) {
+            final row = entry.value;
             final duration = row['duration_seconds'];
-            final text = row['type'] == 'dialogue'
-                ? '${row['speaker']}: (${row['performance']}) ${row['text']} (${duration}s)'
-                : '(action) ${row['text']} (${duration}s)';
+            final isDialogue = row['type'] == 'dialogue';
             return Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: SelectableText(
-                text,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  height: 1.5,
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextFormField(
+                initialValue: isDialogue
+                    ? '${row['speaker']}: ${row['text']}'
+                    : row['text']?.toString() ?? '',
+                minLines: 1,
+                maxLines: 4,
+                enabled: !locked,
+                decoration: InputDecoration(
+                  labelText: isDialogue
+                      ? 'Diálogo (${duration}s)'
+                      : 'Ação (${duration}s)',
+                ),
+                onChanged: (value) => _patchEpisodeScriptRow(
+                  sceneIndex: sceneIndex,
+                  shotIndex: shotIndex,
+                  rowIndex: entry.key,
+                  text: value,
                 ),
               ),
             );
           }),
-          Text(
-            'Duration: ${shot['duration_seconds']}s',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
         ],
       ),
     );
   }
 
+  void _patchEpisodeScriptField({
+    required int sceneIndex,
+    required Map<String, dynamic> Function(Map<String, dynamic> scene) updater,
+  }) {
+    _rewriteCurrentEpisodeScript((script) {
+      final scenes = (script['scenes'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (sceneIndex < 0 || sceneIndex >= scenes.length) return script;
+      scenes[sceneIndex] = updater(scenes[sceneIndex]);
+      return {...script, 'scenes': scenes};
+    });
+  }
+
+  void _patchEpisodeScriptRow({
+    required int sceneIndex,
+    required int shotIndex,
+    required int rowIndex,
+    required String text,
+  }) {
+    _rewriteCurrentEpisodeScript((script) {
+      final scenes = (script['scenes'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (sceneIndex < 0 || sceneIndex >= scenes.length) return script;
+      final scene = Map<String, dynamic>.from(scenes[sceneIndex]);
+      final shots = (scene['shots'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (shotIndex < 0 || shotIndex >= shots.length) return script;
+      final shot = Map<String, dynamic>.from(shots[shotIndex]);
+      final rows = (shot['rows'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (rowIndex < 0 || rowIndex >= rows.length) return script;
+      final row = Map<String, dynamic>.from(rows[rowIndex]);
+      if (row['type'] == 'dialogue') {
+        final split = text.split(':');
+        if (split.length > 1) {
+          row['speaker'] = split.first.trim();
+          row['text'] = split.sublist(1).join(':').trim();
+        } else {
+          row['text'] = text.trim();
+        }
+      } else {
+        row['text'] = text.trim();
+      }
+      rows[rowIndex] = row;
+      shot['rows'] = rows;
+      shots[shotIndex] = shot;
+      scene['shots'] = shots;
+      scenes[sceneIndex] = scene;
+      return {...script, 'scenes': scenes};
+    });
+  }
+
+  void _rewriteCurrentEpisodeScript(
+    Map<String, dynamic> Function(Map<String, dynamic> script) update,
+  ) {
+    final project = _project;
+    final episode = _episode;
+    if (project == null || episode == null) return;
+    final scripts =
+        (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final index = scripts.indexWhere(
+      (item) => _studioEpisodeNumber(item['episode']) == episode.number,
+    );
+    if (index < 0) return;
+    final updatedScript = update(Map<String, dynamic>.from(scripts[index]));
+    scripts[index] = updatedScript;
+    final otherScenes =
+        (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) => _studioEpisodeNumber(item['episode']) != episode.number,
+            )
+            .toList();
+    final sceneCards = [
+      ...otherScenes,
+      ...(updatedScript['scenes'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item)),
+    ];
+    setState(() {
+      _project = project.copyWith(
+        seriesBible: {
+          ...project.seriesBible,
+          'episode_scripts': scripts,
+          'scene_cards': sceneCards,
+        },
+      );
+    });
+    _schedulePersist();
+  }
+
   Widget _buildStudioMainPane() {
     return switch (_studioTabIndex) {
       0 => ColoredBox(color: const Color(0xFF121418), child: _buildOverview()),
-      1 => _buildScript(),
+      1 =>
+        _showEpisodeScriptEditor
+            ? _buildInlineEpisodeScriptPane()
+            : _buildScript(),
       2 => _buildReferences(
         categories: const {
           'CHARACTER_MASTER',
@@ -323,7 +531,7 @@ extension _AdminProductionEditorStudioExtension
         title: Text('${_project?.title ?? 'Studio'} • editor tecnico'),
         actions: [
           IconButton(
-            tooltip: 'Salvar localmente',
+            tooltip: 'Salvar na API',
             onPressed: _isSaving ? null : _saveProject,
             icon: _isSaving
                 ? const SizedBox(
@@ -391,114 +599,198 @@ extension _AdminProductionEditorStudioExtension
       (Icons.landscape_outlined, 'Ambientes'),
       (Icons.inventory_2_outlined, 'Adereços'),
     ];
-    return Container(
-      height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+    return ColoredBox(
       color: const Color(0xFF17191D),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          final compact = constraints.maxWidth < 720;
           final wide = constraints.maxWidth >= 1180;
-          return Row(
-            children: [
-              IconButton(
-                tooltip: 'Voltar',
-                onPressed: () => context.pop(),
-                icon: const Icon(Icons.arrow_back),
-              ),
-              const SizedBox(width: 4),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: wide ? 210 : 150),
-                child: Text(
-                  project.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+          final saveButton = IconButton(
+            tooltip: 'Salvar',
+            onPressed: _isSaving ? null : _saveProject,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+          );
+          final boardButton = compact
+              ? IconButton(
+                  tooltip: 'Quadro do projeto',
+                  onPressed: () => setState(() => _showTechnicalEditor = true),
+                  icon: const Icon(Icons.dashboard_customize_outlined),
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => setState(() => _showTechnicalEditor = true),
+                  icon: const Icon(
+                    Icons.dashboard_customize_outlined,
+                    size: 18,
+                  ),
+                  label: Text(wide ? 'Abrir quadro do projeto' : 'Quadro'),
+                );
+          final title = Text(
+            project.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          );
+          if (compact) {
+            return Column(
+              children: [
+                SizedBox(
+                  height: 52,
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Voltar',
+                        onPressed: () => context.pop(),
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(child: title),
+                      if (_isAutomaticPreparationRunning)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Text(
+                            '$_automaticPreparationCompleted/$_automaticPreparationTotal',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      boardButton,
+                      saveButton,
+                    ],
                   ),
                 ),
-              ),
-              if (wide) ...[
-                const SizedBox(width: 22),
-                TextButton(
-                  onPressed: () => _showStudioMessage(
-                    'Envie seu feedback pelo canal da equipe.',
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: tabs.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final selected = _studioTabIndex == index;
+                      return ChoiceChip(
+                        avatar: Icon(tabs[index].$1, size: 16),
+                        label: Text(tabs[index].$2),
+                        selected: selected,
+                        visualDensity: VisualDensity.compact,
+                        selectedColor: AppColors.primary.withAlpha(55),
+                        backgroundColor: AppColors.surface,
+                        side: BorderSide(
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.surfaceLighter,
+                        ),
+                        onSelected: (_) => _selectStudioTab(index),
+                      );
+                    },
                   ),
-                  child: const Text('Feedback'),
                 ),
               ],
-              const Spacer(),
-              if (wide)
-                ...List.generate(tabs.length, (index) {
-                  final selected = _studioTabIndex == index;
-                  return _studioTopTab(
-                    icon: tabs[index].$1,
-                    label: tabs[index].$2,
-                    selected: selected,
-                    onTap: () => setState(() => _studioTabIndex = index),
-                  );
-                })
-              else
-                PopupMenuButton<int>(
-                  tooltip: 'Seções do projeto',
-                  initialValue: _studioTabIndex,
-                  onSelected: (value) =>
-                      setState(() => _studioTabIndex = value),
-                  itemBuilder: (_) => List.generate(
-                    tabs.length,
-                    (index) => PopupMenuItem(
-                      value: index,
-                      child: Row(
-                        children: [
-                          Icon(tabs[index].$1, size: 18),
-                          const SizedBox(width: 10),
-                          Text(tabs[index].$2),
-                        ],
+            );
+          }
+          return SizedBox(
+            height: 72,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Voltar',
+                    onPressed: () => context.pop(),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  const SizedBox(width: 4),
+                  Flexible(flex: 2, child: title),
+                  if (wide) ...[
+                    const SizedBox(width: 22),
+                    TextButton(
+                      onPressed: () => _showStudioMessage(
+                        'Envie seu feedback pelo canal da equipe.',
+                      ),
+                      child: const Text('Feedback'),
+                    ),
+                  ],
+                  const SizedBox(width: 12),
+                  if (wide)
+                    ...List.generate(tabs.length, (index) {
+                      final selected = _studioTabIndex == index;
+                      return _studioTopTab(
+                        icon: tabs[index].$1,
+                        label: tabs[index].$2,
+                        selected: selected,
+                        onTap: () => _selectStudioTab(index),
+                      );
+                    })
+                  else
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: PopupMenuButton<int>(
+                          tooltip: 'Seções do projeto',
+                          initialValue: _studioTabIndex,
+                          onSelected: _selectStudioTab,
+                          itemBuilder: (_) => List.generate(
+                            tabs.length,
+                            (index) => PopupMenuItem(
+                              value: index,
+                              child: Row(
+                                children: [
+                                  Icon(tabs[index].$1, size: 18),
+                                  const SizedBox(width: 10),
+                                  Text(tabs[index].$2),
+                                ],
+                              ),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(tabs[_studioTabIndex].$1, size: 18),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    tabs[_studioTabIndex].$2,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.arrow_drop_down),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Row(
-                      children: [
-                        Icon(tabs[_studioTabIndex].$1, size: 18),
-                        const SizedBox(width: 8),
-                        Text(tabs[_studioTabIndex].$2),
-                        const Icon(Icons.arrow_drop_down),
-                      ],
+                  const SizedBox(width: 8),
+                  boardButton,
+                  if (_isAutomaticPreparationRunning) ...[
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        'Preparação $_automaticPreparationCompleted/$_automaticPreparationTotal',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              const SizedBox(width: 10),
-              OutlinedButton.icon(
-                onPressed: () => setState(() => _showTechnicalEditor = true),
-                icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
-                label: Text(wide ? 'Abrir quadro do projeto' : 'Quadro'),
+                  ],
+                  saveButton,
+                ],
               ),
-              if (_isAutomaticPreparationRunning) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'Preparação $_automaticPreparationCompleted/$_automaticPreparationTotal',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Salvar',
-                onPressed: _isSaving ? null : _saveProject,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-              ),
-            ],
+            ),
           );
         },
       ),
@@ -559,16 +851,15 @@ extension _AdminProductionEditorStudioExtension
         ),
       );
     }
-    final episodeScript = _episodeScriptFor(project, episode.number);
-    final hasDetailedScript = episodeScript.isNotEmpty;
+    final hasDetailedScript = _hasEpisodeScriptDraft(project, episode.number);
     final productionReady = episode.takes.isNotEmpty;
     final characterCount = project.references
         .where((item) => item.category.contains('CHARACTER'))
         .length;
     final nextEpisodeIndex = _episodeIndex + 1;
     final hasNextEpisode = nextEpisodeIndex < project.episodes.length;
-    final previewText = episode.summary.trim().isNotEmpty
-        ? episode.summary
+    final previewText = _visibleText(episode.summary).isNotEmpty
+        ? _visibleText(episode.summary)
         : _bibleText(project, 'logline', fallback: project.description);
     return ColoredBox(
       color: const Color(0xFF14161A),
@@ -578,13 +869,17 @@ extension _AdminProductionEditorStudioExtension
             height: 70,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             alignment: Alignment.centerLeft,
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
-                SizedBox(width: 12),
-                Text(
-                  'Assistente de redação de AI',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                const Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Assistente de redação de AI',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ),
@@ -592,25 +887,18 @@ extension _AdminProductionEditorStudioExtension
           const Divider(height: 1),
           Expanded(
             child: ListView(
+              controller: _assistantScrollController,
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               children: [
-                if (_isAutomaticPreparationRunning || _activeAiAction != null)
-                  _assistantStatusCard(),
-                if (_assistantRequest != null) ...[
-                  _assistantUserBubble(_assistantRequest!),
-                  const SizedBox(height: 12),
-                ],
-                _assistantAiBubble(
-                  child: _assistantConversationBody(
-                    fallback: Text(
-                      previewText,
-                      maxLines: 12,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        height: 1.55,
-                        fontSize: 13,
-                      ),
+                _buildAssistantTurns(
+                  fallback: Text(
+                    previewText,
+                    maxLines: 12,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      height: 1.55,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -657,13 +945,8 @@ extension _AdminProductionEditorStudioExtension
                           if (hasNextEpisode) {
                             setState(() => _episodeIndex = nextEpisodeIndex);
                             _generateEpisodeScript(nextEpisodeIndex);
-                          } else if (productionReady) {
-                            setState(() {
-                              _episodeProductionMode = true;
-                              _sectionIndex = 2;
-                            });
-                          } else if (hasDetailedScript) {
-                            setState(() => _showEpisodeScriptEditor = true);
+                          } else if (productionReady || hasDetailedScript) {
+                            _openEpisodeProduction();
                           } else {
                             _generateEpisodeScript(_episodeIndex);
                           }
@@ -718,13 +1001,17 @@ extension _AdminProductionEditorStudioExtension
             height: 70,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             alignment: Alignment.centerLeft,
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
-                SizedBox(width: 12),
-                Text(
-                  'Assistente de redação de AI',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                const Icon(Icons.auto_awesome, color: Color(0xFF9B8CFF)),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Assistente de redação de AI',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ),
@@ -732,6 +1019,7 @@ extension _AdminProductionEditorStudioExtension
           const Divider(height: 1),
           Expanded(
             child: ListView(
+              controller: _assistantScrollController,
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               children: [
                 const Text(
@@ -843,25 +1131,14 @@ extension _AdminProductionEditorStudioExtension
                 ),
                 const SizedBox(height: 14),
                 _creationAutoGenerateTile(automaticPreparation),
-                if (_isAutomaticPreparationRunning || _activeAiAction != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 14),
-                    child: _assistantStatusCard(),
-                  ),
-                if (_assistantRequest != null) ...[
-                  const SizedBox(height: 14),
-                  _assistantUserBubble(_assistantRequest!),
-                ],
                 const SizedBox(height: 14),
-                _assistantAiBubble(
-                  child: _assistantConversationBody(
-                    fallback: const Text(
-                      'Descreva a ideia da sua história no bate-papo abaixo. O contrato da série — logline, protagonista, força oposta, pergunta central e risco — será pensado aqui, a partir do tema escolhido.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        height: 1.55,
-                        fontSize: 13,
-                      ),
+                _buildAssistantTurns(
+                  fallback: const Text(
+                    'Descreva a ideia da sua história no bate-papo abaixo. O contrato da série — logline, protagonista, força oposta, pergunta central e risco — será pensado aqui, a partir do tema escolhido.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      height: 1.55,
+                      fontSize: 13,
                     ),
                   ),
                 ),
@@ -1193,56 +1470,82 @@ extension _AdminProductionEditorStudioExtension
     );
   }
 
-  Widget _assistantStatusCard() {
-    final preparing = _isAutomaticPreparationRunning;
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: preparing
-            ? AppColors.success.withAlpha(18)
-            : AppColors.primary.withAlpha(20),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: preparing
-              ? AppColors.success.withAlpha(65)
-              : AppColors.primary.withAlpha(65),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget _buildAssistantTurns({required Widget fallback}) {
+    if (_assistantTurns.isEmpty) {
+      return _assistantAiBubble(
+        child: _assistantConversationBody(fallback: fallback),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var index = 0; index < _assistantTurns.length; index++) ...[
+          if (index > 0) const SizedBox(height: 12),
+          if (_assistantTurns[index].role == 'user')
+            _assistantUserBubble(_assistantTurns[index].text)
+          else
+            _assistantAiBubble(
+              child: _buildAssistantTurnBody(_assistantTurns[index]),
+            ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildAssistantTurnBody(_StudioChatTurn turn) {
+    final text = turn.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (text.isNotEmpty)
+          Text(
+            text,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              height: 1.55,
+              fontSize: 13,
+            ),
+          )
+        else if (_pendingChatContract != null)
+          _creationContractCard(),
+        if (turn.busy) ...[
+          if (text.isNotEmpty || _pendingChatContract != null)
+            const SizedBox(height: 10),
           Row(
             children: [
               const SizedBox(
-                width: 16,
-                height: 16,
+                width: 14,
+                height: 14,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              const SizedBox(width: 9),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  preparing
-                      ? (_automaticPreparationMessage ??
-                            'Preparando projeto...')
-                      : (_activeAiMessage ?? 'Gerando com IA...'),
-                  style: const TextStyle(fontSize: 12),
+                  _activeAiMessage ??
+                      _automaticPreparationMessage ??
+                      'escrevendo...',
+                  style: const TextStyle(
+                    color: AppColors.primaryLight,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: preparing
-                ? (_automaticPreparationTotal <= 0
-                      ? null
-                      : _automaticPreparationCompleted /
-                            _automaticPreparationTotal)
-                : (_activeAiProgress <= 0 ? null : _activeAiProgress / 100),
-          ),
+          if (_activeAiProgress > 0 || _isAutomaticPreparationRunning) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: _isAutomaticPreparationRunning
+                  ? (_automaticPreparationTotal <= 0
+                        ? null
+                        : _automaticPreparationCompleted /
+                              _automaticPreparationTotal)
+                  : (_activeAiProgress <= 0 ? null : _activeAiProgress / 100),
+            ),
+          ],
         ],
-      ),
+      ],
     );
   }
 
@@ -1416,10 +1719,7 @@ extension _AdminProductionEditorStudioExtension
   void _submitAssistantRequest() {
     final value = _assistantController.text.trim();
     if (value.isEmpty || _isAnyGenerationBusy) return;
-    setState(() {
-      _assistantRequest = value;
-      _assistantController.clear();
-    });
+    _assistantController.clear();
     if (_isChatBrief) {
       unawaited(_developSeriesFromChat(value));
       return;

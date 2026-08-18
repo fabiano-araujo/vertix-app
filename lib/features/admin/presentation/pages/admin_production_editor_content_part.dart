@@ -149,10 +149,7 @@ extension _AdminProductionEditorContentExtension
     bool compact = false,
   }) {
     final hasScript = episode.takes.isNotEmpty;
-    final hasScriptDraft = _episodeScriptFor(
-      _project!,
-      episode.number,
-    ).isNotEmpty;
+    final hasScriptDraft = _hasEpisodeScriptDraft(_project!, episode.number);
     final generatingScript = _generatingScriptEpisodeNumber == episode.number;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -191,8 +188,10 @@ extension _AdminProductionEditorContentExtension
               ? _simulateEpisode
               : hasScriptDraft
               ? () => setState(() {
+                  _episodeProductionMode = false;
                   _showTechnicalEditor = false;
                   _showEpisodeScriptEditor = true;
+                  _studioTabIndex = 1;
                 })
               : () => _generateEpisodeScript(_episodeIndex),
           icon: _isGeneratingEpisode || generatingScript
@@ -458,7 +457,7 @@ extension _AdminProductionEditorContentExtension
       color: const Color(0xFF121418),
       child: ListView(
         key: const PageStorageKey('production-script'),
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
           _buildOutlineToolbar(),
           const SizedBox(height: 16),
@@ -529,40 +528,55 @@ extension _AdminProductionEditorContentExtension
   }
 
   Widget _buildOutlineToolbar() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _outlineToolButton(
-          icon: Icons.add,
-          label: 'Adicionar episódio',
-          onTap: _addBlankEpisode,
-        ),
-        _outlineToolButton(
-          icon: Icons.auto_awesome,
-          label: 'Esboço do AI Optimize',
-          onTap: _isAnyGenerationBusy || _isChatBrief
-              ? null
-              : _generateSeriesOutlineWithCodex,
-        ),
-        _outlineToolButton(
-          icon: Icons.ios_share_outlined,
-          label: 'Exportar script e ativos',
-          onTap: _saveProject,
-        ),
-        _outlineToolButton(
-          icon: Icons.view_list_outlined,
-          label: 'Lista de cenas',
-          selected: !_showHookChain,
-          onTap: () => setState(() => _showHookChain = false),
-        ),
-        _outlineToolButton(
-          icon: Icons.account_tree_outlined,
-          label: 'Corrente de gancho',
-          selected: _showHookChain,
-          onTap: () => setState(() => _showHookChain = true),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 720;
+        final buttons = [
+          _outlineToolButton(
+            icon: Icons.add,
+            label: compact ? 'Episódio' : 'Adicionar episódio',
+            onTap: _addBlankEpisode,
+          ),
+          _outlineToolButton(
+            icon: Icons.auto_awesome,
+            label: compact ? 'Otimizar' : 'Esboço do AI Optimize',
+            onTap: _isAnyGenerationBusy || _isChatBrief
+                ? null
+                : _generateSeriesOutlineWithCodex,
+          ),
+          _outlineToolButton(
+            icon: Icons.ios_share_outlined,
+            label: compact ? 'Exportar' : 'Exportar script e ativos',
+            onTap: _saveProject,
+          ),
+          _outlineToolButton(
+            icon: Icons.view_list_outlined,
+            label: compact ? 'Cenas' : 'Lista de cenas',
+            selected: !_showHookChain,
+            onTap: () => setState(() => _showHookChain = false),
+          ),
+          _outlineToolButton(
+            icon: Icons.account_tree_outlined,
+            label: compact ? 'Ganchos' : 'Corrente de gancho',
+            selected: _showHookChain,
+            onTap: () => setState(() => _showHookChain = true),
+          ),
+        ];
+        if (compact) {
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (var index = 0; index < buttons.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  buttons[index],
+                ],
+              ],
+            ),
+          );
+        }
+        return Wrap(spacing: 8, runSpacing: 8, children: buttons);
+      },
     );
   }
 
@@ -577,6 +591,10 @@ extension _AdminProductionEditorContentExtension
       style: OutlinedButton.styleFrom(
         foregroundColor: selected ? Colors.white : AppColors.textSecondary,
         backgroundColor: selected ? Colors.white12 : Colors.transparent,
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         side: BorderSide(
           color: selected ? Colors.white38 : AppColors.surfaceLighter,
         ),
@@ -607,9 +625,13 @@ extension _AdminProductionEditorContentExtension
             children: [
               Icon(Icons.auto_stories_outlined, color: purple, size: 18),
               SizedBox(width: 8),
-              Text(
-                'Visão geral do projeto',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              Expanded(
+                child: Text(
+                  'Visão geral do projeto',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
               ),
             ],
           ),
@@ -652,10 +674,13 @@ extension _AdminProductionEditorContentExtension
             spacing: 8,
             runSpacing: 8,
             children: [
-              _pill('${project.episodes.length} episódios', purple),
+              _pill(
+                _countNoun(project.episodes.length, 'episódio', 'episódios'),
+                purple,
+              ),
               _pill(_longDuration(totalSeconds)),
-              _pill('$characterCount personagens'),
-              _pill('$locationCount ambientes'),
+              _pill(_countNoun(characterCount, 'personagem', 'personagens')),
+              _pill(_countNoun(locationCount, 'ambiente', 'ambientes')),
             ],
           ),
         ],
@@ -683,6 +708,7 @@ extension _AdminProductionEditorContentExtension
       _episodeIndex = project.episodes.length;
       _showHookChain = false;
     });
+    _schedulePersist();
   }
 
   Widget _buildOutlineEpisodeCard(
@@ -691,15 +717,18 @@ extension _AdminProductionEditorContentExtension
   ) {
     final selected = episodeIndex == _episodeIndex;
     final sceneCards = _sceneCardsForEpisode(_project!, episode.number);
-    final episodeScript = _episodeScriptFor(_project!, episode.number);
     final outlineCard = _episodeCardFor(_project!, episode.number);
     final stageGoal = outlineCard['stage_goal']?.toString().trim() ?? '';
     final emotionalBeat =
         outlineCard['emotional_beat']?.toString().trim() ?? '';
     final valueShift = outlineCard['value_shift']?.toString().trim() ?? '';
-    final hasDetailedScript = episodeScript.isNotEmpty && sceneCards.isNotEmpty;
+    final hasDetailedScript = _hasEpisodeScriptDraft(_project!, episode.number);
     final productionReady = episode.takes.isNotEmpty;
     final generatingScript = _generatingScriptEpisodeNumber == episode.number;
+    final displayTitle = _episodeDisplayTitle(episode, outlineCard);
+    final displaySummary = _episodeDisplaySummary(episode, outlineCard);
+    final displayCliffhanger = _episodeDisplayCliffhanger(episode, outlineCard);
+    final compact = MediaQuery.sizeOf(context).width < 720;
     return Card(
       color: const Color(0xFF1A1C22),
       margin: const EdgeInsets.only(bottom: 14),
@@ -718,7 +747,7 @@ extension _AdminProductionEditorContentExtension
       child: InkWell(
         onTap: () => setState(() => _episodeIndex = episodeIndex),
         child: Padding(
-          padding: const EdgeInsets.all(15),
+          padding: EdgeInsets.all(compact ? 12 : 15),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -735,7 +764,9 @@ extension _AdminProductionEditorContentExtension
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      episode.title,
+                      displayTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -773,20 +804,21 @@ extension _AdminProductionEditorContentExtension
                 ),
                 const SizedBox(height: 8),
               ],
-              Text(
-                episode.summary.isNotEmpty
-                    ? episode.summary
-                    : episode.status == 'GENERATING'
-                    ? 'A IA está escrevendo este episódio...'
-                    : episode.summary,
-                maxLines: 5,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                  height: 1.45,
+              if (displaySummary.isNotEmpty ||
+                  episode.status == 'GENERATING') ...[
+                Text(
+                  displaySummary.isNotEmpty
+                      ? displaySummary
+                      : 'A IA está escrevendo este episódio...',
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.45,
+                  ),
                 ),
-              ),
+              ],
               if (valueShift.isNotEmpty) ...[
                 const SizedBox(height: 9),
                 Text(
@@ -813,7 +845,9 @@ extension _AdminProductionEditorContentExtension
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        episode.cliffhanger,
+                        displayCliffhanger.isNotEmpty
+                            ? displayCliffhanger
+                            : 'Defina o cliffhanger do episódio.',
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 11, height: 1.35),
@@ -831,7 +865,7 @@ extension _AdminProductionEditorContentExtension
                   _pill(_timecode(episode.durationSeconds)),
                   if (hasDetailedScript) ...[
                     _pill(
-                      'Script concluído (${sceneCards.length} batidas)',
+                      'Script concluído (${sceneCards.length} cenas)',
                       const Color(0xFF7DCE82),
                     ),
                     _pill(
@@ -842,53 +876,106 @@ extension _AdminProductionEditorContentExtension
                 ],
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: generatingScript
-                      ? null
-                      : () {
-                          setState(() => _episodeIndex = episodeIndex);
-                          if (productionReady || hasDetailedScript) {
-                            setState(() => _showEpisodeScriptEditor = true);
-                          } else {
-                            _generateEpisodeScript(episodeIndex);
-                          }
-                        },
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white24),
-                    backgroundColor: Colors.white10,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    generatingScript
-                        ? 'Gerando roteiro...'
-                        : hasDetailedScript || productionReady
-                        ? 'Ver/Editar script'
-                        : 'Gerar script',
-                  ),
+              if (compact)
+                Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: generatingScript
+                            ? null
+                            : () {
+                                setState(() => _episodeIndex = episodeIndex);
+                                if (productionReady || hasDetailedScript) {
+                                  setState(() {
+                                    _studioTabIndex = 1;
+                                    _showEpisodeScriptEditor = true;
+                                  });
+                                } else {
+                                  _generateEpisodeScript(episodeIndex);
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white24),
+                          backgroundColor: Colors.white10,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: Text(
+                          generatingScript
+                              ? 'Gerando roteiro...'
+                              : hasDetailedScript || productionReady
+                              ? 'Ver roteiro'
+                              : 'Gerar roteiro',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            _openEpisodeProduction(episodeIndex: episodeIndex),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        icon: const Icon(Icons.movie_filter_outlined, size: 18),
+                        label: const Text('Produção de vídeo'),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: generatingScript
+                            ? null
+                            : () {
+                                setState(() => _episodeIndex = episodeIndex);
+                                if (productionReady || hasDetailedScript) {
+                                  setState(() {
+                                    _studioTabIndex = 1;
+                                    _showEpisodeScriptEditor = true;
+                                  });
+                                } else {
+                                  _generateEpisodeScript(episodeIndex);
+                                }
+                              },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white24),
+                          backgroundColor: Colors.white10,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Text(
+                          generatingScript
+                              ? 'Gerando roteiro...'
+                              : hasDetailedScript || productionReady
+                              ? 'Ver/Editar script'
+                              : 'Gerar script',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            _openEpisodeProduction(episodeIndex: episodeIndex),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: const Icon(Icons.movie_filter_outlined, size: 18),
+                        label: const Text('Produção de vídeo'),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => setState(() {
-                    _episodeIndex = episodeIndex;
-                    _showEpisodeScriptEditor = false;
-                    _episodeProductionMode = true;
-                    _sectionIndex = 2;
-                  }),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  icon: const Icon(Icons.movie_filter_outlined, size: 18),
-                  label: const Text('Entre na produção de vídeo'),
-                ),
-              ),
               if (selected && sceneCards.isNotEmpty) ...[
                 const Divider(height: 22),
                 const Text(
@@ -901,8 +988,12 @@ extension _AdminProductionEditorContentExtension
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...sceneCards.map(
-                  (scene) => Container(
+                ...sceneCards.asMap().entries.map((entry) {
+                  final scene = entry.value;
+                  final title = _sceneTitle(scene);
+                  final meta = _sceneMetaLine(scene);
+                  final story = _sceneStory(scene);
+                  return Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 7),
                     padding: const EdgeInsets.all(10),
@@ -914,35 +1005,41 @@ extension _AdminProductionEditorContentExtension
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Cena ${scene['scene']} · ${scene['title']}',
+                          title.isEmpty
+                              ? 'Cena ${_sceneNumber(scene, fallback: entry.key + 1)}'
+                              : 'Cena ${_sceneNumber(scene, fallback: entry.key + 1)} · $title',
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${scene['location']} · ${(scene['cast'] as List<dynamic>? ?? const []).join(', ')}',
-                          style: const TextStyle(
-                            color: AppColors.textTertiary,
-                            fontSize: 9,
+                        if (meta.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            meta,
+                            style: const TextStyle(
+                              color: AppColors.textTertiary,
+                              fontSize: 9,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          scene['story']?.toString() ?? '',
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            height: 1.35,
+                        ],
+                        if (story.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            story,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                              height: 1.35,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
-                  ),
-                ),
+                  );
+                }),
               ],
             ],
           ),
@@ -1192,7 +1289,7 @@ extension _AdminProductionEditorContentExtension
       .whereType<Map>()
       .map((item) => Map<String, dynamic>.from(item))
       .firstWhere(
-        (item) => item['episode'] == episodeNumber,
+        (item) => _studioEpisodeNumber(item['episode']) == episodeNumber,
         orElse: () => const <String, dynamic>{},
       );
 
@@ -1203,26 +1300,51 @@ extension _AdminProductionEditorContentExtension
       .whereType<Map>()
       .map((item) => Map<String, dynamic>.from(item))
       .firstWhere(
-        (item) => item['episode'] == episodeNumber,
+        (item) => _studioEpisodeNumber(item['episode']) == episodeNumber,
         orElse: () => const <String, dynamic>{},
       );
+
+  bool _hasEpisodeScriptDraft(ProductionProject project, int episodeNumber) {
+    final scenes = _episodeScriptFor(project, episodeNumber)['scenes'];
+    return scenes is List && scenes.isNotEmpty;
+  }
 
   List<Map<String, dynamic>> _sceneCardsForEpisode(
     ProductionProject project,
     int episodeNumber,
-  ) => (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .where((item) => item['episode'] == episodeNumber)
-      .toList();
+  ) {
+    var cards =
+        (project.seriesBible['scene_cards'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .where(
+              (item) => _studioEpisodeNumber(item['episode']) == episodeNumber,
+            )
+            .toList();
+    if (cards.isEmpty) {
+      cards =
+          (_episodeScriptFor(project, episodeNumber)['scenes']
+                      as List<dynamic>? ??
+                  const [])
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+    }
+    return cards;
+  }
 
   String _bibleText(
     ProductionProject project,
     String key, {
     required String fallback,
   }) {
-    final value = project.seriesBible[key]?.toString().trim();
-    return value == null || value.isEmpty ? fallback : value;
+    dynamic raw = project.seriesBible[key];
+    if (raw == null) {
+      final nested = project.seriesBible['seriesBible'];
+      if (nested is Map) raw = nested[key];
+    }
+    final value = _visibleText(raw);
+    return value.isEmpty ? fallback : value;
   }
 
   String _longDuration(int seconds) {
@@ -1230,5 +1352,107 @@ extension _AdminProductionEditorContentExtension
     final minutes = (seconds % 3600) ~/ 60;
     if (hours > 0) return '${hours}h ${minutes}m';
     return '${minutes}m';
+  }
+
+  String _countNoun(int count, String singular, String plural) =>
+      '$count ${count == 1 ? singular : plural}';
+
+  String _visibleText(dynamic value) {
+    if (value == null) return '';
+    final text = value.toString().trim();
+    if (text.isEmpty || text == 'null' || text == 'undefined') return '';
+    if (_looksLikeJsonText(text)) return '';
+    return text;
+  }
+
+  bool _looksLikeJsonText(String value) {
+    final text = value.trim();
+    return (text.startsWith('{') && text.contains('}')) ||
+        (text.startsWith('[') && text.contains(']'));
+  }
+
+  String _episodeDisplayTitle(
+    ProductionEpisodeItem episode,
+    Map<String, dynamic> outlineCard,
+  ) {
+    final cardTitle = _visibleText(outlineCard['title']);
+    final title = _visibleText(episode.title);
+    final generic = RegExp(r'^epis[oó]dio\s*\d+$', caseSensitive: false);
+    final generating = RegExp(r'^gerando epis[oó]dio', caseSensitive: false);
+    if (title.isEmpty ||
+        generic.hasMatch(title) ||
+        generating.hasMatch(title)) {
+      return cardTitle.isNotEmpty ? cardTitle : 'Episódio ${episode.number}';
+    }
+    return title;
+  }
+
+  String _episodeDisplaySummary(
+    ProductionEpisodeItem episode,
+    Map<String, dynamic> outlineCard,
+  ) {
+    final summary = _visibleText(episode.summary);
+    if (summary.isNotEmpty) return summary;
+    for (final key in const ['treatment', 'cold_open', 'summary', 'story']) {
+      final value = _visibleText(outlineCard[key]);
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  String _episodeDisplayCliffhanger(
+    ProductionEpisodeItem episode,
+    Map<String, dynamic> outlineCard,
+  ) {
+    final cliffhanger = _visibleText(episode.cliffhanger);
+    final placeholder = RegExp(r'^defina o cliffhanger', caseSensitive: false);
+    if (cliffhanger.isNotEmpty && !placeholder.hasMatch(cliffhanger)) {
+      return cliffhanger;
+    }
+    for (final key in const ['peak_action', 'cliffhanger', 'exact_cut_point']) {
+      final value = _visibleText(outlineCard[key]);
+      if (value.isNotEmpty) return value;
+    }
+    return cliffhanger;
+  }
+
+  int _sceneNumber(Map<String, dynamic> scene, {required int fallback}) =>
+      _studioEpisodeNumber(scene['scene']) ??
+      _studioEpisodeNumber(scene['scene_number']) ??
+      _studioEpisodeNumber(scene['sceneNumber']) ??
+      _studioEpisodeNumber(scene['number']) ??
+      fallback;
+
+  String _sceneTitle(Map<String, dynamic> scene) =>
+      _visibleText(scene['title'] ?? scene['name'] ?? scene['heading']);
+
+  String _sceneLocation(Map<String, dynamic> scene) => _visibleText(
+    scene['location'] ??
+        scene['location_name'] ??
+        scene['locationName'] ??
+        scene['setting'] ??
+        scene['place'] ??
+        scene['time_and_location'] ??
+        scene['environment'],
+  );
+
+  String _sceneStory(Map<String, dynamic> scene) => _visibleText(
+    scene['story'] ??
+        scene['description'] ??
+        scene['synopsis'] ??
+        scene['beats'] ??
+        scene['action'] ??
+        scene['summary'],
+  );
+
+  String _sceneMetaLine(Map<String, dynamic> scene) {
+    final castRaw = scene['cast'] ?? scene['characters'] ?? scene['speakers'];
+    final cast = castRaw is List
+        ? castRaw.map(_visibleText).where((item) => item.isNotEmpty).join(', ')
+        : _visibleText(castRaw);
+    return [
+      _sceneLocation(scene),
+      cast,
+    ].where((item) => item.isNotEmpty).join(' · ');
   }
 }

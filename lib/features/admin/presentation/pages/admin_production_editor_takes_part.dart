@@ -14,24 +14,27 @@ extension _AdminProductionEditorTakesExtension
 
   Widget _buildTakes() {
     final episode = _episode!;
-    final hasScriptDraft = _episodeScriptFor(
-      _project!,
-      episode.number,
-    ).isNotEmpty;
+    final hasScriptDraft = _hasEpisodeScriptDraft(_project!, episode.number);
     if (episode.takes.isEmpty) {
       return ListView(
         key: const PageStorageKey('production-takes-empty'),
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
         children: [
           _panel(
-            title: 'Roteiro ainda não gerado',
-            icon: Icons.description_outlined,
+            title: hasScriptDraft
+                ? 'Roteiro gerado — revise e aprove'
+                : 'Roteiro ainda não gerado',
+            icon: hasScriptDraft
+                ? Icons.fact_check_outlined
+                : Icons.description_outlined,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'A produção só é liberada depois que o roteiro completo do episódio é revisado e aprovado.',
-                  style: TextStyle(
+                Text(
+                  hasScriptDraft
+                      ? 'O roteiro do EP${episode.number} já está salvo. Revise as cenas e aprove para liberar os takes de vídeo.'
+                      : 'A produção só é liberada depois que o roteiro completo do episódio é gerado, revisado e aprovado.',
+                  style: const TextStyle(
                     color: AppColors.textSecondary,
                     height: 1.45,
                   ),
@@ -40,8 +43,10 @@ extension _AdminProductionEditorTakesExtension
                 FilledButton.icon(
                   onPressed: hasScriptDraft
                       ? () => setState(() {
+                          _episodeProductionMode = false;
                           _showTechnicalEditor = false;
                           _showEpisodeScriptEditor = true;
+                          _studioTabIndex = 1;
                         })
                       : _generatingScriptEpisodeNumber == episode.number
                       ? null
@@ -57,6 +62,26 @@ extension _AdminProductionEditorTakesExtension
                         : 'Gerar roteiro por cenas',
                   ),
                 ),
+                if (hasScriptDraft) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _isApprovingScript
+                        ? null
+                        : _approveEpisodeScriptForProduction,
+                    icon: _isApprovingScript
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_outline),
+                    label: Text(
+                      _isApprovingScript
+                          ? 'Preparando produção...'
+                          : 'Aprovar e liberar produção',
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -220,6 +245,23 @@ extension _AdminProductionEditorTakesExtension
           icon: const Icon(Icons.tune, size: 16),
           label: const Text('Mais opções'),
         ),
+        FilledButton.icon(
+          onPressed: _isGeneratingEpisode ? null : _generateAllTakes,
+          style: FilledButton.styleFrom(
+            backgroundColor: _generateGold,
+            foregroundColor: Colors.black,
+            disabledBackgroundColor: _generateGold.withAlpha(90),
+          ),
+          icon: Icon(
+            _isGeneratingEpisode ? Icons.hourglass_top : Icons.auto_awesome,
+            size: 16,
+          ),
+          label: Text(
+            _isGeneratingEpisode
+                ? 'Gerando todos...'
+                : 'Gerar todos os takes',
+          ),
+        ),
       ],
     );
   }
@@ -229,14 +271,17 @@ extension _AdminProductionEditorTakesExtension
     int takeIndex,
     ProductionTakeItem take,
   ) {
-    final generating = take.status == 'GENERATING' || take.status == 'QUEUED';
+    final generating =
+        take.status == 'GENERATING' ||
+        take.status == 'QUEUED' ||
+        _isGeneratingEpisode;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
-          'Seedance 2.5 · ${take.durationSeconds}s · 720p · ${_transitionLabel(take.transitionMode)}',
+          'Dola Pre-Writes · Seedance 2.5 · ${take.durationSeconds}s · 720p · ${_transitionLabel(take.transitionMode)}',
           style: const TextStyle(
             color: AppColors.textTertiary,
             fontSize: 12,
@@ -254,7 +299,7 @@ extension _AdminProductionEditorTakesExtension
           label: const Text('Take mental'),
         ),
         FilledButton.icon(
-          onPressed: generating ? null : () => _simulateTake(takeIndex),
+          onPressed: generating ? null : () => _generateTakeWithDola(takeIndex),
           style: FilledButton.styleFrom(
             backgroundColor: _generateGold,
             foregroundColor: Colors.black,
@@ -284,10 +329,6 @@ extension _AdminProductionEditorTakesExtension
   Widget _buildTakePreviewPane(ProductionTakeItem take) {
     final references = _referencesForTake(take);
     final cover = references.isNotEmpty ? references.first : null;
-    final hasOutput =
-        take.outputUrl != null &&
-        take.outputUrl!.trim().isNotEmpty &&
-        !take.outputUrl!.startsWith('local://');
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 12, 10, 10),
       child: Column(
@@ -296,77 +337,19 @@ extension _AdminProductionEditorTakesExtension
             child: Center(
               child: AspectRatio(
                 aspectRatio: 9 / 16,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0C0D10),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: AppColors.surfaceLighter),
+                child: _InlineTakePlayer(
+                  key: _inlineTakePlayerKey,
+                  take: take,
+                  cover: cover == null ? null : _referencePreview(cover),
+                  onMentalTake: () => _showMentalTake(_currentTakeIndex),
+                  onAdjust: () => _showTakeAdvancedSheet(
+                    _episode!,
+                    _currentTakeIndex,
+                    take,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(17),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (cover != null)
-                          _referencePreview(cover)
-                        else
-                          const ColoredBox(color: Color(0xFF15171B)),
-                        const DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0x33000000), Color(0xCC000000)],
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 18),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  hasOutput
-                                      ? take.title
-                                      : 'Edite o prompt e clique em Gerar vídeo',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.35,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _previewGhostButton(
-                                      icon: Icons.visibility_outlined,
-                                      label: 'Ver take mental',
-                                      onTap: () =>
-                                          _showMentalTake(_currentTakeIndex),
-                                    ),
-                                    _previewGhostButton(
-                                      icon: Icons.tune,
-                                      label: 'Ajustar cena',
-                                      onTap: () => _showTakeAdvancedSheet(
-                                        _episode!,
-                                        _currentTakeIndex,
-                                        take,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  onPlaybackTick: () {
+                    if (mounted) setState(() {});
+                  },
                 ),
               ),
             ),
@@ -379,10 +362,15 @@ extension _AdminProductionEditorTakesExtension
   }
 
   Widget _buildTakePlaybackBar(ProductionTakeItem take) {
+    final player = _inlineTakePlayerKey.currentState;
+    final playing = player?.isPlaying ?? false;
+    final loading = player?.isLoading ?? false;
+    final position = player?.position ?? Duration.zero;
+    final duration = player?.duration ?? Duration(seconds: take.durationSeconds);
     return Row(
       children: [
         Text(
-          '0:00 / ${_timecode(take.durationSeconds)}',
+          '${_formatClock(position)} / ${_formatClock(duration)}',
           style: const TextStyle(
             color: AppColors.textTertiary,
             fontSize: 12,
@@ -399,9 +387,14 @@ extension _AdminProductionEditorTakesExtension
           icon: const Icon(Icons.skip_previous),
         ),
         IconButton.filled(
-          tooltip: 'Prévia da montagem',
-          onPressed: _showEpisodePreview,
-          icon: const Icon(Icons.play_arrow),
+          tooltip: playing ? 'Pausar' : 'Reproduzir nesta tela',
+          onPressed: loading
+              ? null
+              : () async {
+                  await _inlineTakePlayerKey.currentState?.togglePlay();
+                  if (mounted) setState(() {});
+                },
+          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
         ),
         IconButton(
           tooltip: 'Próxima cena',
@@ -616,23 +609,6 @@ extension _AdminProductionEditorTakesExtension
     );
   }
 
-  Widget _previewGhostButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return OutlinedButton.icon(
-      onPressed: onTap,
-      style: OutlinedButton.styleFrom(
-        foregroundColor: Colors.white,
-        side: const BorderSide(color: Colors.white54),
-        backgroundColor: Colors.black45,
-      ),
-      icon: Icon(icon, size: 16),
-      label: Text(label),
-    );
-  }
-
   Widget _versionRailButton({
     required IconData icon,
     required String label,
@@ -792,7 +768,7 @@ extension _AdminProductionEditorTakesExtension
           FilledButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              _simulateTake(takeIndex);
+              _generateTakeWithDola(takeIndex);
             },
             child: const Text('Gerar vídeo'),
           ),
@@ -1212,5 +1188,532 @@ extension _AdminProductionEditorTakesExtension
     );
     if (result == null || !mounted) return;
     _replaceTake(takeIndex, take.copyWith(referenceIds: result));
+  }
+}
+
+class _InlineTakePlayer extends StatefulWidget {
+  const _InlineTakePlayer({
+    super.key,
+    required this.take,
+    required this.cover,
+    required this.onMentalTake,
+    required this.onAdjust,
+    required this.onPlaybackTick,
+  });
+
+  final ProductionTakeItem take;
+  final Widget? cover;
+  final VoidCallback onMentalTake;
+  final VoidCallback onAdjust;
+  final VoidCallback onPlaybackTick;
+
+  @override
+  State<_InlineTakePlayer> createState() => _InlineTakePlayerState();
+}
+
+class _InlineTakePlayerState extends State<_InlineTakePlayer> {
+  final TransformationController _transform = TransformationController();
+  VideoPlayerController? _controller;
+  String? _loadedSource;
+  bool _isLoading = false;
+  bool _fullscreen = false;
+  String? _error;
+
+  bool get isPlaying => _controller?.value.isPlaying ?? false;
+  bool get isLoading => _isLoading;
+  Duration get position => _controller?.value.position ?? Duration.zero;
+  Duration get duration {
+    final value = _controller?.value.duration;
+    if (value != null && value > Duration.zero) return value;
+    return Duration(seconds: widget.take.durationSeconds);
+  }
+
+  ({String source, bool isAsset})? get _source =>
+      _playableTakeVideoSource(widget.take);
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_prepareController(autoplay: false));
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineTakePlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.take.id != widget.take.id ||
+        oldWidget.take.outputUrl != widget.take.outputUrl) {
+      _transform.value = Matrix4.identity();
+      unawaited(_prepareController(autoplay: false));
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_handleTick);
+    _controller?.dispose();
+    _transform.dispose();
+    super.dispose();
+  }
+
+  Future<void> togglePlay() async {
+    final source = _source;
+    if (source == null) {
+      _showMissingVideo();
+      return;
+    }
+    await _prepareController(autoplay: true);
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      if (controller.value.position >= controller.value.duration &&
+          controller.value.duration > Duration.zero) {
+        await controller.seekTo(Duration.zero);
+      }
+      await controller.play();
+    }
+    if (mounted) setState(() {});
+    widget.onPlaybackTick();
+  }
+
+  Future<void> openFullscreen() async {
+    final source = _source;
+    if (source == null) {
+      _showMissingVideo();
+      return;
+    }
+    await _prepareController(autoplay: false);
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || !mounted) {
+      return;
+    }
+    setState(() => _fullscreen = true);
+    await showDialog<void>(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (dialogContext) => _TakeFullscreenScaffold(
+        title: widget.take.title,
+        controller: controller,
+        transform: _transform,
+        onClose: () => Navigator.pop(dialogContext),
+        onPlayPause: togglePlay,
+        onZoomIn: () => _nudgeZoom(0.35),
+        onZoomOut: () => _nudgeZoom(-0.35),
+      ),
+    );
+    if (mounted) setState(() => _fullscreen = false);
+    widget.onPlaybackTick();
+  }
+
+  Future<void> _prepareController({required bool autoplay}) async {
+    final source = _source;
+    if (source == null) {
+      await _disposeController();
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = null;
+        });
+      }
+      return;
+    }
+    if (_loadedSource == source.source &&
+        _controller != null &&
+        _controller!.value.isInitialized) {
+      return;
+    }
+    await _disposeController();
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    final controller = source.isAsset
+        ? VideoPlayerController.asset(source.source)
+        : VideoPlayerController.networkUrl(Uri.parse(source.source));
+    try {
+      await controller.initialize();
+      await controller.setLooping(false);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      controller.addListener(_handleTick);
+      setState(() {
+        _controller = controller;
+        _loadedSource = source.source;
+        _isLoading = false;
+      });
+      if (autoplay) await controller.play();
+    } catch (error) {
+      await controller.dispose();
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _error = 'Não foi possível carregar o vídeo.';
+      });
+    }
+  }
+
+  Future<void> _disposeController() async {
+    final previous = _controller;
+    _controller = null;
+    _loadedSource = null;
+    previous?.removeListener(_handleTick);
+    await previous?.dispose();
+  }
+
+  DateTime? _lastParentTick;
+
+  void _handleTick() {
+    if (!mounted) return;
+    final controller = _controller;
+    if (controller != null &&
+        controller.value.isInitialized &&
+        !controller.value.isPlaying &&
+        controller.value.duration > Duration.zero &&
+        controller.value.position >= controller.value.duration) {
+      unawaited(controller.pause());
+    }
+    setState(() {});
+    final now = DateTime.now();
+    final playing = controller?.value.isPlaying ?? false;
+    if (!playing ||
+        _lastParentTick == null ||
+        now.difference(_lastParentTick!) >= const Duration(milliseconds: 250)) {
+      _lastParentTick = now;
+      widget.onPlaybackTick();
+    }
+  }
+
+  void _nudgeZoom(double delta) {
+    final current = _transform.value.getMaxScaleOnAxis();
+    final next = (current + delta).clamp(1.0, 4.0);
+    _transform.value = Matrix4.identity()..scaleByDouble(next, next, 1, 1);
+    setState(() {});
+  }
+
+  void _showMissingVideo() {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Text('Gere o vídeo desta cena para reproduzir aqui.'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0C0D10),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.surfaceLighter),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (widget.cover != null)
+              widget.cover!
+            else
+              const ColoredBox(color: Color(0xFF15171B)),
+            if (!_fullscreen &&
+                _controller != null &&
+                _controller!.value.isInitialized)
+              GestureDetector(
+                onTap: togglePlay,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    return InteractiveViewer(
+                      transformationController: _transform,
+                      constrained: false,
+                      minScale: 1,
+                      maxScale: 4,
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        height: constraints.maxHeight,
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: SizedBox(
+                            width: _controller!.value.size.width,
+                            height: _controller!.value.size.height,
+                            child: VideoPlayer(_controller!),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            if (!_fullscreen && !isPlaying && !_isLoading)
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x22000000), Color(0x99000000)],
+                  ),
+                ),
+              ),
+            if (_isLoading)
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            if (_error != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+              ),
+            if (!_fullscreen && !isPlaying && !_isLoading)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _source == null
+                            ? 'Edite o prompt e clique em Gerar vídeo'
+                            : widget.take.title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _TakePreviewGhostButton(
+                            icon: Icons.visibility_outlined,
+                            label: 'Ver take mental',
+                            onTap: widget.onMentalTake,
+                          ),
+                          _TakePreviewGhostButton(
+                            icon: Icons.tune,
+                            label: 'Ajustar cena',
+                            onTap: widget.onAdjust,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _TakePreviewIconButton(
+                    tooltip: 'Diminuir',
+                    icon: Icons.zoom_out,
+                    onPressed: () => _nudgeZoom(-0.35),
+                  ),
+                  const SizedBox(width: 6),
+                  _TakePreviewIconButton(
+                    tooltip: 'Aumentar',
+                    icon: Icons.zoom_in,
+                    onPressed: () => _nudgeZoom(0.35),
+                  ),
+                  const SizedBox(width: 6),
+                  _TakePreviewIconButton(
+                    tooltip: 'Tela cheia',
+                    icon: Icons.fullscreen,
+                    onPressed: openFullscreen,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TakePreviewGhostButton extends StatelessWidget {
+  const _TakePreviewGhostButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white,
+        side: const BorderSide(color: Colors.white54),
+        backgroundColor: Colors.black45,
+      ),
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+    );
+  }
+}
+
+class _TakePreviewIconButton extends StatelessWidget {
+  const _TakePreviewIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black54,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 18, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TakeFullscreenScaffold extends StatelessWidget {
+  const _TakeFullscreenScaffold({
+    required this.title,
+    required this.controller,
+    required this.transform,
+    required this.onClose,
+    required this.onPlayPause,
+    required this.onZoomIn,
+    required this.onZoomOut,
+  });
+
+  final String title;
+  final VideoPlayerController controller;
+  final TransformationController transform;
+  final VoidCallback onClose;
+  final Future<void> Function() onPlayPause;
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  transformationController: transform,
+                  constrained: false,
+                  minScale: 1,
+                  maxScale: 4,
+                  child: SizedBox(
+                    width: MediaQuery.sizeOf(context).width,
+                    height: MediaQuery.sizeOf(context).height,
+                    child: value.isInitialized
+                        ? FittedBox(
+                            fit: BoxFit.contain,
+                            child: SizedBox(
+                              width: value.size.width,
+                              height: value.size.height,
+                              child: VideoPlayer(controller),
+                            ),
+                          )
+                        : const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 16,
+                left: 16,
+                right: 16,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Diminuir',
+                      color: Colors.white,
+                      onPressed: onZoomOut,
+                      icon: const Icon(Icons.zoom_out),
+                    ),
+                    IconButton(
+                      tooltip: 'Aumentar',
+                      color: Colors.white,
+                      onPressed: onZoomIn,
+                      icon: const Icon(Icons.zoom_in),
+                    ),
+                    IconButton(
+                      tooltip: 'Fechar',
+                      color: Colors.white,
+                      onPressed: onClose,
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 28,
+                child: Center(
+                  child: IconButton.filled(
+                    tooltip: value.isPlaying ? 'Pausar' : 'Reproduzir',
+                    onPressed: onPlayPause,
+                    icon: Icon(
+                      value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

@@ -71,6 +71,7 @@ class AdminService {
     String? description,
     String? genre,
     int totalEpisodes = 0,
+    String status = 'DRAFT',
   }) async {
     final response = await _client.post(
       ApiConstants.adminCreateSeries,
@@ -79,8 +80,29 @@ class AdminService {
         if (description != null) 'description': description,
         if (genre != null) 'genre': genre,
         'totalEpisodes': totalEpisodes,
-        'status': 'DRAFT',
+        'status': status,
         'isAiGenerated': true,
+      },
+    );
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  Future<Map<String, dynamic>> updateSeries({
+    required int seriesId,
+    required String title,
+    String? description,
+    String? genre,
+    String? status,
+    String? coverUrl,
+  }) async {
+    final response = await _client.put(
+      '${ApiConstants.series}/$seriesId',
+      data: {
+        'title': title,
+        if (description != null) 'description': description,
+        if (genre != null) 'genre': genre,
+        if (status != null) 'status': status,
+        if (coverUrl != null) 'coverUrl': coverUrl,
       },
     );
     return Map<String, dynamic>.from(response.data as Map);
@@ -93,6 +115,10 @@ class AdminService {
     final response = await _client.post(
       '${ApiConstants.admin}/series/$seriesId/production',
       data: payload,
+      options: Options(
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 2),
+      ),
     );
     return Map<String, dynamic>.from(response.data as Map);
   }
