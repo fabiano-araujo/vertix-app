@@ -297,6 +297,16 @@ extension _AdminProductionEditorContentExtension
       key: const PageStorageKey('production-overview'),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
       children: [
+        _panel(
+          title: 'Geração de vídeo',
+          icon: Icons.movie_filter_outlined,
+          child: _videoGenerationPresetPicker(
+            selectedId:
+                project.seriesBible['video_generation_profile']?.toString() ??
+                '',
+          ),
+        ),
+        const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 820;
@@ -346,8 +356,9 @@ extension _AdminProductionEditorContentExtension
                   ),
                   _WorkflowStep(
                     icon: Icons.account_tree_outlined,
-                    title: 'Outline e ganchos',
-                    subtitle: 'Pagamento, escalada, virada e corte no pico',
+                    title: 'Mapa, outline e ganchos',
+                    subtitle:
+                        'Blocos da temporada, paywall, revelações reservadas e corte no pico',
                     done: outlineReady,
                   ),
                   _WorkflowStep(
@@ -473,6 +484,10 @@ extension _AdminProductionEditorContentExtension
               locationCount: locationCount,
             ),
             const SizedBox(height: 16),
+            if (_seasonArchitecture(project).isNotEmpty) ...[
+              _buildSeasonArchitectureCard(project),
+              const SizedBox(height: 16),
+            ],
             ...List.generate(
               project.episodes.length,
               (index) =>
@@ -539,7 +554,7 @@ extension _AdminProductionEditorContentExtension
           ),
           _outlineToolButton(
             icon: Icons.auto_awesome,
-            label: compact ? 'Otimizar' : 'Esboço do AI Optimize',
+            label: compact ? 'Esboço' : 'Gerar esboço com IA',
             onTap: _isAnyGenerationBusy || _isChatBrief
                 ? null
                 : _generateSeriesOutlineWithCodex,
@@ -688,6 +703,150 @@ extension _AdminProductionEditorContentExtension
     );
   }
 
+  Widget _buildSeasonArchitectureCard(ProductionProject project) {
+    const gold = Color(0xFFE6D3A8);
+    final architecture = _seasonArchitecture(project);
+    final blocks = (architecture['blocks'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    final reveals =
+        (project.seriesBible['reserved_reveals'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+    final paywall = architecture['paywall_episode'];
+    final freeCount = architecture['free_episode_count'];
+    final payoffWindow = architecture['central_question_payoff_window']
+        ?.toString()
+        .trim();
+    final irony = _bibleText(project, 'viewer_dramatic_irony', fallback: '');
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1C22),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: gold.withAlpha(140), width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.map_outlined, color: gold, size: 18),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Mapa da temporada',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'A espinha é travada antes dos cartões: o EP1 não gasta o que o bloco final precisa, e o paywall entra como decisão de roteiro.',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (freeCount != null)
+                _pill('$freeCount episódios no funil grátis', gold),
+              if (paywall != null) _pill('Paywall no EP$paywall', gold),
+              if (payoffWindow != null && payoffWindow.isNotEmpty)
+                _pill('Pergunta central: EP$payoffWindow', gold),
+              if (reveals.isNotEmpty)
+                _pill('${reveals.length} revelações reservadas', gold),
+            ],
+          ),
+          if (irony.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Ironia dramática: $irony',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+          if (reveals.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'REVELAÇÕES RESERVADAS',
+              style: TextStyle(
+                color: gold,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...reveals.take(6).map((reveal) {
+              final fact = reveal['fact']?.toString().trim() ?? '';
+              final earliest = reveal['earliest_episode'];
+              if (fact.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'A partir do EP$earliest: $fact',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              );
+            }),
+          ],
+          if (blocks.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ...blocks.map((block) {
+              final range = block['episodes']?.toString() ?? '';
+              final role = block['role']?.toString() ?? '';
+              final turn = block['irreversible_turn']?.toString().trim() ?? '';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'EP$range · ${block['conversion_role'] ?? role}',
+                      style: const TextStyle(
+                        color: gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      turn.isNotEmpty ? turn : role.replaceAll('_', ' '),
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
   void _addBlankEpisode() {
     final project = _project;
     if (project == null) return;
@@ -722,6 +881,8 @@ extension _AdminProductionEditorContentExtension
     final emotionalBeat =
         outlineCard['emotional_beat']?.toString().trim() ?? '';
     final valueShift = outlineCard['value_shift']?.toString().trim() ?? '';
+    final paywallRole = outlineCard['paywall_role']?.toString().trim() ?? '';
+    final pressureType = outlineCard['pressure_type']?.toString().trim() ?? '';
     final hasDetailedScript = _hasEpisodeScriptDraft(_project!, episode.number);
     final productionReady = episode.takes.isNotEmpty;
     final generatingScript = _generatingScriptEpisodeNumber == episode.number;
@@ -863,6 +1024,9 @@ extension _AdminProductionEditorContentExtension
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   _pill(_timecode(episode.durationSeconds)),
+                  if (paywallRole.isNotEmpty)
+                    _pill(_paywallRoleLabel(paywallRole), const Color(0xFFE6D3A8)),
+                  if (pressureType.isNotEmpty) _pill(pressureType),
                   if (hasDetailedScript) ...[
                     _pill(
                       'Script concluído (${sceneCards.length} cenas)',
@@ -1346,6 +1510,23 @@ extension _AdminProductionEditorContentExtension
     final value = _visibleText(raw);
     return value.isEmpty ? fallback : value;
   }
+
+  Map<String, dynamic> _seasonArchitecture(ProductionProject project) {
+    final raw = project.seriesBible['season_architecture'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return const <String, dynamic>{};
+  }
+
+  String _paywallRoleLabel(String role) => switch (role) {
+    'funnel' || 'free_funnel' => 'Funil grátis',
+    'paywall_question' || 'paywall_cliffhanger' => 'Corte do paywall',
+    'post_paywall_payoff' => 'Pagamento pós-paywall',
+    'midgame' || 'binge_midgame' => 'Meio da temporada',
+    'sunk_cost' => 'Ponto mais baixo',
+    'finale' || 'season_payoff' => 'Bloco final',
+    'acquisition_clip' => 'Gancho de aquisição',
+    _ => role.replaceAll('_', ' '),
+  };
 
   String _longDuration(int seconds) {
     final hours = seconds ~/ 3600;

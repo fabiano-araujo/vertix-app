@@ -59,6 +59,11 @@ void main() {
       project.seriesBible['hook_chain'] as List<dynamic>,
       hasLength(project.episodes.length),
     );
+    expect(project.seriesBible['season_architecture'], isA<Map>());
+    expect(
+      (project.seriesBible['season_architecture'] as Map)['paywall_episode'],
+      3,
+    );
     final hookChain = (project.seriesBible['hook_chain'] as List<dynamic>)
         .whereType<Map>()
         .map((item) => Map<String, dynamic>.from(item))
@@ -126,7 +131,11 @@ void main() {
     final service = LocalProductionWorkspaceService();
     final project = service.buildMicroDramaProjectForTesting(_config);
 
-    expect(service.automaticReferenceTargets(project), hasLength(14));
+    expect(service.automaticReferenceTargets(project), hasLength(15));
+    final coverTarget = service.automaticReferenceTargets(project).last;
+    expect(coverTarget.category, 'APP_COVER');
+    expect(coverTarget.label, project.title);
+    expect(coverTarget.metadata['targetField'], 'Series.coverUrl');
     final target = project.references.first;
     final withImage = service.applyGeneratedReferenceImage(project, {
       'result': {
@@ -137,11 +146,31 @@ void main() {
       },
     });
 
-    expect(service.automaticReferenceTargets(withImage), hasLength(13));
+    expect(service.automaticReferenceTargets(withImage), hasLength(14));
     expect(
       service.automaticReferenceTargets(withImage, regenerateExisting: true),
-      hasLength(14),
+      hasLength(15),
     );
+    expect(service.areStoryReferencesReadyForVideo(project), isFalse);
+    expect(
+      service.videoGenerationBlockedByReferencesReason(project),
+      contains('personagens'),
+    );
+
+    var complete = project;
+    for (final reference in project.references) {
+      complete = service.applyGeneratedReferenceImage(complete, {
+        'result': {
+          'reference': {
+            ...reference.toJson(),
+            'publicUrl': 'https://cdn.example.com/${reference.id}.png',
+          },
+        },
+      });
+    }
+    expect(service.missingStoryReferenceImages(complete), isEmpty);
+    expect(service.areStoryReferencesReadyForVideo(complete), isTrue);
+    expect(service.videoGenerationBlockedByReferencesReason(complete), isNull);
   });
 
   test('episode script is generated on demand after the outline', () {
@@ -533,6 +562,27 @@ void main() {
         'seriesBiblePatch': {
           'logline': 'Logline refinada pelo Codex.',
           'big_expectation': 'Uma revelação por episódio.',
+          'season_architecture': {
+            'paywall_episode': 3,
+            'free_episode_count': 3,
+            'central_question_payoff_window': '7-8',
+            'blocks': [
+              {
+                'id': 'premise_hook',
+                'episodes': '1-2',
+                'role': 'detonate_premise_prove_fantasy',
+                'conversion_role': 'free_funnel',
+              },
+            ],
+          },
+          'reserved_reveals': [
+            {
+              'id': 'r1',
+              'fact': 'Helena forjou o contrato',
+              'earliest_episode': 6,
+              'payoff_episode': 8,
+            },
+          ],
           'episode_cards': outline.seriesBible['episode_cards'],
           'characters': outline.seriesBible['characters'],
           'environments': outline.seriesBible['environments'],
@@ -568,6 +618,11 @@ void main() {
     expect(generated.description, 'Logline refinada pelo Codex.');
     expect(generated.title, 'O último brinde');
     expect(generated.seriesBible['codex_thread_id'], 'thread-outline');
+    expect(generated.seriesBible['season_architecture']['paywall_episode'], 3);
+    expect(
+      generated.seriesBible['reserved_reveals'],
+      isNotEmpty,
+    );
     expect(
       generated.episodes.first.cliffhanger,
       'A TV da padaria mostra o rosto do príncipe; corte no preto.',
@@ -639,6 +694,63 @@ void main() {
     expect(script['max_shot_duration_seconds'], 5);
     expect(durations, everyElement(lessThanOrEqualTo(5)));
     expect(durations.toSet().length, greaterThan(1));
+    expect(durations.fold<int>(0, (total, duration) => total + duration),
+      scripted.episodes.first.durationSeconds,
+    );
+  });
+
+  test('dola preset writes exact 10s shots instead of 15s or 30s beats', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(
+      _config.copyWith(videoGenerationPresetId: 'seedance_2_5_dola'),
+    );
+    expect(outline.seriesBible['video_generation_profile'], 'seedance_2_5_dola');
+    expect(outline.seriesBible['shot_duration_mode'], 'FIXED');
+    expect(outline.seriesBible['max_shot_duration_seconds'], 10);
+
+    final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    final script =
+        (scripted.seriesBible['episode_scripts'] as List<dynamic>).first as Map;
+    final durations = (script['scenes'] as List<dynamic>)
+        .cast<Map>()
+        .expand((scene) => (scene['shots'] as List<dynamic>).cast<Map>())
+        .map((shot) => shot['duration_seconds'] as int)
+        .toList();
+
+    expect(script['shot_duration_mode'], 'FIXED');
+    expect(durations, everyElement(equals(10)));
+    expect(
+      durations.fold<int>(0, (total, duration) => total + duration),
+      scripted.episodes.first.durationSeconds,
+    );
+  });
+
+  test('seedance 2.5 api plans variable shots up to 30 seconds', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(
+      _config.copyWith(videoGenerationPresetId: 'seedance_2_5_api'),
+    );
+    expect(outline.seriesBible['max_shot_duration_seconds'], 30);
+    expect(outline.seriesBible['shot_duration_mode'], 'VARIABLE_UP_TO_LIMIT');
+
+    final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    final script =
+        (scripted.seriesBible['episode_scripts'] as List<dynamic>).first as Map;
+    final durations = (script['scenes'] as List<dynamic>)
+        .cast<Map>()
+        .expand((scene) => (scene['shots'] as List<dynamic>).cast<Map>())
+        .map((shot) => shot['duration_seconds'] as int)
+        .toList();
+
+    expect(script['max_shot_duration_seconds'], 30);
+    expect(durations, everyElement(lessThanOrEqualTo(30)));
+    expect(durations.any((duration) => duration > 10), isTrue);
     expect(
       durations.fold<int>(0, (total, duration) => total + duration),
       scripted.episodes.first.durationSeconds,
@@ -866,5 +978,67 @@ void main() {
     expect(refreshed.episodes.first.title, 'O Reencontro');
     expect(refreshed.seriesBible['episode_scripts'], isEmpty);
     expect(refreshed.seriesBible['scene_cards'], isEmpty);
+  });
+
+  test('Codex story sheets keep title and episodes and fill character cards', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final stripped = outline.copyWith(references: const []);
+    final withSheets = service.applyCodexStorySheets(stripped, {
+      'summary': 'Fichas de personagens',
+      'result': {
+        'title': 'Título inventado que não deve entrar',
+        'seriesBiblePatch': {
+          'title': 'Título inventado que não deve entrar',
+          'logline': 'Logline nova que não deve entrar',
+          'characters': [
+            {
+              'reference_id': 'character-marta',
+              'name': 'Marta',
+              'role': 'Protagonista',
+              'appearance': 'Chef de 34 anos, cabelo preso, avental marcado.',
+            },
+          ],
+          'environments': [
+            {
+              'reference_id': 'location-cozinha',
+              'name': 'Cozinha',
+              'description': 'Não deve aparecer no escopo de personagens.',
+            },
+          ],
+          'episode_cards': const [],
+        },
+        'episodes': [
+          {'number': 1, 'title': 'Episódio reescrito'},
+        ],
+        'references': [
+          {
+            'id': 'character-marta',
+            'label': 'Marta',
+            'category': 'CHARACTER_MASTER',
+            'description': 'Chef de 34 anos, cabelo preso, avental marcado.',
+            'canonical': true,
+            'metadata': {'role': 'Protagonista'},
+          },
+        ],
+      },
+    }, family: 'characters');
+
+    expect(withSheets.title, stripped.title);
+    expect(withSheets.description, stripped.description);
+    expect(withSheets.episodes.first.title, stripped.episodes.first.title);
+    expect(withSheets.seriesBible['episode_cards'], isNotEmpty);
+    expect(
+      (withSheets.seriesBible['characters'] as List).first['name'],
+      'Marta',
+    );
+    expect(
+      withSheets.references.where((item) => item.category.contains('CHARACTER')),
+      hasLength(1),
+    );
+    expect(
+      withSheets.references.any((item) => item.id == 'location-cozinha'),
+      isFalse,
+    );
   });
 }

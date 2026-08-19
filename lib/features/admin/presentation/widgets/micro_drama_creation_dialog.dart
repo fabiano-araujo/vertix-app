@@ -29,7 +29,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
   int _episodeCount = 8;
   int _firstEpisodeDuration = 120;
   int _episodeDuration = 60;
-  int _maxShotDuration = 10;
+  String _videoGenerationPresetId = 'seedance_2_5_dola';
   bool _automaticReview = true;
   bool _automaticPreparation = false;
   String? _error;
@@ -253,16 +253,6 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             labelFor: (value) => '$value segundos',
             onChanged: (value) => setState(() => _episodeDuration = value),
           ),
-          _dropdown<int>(
-            label: 'Limite máximo de cada shot',
-            icon: Icons.movie_filter_outlined,
-            value: _maxShotDuration,
-            values: const [5, 8, 10],
-            labelFor: (value) => value == 10
-                ? 'Até 10 segundos · recomendado'
-                : 'Até $value segundos',
-            onChanged: (value) => setState(() => _maxShotDuration = value),
-          ),
           _dropdown<String>(
             label: 'Classificação',
             icon: Icons.shield_outlined,
@@ -272,6 +262,8 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
             onChanged: (value) => setState(() => _rating = value),
           ),
         ]),
+        const SizedBox(height: 18),
+        _videoGenerationPresetField(),
         const SizedBox(height: 14),
         Container(
           decoration: BoxDecoration(
@@ -472,7 +464,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
       children: [
         _stepTitle(
           'Revisar e criar',
-          'O Vertix criará primeiro o outline, a cadeia de ganchos e as bíblias canônicas. Os roteiros por cenas serão gerados depois, episódio por episódio.',
+          'O Vertix cria primeiro o contrato, o mapa da temporada (blocos, paywall e revelações reservadas) e só então o esboço de cada episódio. Os roteiros por cenas vêm depois, um a um.',
         ),
         const SizedBox(height: 18),
         Container(
@@ -508,7 +500,7 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
                   _reviewPill('$_episodeCount episódios'),
                   _reviewPill(_formatDuration(totalSeconds)),
                   _reviewPill('9:16'),
-                  _reviewPill('Limite por shot: ${_maxShotDuration}s'),
+                  _reviewPill(_videoGenerationPreset.durationLabel),
                   _reviewPill(_genre),
                   _reviewPill(_trope),
                   _reviewPill(_language),
@@ -548,7 +540,9 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         _reviewRow(
           Icons.movie_filter_outlined,
           'Roteiro por cenas, depois do esboço',
-          'O roteirista escolherá a duração suficiente para cada shot, sem ultrapassar ${_maxShotDuration}s, somente após a revisão do esboço geral.',
+          _videoGenerationPreset.fixedShotDuration
+              ? 'Cenas e planos nascem em ${_videoGenerationPreset.maxShotDurationSeconds}s fixos, porque o Dola só gera 5s ou 10s.'
+              : 'O roteirista escolherá a duração suficiente para cada shot, sem ultrapassar ${_videoGenerationPreset.maxShotDurationSeconds}s, somente após a revisão do esboço geral.',
           last: true,
         ),
         const SizedBox(height: 14),
@@ -646,9 +640,11 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
         episodeCount: _episodeCount,
         firstEpisodeDurationSeconds: _firstEpisodeDuration,
         episodeDurationSeconds: _episodeDuration,
-        maxShotDurationSeconds: _maxShotDuration,
+        maxShotDurationSeconds:
+            _videoGenerationPreset.maxShotDurationSeconds,
         automaticReview: _automaticReview,
         automaticPreparation: _automaticPreparation,
+        videoGenerationPresetId: _videoGenerationPresetId,
       ),
     );
   }
@@ -673,6 +669,84 @@ class _MicroDramaCreationDialogState extends State<MicroDramaCreationDialog> {
       }
     }
     return null;
+  }
+
+  VideoGenerationPreset get _videoGenerationPreset =>
+      VideoGenerationPreset.byId(_videoGenerationPresetId);
+
+  Widget _videoGenerationPresetField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Geração de vídeo',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 10),
+        ...VideoGenerationPreset.catalog.map((preset) {
+          final selected = preset.id == _videoGenerationPresetId;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              onTap: () => setState(() => _videoGenerationPresetId = preset.id),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.surfaceLight
+                      : AppColors.background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: selected
+                        ? Colors.white38
+                        : AppColors.surfaceLighter,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                preset.modelLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              _reviewPill(preset.durationLabel),
+                              if (preset.recommended)
+                                _reviewPill('Recomendado'),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            preset.description,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (selected) const Icon(Icons.check, size: 18),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
   }
 
   Widget _stepTitle(String title, String subtitle) => Column(

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_service.dart';
+import 'season_architecture.dart';
 
 int? _asEpisodeNumber(dynamic value) {
   if (value is int) return value;
@@ -86,6 +87,56 @@ List<Map<String, dynamic>> _asObjectList(dynamic value) {
       .whereType<Map>()
       .map((item) => Map<String, dynamic>.from(item))
       .toList();
+}
+
+Set<String> _storySheetBibleKeys(String family) {
+  return switch (family) {
+    'characters' => {'characters', 'character_bible'},
+    'locations' => {'environments', 'location_bible'},
+    'props' => {'props', 'object_bible'},
+    _ => {
+      'characters',
+      'character_bible',
+      'environments',
+      'location_bible',
+      'props',
+      'object_bible',
+    },
+  };
+}
+
+bool _storySheetCategoryMatches(String family, String category) {
+  final value = category.toUpperCase();
+  return switch (family) {
+    'characters' =>
+      value.contains('CHARACTER') || value.contains('OPPOSING_FORCE'),
+    'locations' =>
+      value.contains('LOCATION') || value.contains('ENVIRONMENT'),
+    'props' => value.contains('PROP') || value.contains('OBJECT'),
+    _ => true,
+  };
+}
+
+void _appendStorySheetReferences(
+  List<Map<String, dynamic>> references, {
+  required List<Map<String, dynamic>> entries,
+  required String category,
+}) {
+  for (final item in entries) {
+    final id = (item['reference_id'] ?? item['id'] ?? '').toString().trim();
+    if (id.isEmpty) continue;
+    if (references.any((reference) => reference['id']?.toString() == id)) {
+      continue;
+    }
+    references.add({
+      'id': id,
+      'label': item['name'] ?? item['label'] ?? id,
+      'category': category,
+      'description': item['appearance'] ?? item['description'] ?? '',
+      'canonical': true,
+      'metadata': item,
+    });
+  }
 }
 
 Map<String, dynamic> _normalizeSceneCard(
@@ -777,6 +828,7 @@ class MicroDramaProjectConfig {
   final int maxShotDurationSeconds;
   final bool automaticReview;
   final bool automaticPreparation;
+  final String videoGenerationPresetId;
 
   const MicroDramaProjectConfig({
     required this.title,
@@ -797,12 +849,21 @@ class MicroDramaProjectConfig {
     this.maxShotDurationSeconds = 10,
     this.automaticReview = true,
     this.automaticPreparation = false,
+    this.videoGenerationPresetId = '',
   });
 
   String get distributionProfile =>
       episodeCount >= 50 ? 'app_native' : 'validation_pilot';
 
   bool get isSingleEpisode => episodeCount <= 1;
+
+  VideoGenerationPreset get videoGenerationPreset =>
+      VideoGenerationPreset.resolve(
+        videoGenerationPresetId,
+        maxShotDurationSeconds: maxShotDurationSeconds,
+      );
+
+  bool get shotDurationFixed => videoGenerationPreset.fixedShotDuration;
 
   MicroDramaProjectConfig copyWith({
     String? title,
@@ -823,6 +884,7 @@ class MicroDramaProjectConfig {
     int? maxShotDurationSeconds,
     bool? automaticReview,
     bool? automaticPreparation,
+    String? videoGenerationPresetId,
   }) => MicroDramaProjectConfig(
     title: title ?? this.title,
     logline: logline ?? this.logline,
@@ -845,7 +907,139 @@ class MicroDramaProjectConfig {
         maxShotDurationSeconds ?? this.maxShotDurationSeconds,
     automaticReview: automaticReview ?? this.automaticReview,
     automaticPreparation: automaticPreparation ?? this.automaticPreparation,
+    videoGenerationPresetId:
+        videoGenerationPresetId ?? this.videoGenerationPresetId,
   );
+}
+
+class VideoGenerationPreset {
+  const VideoGenerationPreset({
+    required this.id,
+    required this.modelLabel,
+    required this.channel,
+    required this.durationLabel,
+    required this.maxShotDurationSeconds,
+    required this.fixedShotDuration,
+    required this.description,
+    this.dolaModel,
+    this.recommended = false,
+  });
+
+  final String id;
+  final String modelLabel;
+  final String channel;
+  final String durationLabel;
+  final int maxShotDurationSeconds;
+  final bool fixedShotDuration;
+  final String description;
+  final String? dolaModel;
+  final bool recommended;
+
+  String get channelLabel => channel == 'dola' ? 'Dola' : 'API';
+
+  String get shotDurationMode =>
+      fixedShotDuration ? 'FIXED' : 'VARIABLE_UP_TO_LIMIT';
+
+  static const catalog = <VideoGenerationPreset>[
+    VideoGenerationPreset(
+      id: 'seedance_2_5_api',
+      modelLabel: 'Seedance 2.5',
+      channel: 'api',
+      durationLabel: '30 s',
+      maxShotDurationSeconds: 30,
+      fixedShotDuration: false,
+      recommended: true,
+      description:
+          'Continuações melhores. Roteiros, cenas e planos com duração variável até 30 s.',
+    ),
+    VideoGenerationPreset(
+      id: 'seedance_2_0_api',
+      modelLabel: 'Seedance 2.0',
+      channel: 'api',
+      durationLabel: '15 s',
+      maxShotDurationSeconds: 15,
+      fixedShotDuration: false,
+      description:
+          'Roteiros, cenas e planos com duração variável até 15 s.',
+    ),
+    VideoGenerationPreset(
+      id: 'seedance_2_5_dola',
+      modelLabel: 'Seedance 2.5 Dola',
+      channel: 'dola',
+      durationLabel: '10 s',
+      maxShotDurationSeconds: 10,
+      fixedShotDuration: true,
+      dolaModel: 'Dreamina Seedance 2.5',
+      description:
+          'Clipe fixo de 10 s. O Dola só gera 5 s ou 10 s; as cenas nascem em 10 s.',
+    ),
+    VideoGenerationPreset(
+      id: 'seedance_2_0_dola',
+      modelLabel: 'Seedance 2.0 Dola',
+      channel: 'dola',
+      durationLabel: '10 s',
+      maxShotDurationSeconds: 10,
+      fixedShotDuration: true,
+      dolaModel: 'Dreamina Seedance 2.0',
+      description:
+          'Clipe fixo de 10 s. O Dola só gera 5 s ou 10 s; as cenas nascem em 10 s.',
+    ),
+  ];
+
+  static const fallback = VideoGenerationPreset(
+    id: 'custom',
+    modelLabel: 'Personalizado',
+    channel: 'api',
+    durationLabel: '10 s',
+    maxShotDurationSeconds: 10,
+    fixedShotDuration: false,
+    description: 'Duração variável até o limite configurado.',
+  );
+
+  static VideoGenerationPreset byId(String? id) {
+    for (final preset in catalog) {
+      if (preset.id == id) return preset;
+    }
+    return fallback;
+  }
+
+  static VideoGenerationPreset resolve(
+    String? id, {
+    int? maxShotDurationSeconds,
+    String? shotDurationMode,
+  }) {
+    final named = byId(id);
+    if (id != null && id.isNotEmpty && named.id == id) return named;
+    final max = (maxShotDurationSeconds ?? 10).clamp(1, 30).toInt();
+    return VideoGenerationPreset(
+      id: 'custom',
+      modelLabel: 'Personalizado',
+      channel: 'api',
+      durationLabel: '$max s',
+      maxShotDurationSeconds: max,
+      fixedShotDuration: shotDurationMode == 'FIXED',
+      description: 'Duração configurada para este projeto.',
+    );
+  }
+
+  static VideoGenerationPreset fromBible(Map<String, dynamic> bible) {
+    return resolve(
+      bible['video_generation_profile']?.toString(),
+      maxShotDurationSeconds:
+          (bible['max_shot_duration_seconds'] as num?)?.toInt(),
+      shotDurationMode: bible['shot_duration_mode']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toBibleFields() => {
+    'video_generation_profile': id,
+    'video_generation_channel': channel,
+    'seedance_model': modelLabel,
+    'max_shot_duration_seconds': maxShotDurationSeconds,
+    'provider_duration_seconds': maxShotDurationSeconds,
+    'shot_duration_mode': shotDurationMode,
+    'provider_duration_mode': shotDurationMode,
+  };
 }
 
 class _MicroDramaStylePreset {
@@ -891,6 +1085,9 @@ class _MicroDramaEpisodePlan {
   final String valueChange;
   final String summary;
   final String cliffhanger;
+  final String paywallRole;
+  final String pressureType;
+  final String withheldAnswer;
 
   const _MicroDramaEpisodePlan({
     required this.title,
@@ -903,6 +1100,9 @@ class _MicroDramaEpisodePlan {
     required this.valueChange,
     required this.summary,
     required this.cliffhanger,
+    required this.paywallRole,
+    required this.pressureType,
+    required this.withheldAnswer,
   });
 }
 
@@ -917,6 +1117,20 @@ class _MicroDramaCreativePackage {
     required this.environments,
     required this.props,
     required this.references,
+  });
+}
+
+class _MicroDramaSeasonPackage {
+  final SeasonRetentionProfile profile;
+  final List<SeasonBlockPlan> blocks;
+  final List<Map<String, dynamic>> reservedReveals;
+  final List<Map<String, dynamic>> spine;
+
+  const _MicroDramaSeasonPackage({
+    required this.profile,
+    required this.blocks,
+    required this.reservedReveals,
+    required this.spine,
   });
 }
 
@@ -1731,6 +1945,12 @@ class LocalProductionWorkspaceService {
         'background': 'Cidade moderna',
         'trope': 'Segunda chance',
         'max_shot_duration_seconds': 10,
+        'shot_duration_mode': 'FIXED',
+        'provider_duration_mode': 'FIXED',
+        'provider_duration_seconds': 10,
+        'video_generation_profile': 'seedance_2_5_dola',
+        'video_generation_channel': 'dola',
+        'seedance_model': 'Seedance 2.5 Dola',
         'first_episode_duration_seconds': 120,
         'episode_duration_seconds': 60,
         'automatic_review': true,
@@ -1802,6 +2022,7 @@ class LocalProductionWorkspaceService {
     int? maxShotDurationSeconds,
     bool? automaticReview,
     bool? automaticPreparation,
+    String? videoGenerationPresetId,
   }) {
     final bible = Map<String, dynamic>.from(project.seriesBible);
     if (genre != null) bible['genre'] = genre;
@@ -1833,12 +2054,39 @@ class LocalProductionWorkspaceService {
           ? 'QUEUED'
           : 'MANUAL';
     }
+    if (videoGenerationPresetId != null &&
+        videoGenerationPresetId.trim().isNotEmpty) {
+      bible.addAll(
+        VideoGenerationPreset.byId(videoGenerationPresetId).toBibleFields(),
+      );
+    }
     return project.copyWith(
       title: title ?? project.title,
       genre: genre ?? project.genre,
       targetEpisodeCount: episodeCount ?? project.targetEpisodeCount,
       updatedAt: DateTime.now(),
       seriesBible: bible,
+    );
+  }
+
+  ProductionProject applyVideoGenerationPreset(
+    ProductionProject project,
+    String presetId,
+  ) {
+    final preset = VideoGenerationPreset.byId(presetId);
+    return project.copyWith(
+      updatedAt: DateTime.now(),
+      seriesBible: {
+        ...project.seriesBible,
+        ...preset.toBibleFields(),
+        'config': {
+          ...Map<String, dynamic>.from(
+            project.seriesBible['config'] as Map? ?? const {},
+          ),
+          'max_shot_duration_seconds': preset.maxShotDurationSeconds,
+          'duration_mode': preset.shotDurationMode,
+        },
+      },
     );
   }
 
@@ -2032,11 +2280,15 @@ class LocalProductionWorkspaceService {
           'episodes': scriptedEpisodes,
           'scenes': sceneCards.length,
           'shots': shotCount,
-          'duration_mode': 'VARIABLE_UP_TO_LIMIT',
+          'duration_mode': config.shotDurationFixed
+              ? 'FIXED'
+              : 'VARIABLE_UP_TO_LIMIT',
           'max_shot_duration_seconds': config.maxShotDurationSeconds,
           'production_ready_episodes': productionReadyEpisodes,
           'generation_order': [
-            'season_outline',
+            'season_architecture',
+            'episode_spine',
+            'episode_cards',
             'characters',
             'environments',
             'props',
@@ -2066,7 +2318,7 @@ class LocalProductionWorkspaceService {
         .map((item) => Map<String, dynamic>.from(item))
         .toList();
     if (generatedEpisodes.isEmpty && !allowPartial) {
-      throw StateError('O Codex não retornou o esboço dos episódios.');
+      throw StateError('A IA não retornou o esboço dos episódios.');
     }
 
     final existingByNumber = {
@@ -2158,7 +2410,7 @@ class LocalProductionWorkspaceService {
     } else if (!allowPartial &&
         episodes.length != project.targetEpisodeCount) {
       throw StateError(
-        'O Codex retornou ${episodes.length} episódios; o projeto exige ${project.targetEpisodeCount}.',
+        'A IA retornou ${episodes.length} episódios; o projeto exige ${project.targetEpisodeCount}.',
       );
     }
 
@@ -2208,7 +2460,8 @@ class LocalProductionWorkspaceService {
       ...project.seriesBible,
       ...biblePatch,
       'creation_stage': 'outline_ready',
-      'creation_workflow': 'openrouter_outline_first_v1',
+      'creation_workflow':
+          biblePatch['creation_workflow'] ?? 'openrouter_outline_architecture_v2',
       'workflow': {
         ...Map<String, dynamic>.from(
           project.seriesBible['workflow'] as Map? ?? const {},
@@ -2294,13 +2547,13 @@ class LocalProductionWorkspaceService {
       result['episodeScript'] as Map? ?? const {},
     );
     if (script.isEmpty) {
-      throw StateError('O Codex não retornou o roteiro do EP$episodeNumber.');
+      throw StateError('A IA não retornou o roteiro do EP$episodeNumber.');
     }
     final returnedEpisode = _asEpisodeNumber(script['episode']);
     if (!allowPartial &&
         returnedEpisode != null &&
         returnedEpisode != episodeNumber) {
-      throw StateError('O Codex não retornou o roteiro do EP$episodeNumber.');
+      throw StateError('A IA não retornou o roteiro do EP$episodeNumber.');
     }
     script['episode'] = episodeNumber;
     final scenes = (script['scenes'] as List<dynamic>? ?? const [])
@@ -2465,7 +2718,7 @@ class LocalProductionWorkspaceService {
     final episode = locked.episodes[episodeIndex];
     if (generatedTakes.length != episode.takes.length) {
       throw StateError(
-        'O Codex retornou ${generatedTakes.length} takes; o roteiro bloqueado exige ${episode.takes.length}.',
+        'A IA retornou ${generatedTakes.length} takes; o roteiro bloqueado exige ${episode.takes.length}.',
       );
     }
     final generatedByNumber = {
@@ -2479,7 +2732,7 @@ class LocalProductionWorkspaceService {
     final takes = episode.takes.map((base) {
       final generated = generatedByNumber[base.number];
       if (generated == null) {
-        throw StateError('Take ${base.number} ausente no retorno do Codex.');
+        throw StateError('Take ${base.number} ausente no retorno da IA.');
       }
       final core = generated['aiShortCore']?.toString().trim() ?? '';
       if (core.isEmpty) {
@@ -2575,7 +2828,9 @@ class LocalProductionWorkspaceService {
     } else {
       references.add(generated);
     }
+    final isAppCover = generated.category.toUpperCase() == 'APP_COVER';
     return project.copyWith(
+      coverUrl: isAppCover ? generated.publicUrl : project.coverUrl,
       updatedAt: DateTime.now(),
       references: references,
       seriesBible: {
@@ -2585,26 +2840,183 @@ class LocalProductionWorkspaceService {
     );
   }
 
+  static bool isStoryMasterReference(ProductionReferenceItem reference) {
+    final category = reference.category.toUpperCase();
+    return category.contains('CHARACTER') ||
+        category.contains('OPPOSING_FORCE') ||
+        category.contains('LOCATION') ||
+        category.contains('ENVIRONMENT') ||
+        category.contains('WORLD') ||
+        category.contains('PROP') ||
+        category.contains('OBJECT');
+  }
+
+  static bool referenceHasGeneratedImage(ProductionReferenceItem reference) {
+    return reference.assetPath?.trim().isNotEmpty == true ||
+        reference.publicUrl?.trim().isNotEmpty == true;
+  }
+
+  static String _storyReferenceFamily(ProductionReferenceItem reference) {
+    final category = reference.category.toUpperCase();
+    if (category.contains('CHARACTER') || category.contains('OPPOSING_FORCE')) {
+      return 'personagem';
+    }
+    if (category.contains('PROP') || category.contains('OBJECT')) {
+      return 'objeto';
+    }
+    return 'ambiente';
+  }
+
+  List<ProductionReferenceItem> storyMasterReferences(
+    ProductionProject project,
+  ) {
+    return project.references
+        .where(
+          (reference) =>
+              reference.canonical && isStoryMasterReference(reference),
+        )
+        .toList();
+  }
+
+  List<ProductionReferenceItem> missingStoryReferenceImages(
+    ProductionProject project,
+  ) {
+    return storyMasterReferences(
+      project,
+    ).where((reference) => !referenceHasGeneratedImage(reference)).toList();
+  }
+
+  bool areStoryReferencesReadyForVideo(ProductionProject project) {
+    return videoGenerationBlockedByReferencesReason(project) == null;
+  }
+
+  String? videoGenerationBlockedByReferencesReason(ProductionProject project) {
+    final masters = storyMasterReferences(project);
+    if (masters.isEmpty) {
+      return 'Gere as referências de personagens, ambientes e objetos antes do vídeo.';
+    }
+    final families = masters.map(_storyReferenceFamily).toSet();
+    final missingFamilies = <String>{
+      'personagem',
+      'ambiente',
+      'objeto',
+    }.difference(families);
+    if (missingFamilies.isNotEmpty) {
+      return 'Faltam fichas de ${missingFamilies.join(', ')} antes de gerar o vídeo.';
+    }
+    final missing = missingStoryReferenceImages(project);
+    if (missing.isEmpty) return null;
+    final counts = <String, int>{};
+    for (final reference in missing) {
+      final family = _storyReferenceFamily(reference);
+      counts[family] = (counts[family] ?? 0) + 1;
+    }
+    final parts = counts.entries
+        .map((entry) {
+          final plural = entry.value == 1
+              ? entry.key
+              : switch (entry.key) {
+                  'personagem' => 'personagens',
+                  'ambiente' => 'ambientes',
+                  _ => 'objetos',
+                };
+          return '${entry.value} $plural';
+        })
+        .join(', ');
+    return 'Gere as imagens de todas as referências antes do vídeo. Ainda faltam $parts.';
+  }
+
   List<ProductionReferenceItem> automaticReferenceTargets(
     ProductionProject project, {
     bool regenerateExisting = false,
   }) {
-    return project.references.where((reference) {
-      final category = reference.category.toUpperCase();
-      final isStoryMaster =
-          category.contains('CHARACTER') ||
-          category.contains('OPPOSING_FORCE') ||
-          category.contains('LOCATION') ||
-          category.contains('ENVIRONMENT') ||
-          category.contains('WORLD') ||
-          category.contains('PROP') ||
-          category.contains('OBJECT');
-      if (!reference.canonical || !isStoryMaster) return false;
+    final targets = storyMasterReferences(project).where((reference) {
       if (regenerateExisting) return true;
-      final hasAsset = reference.assetPath?.trim().isNotEmpty == true;
-      final hasPublicImage = reference.publicUrl?.trim().isNotEmpty == true;
-      return !hasAsset && !hasPublicImage;
+      return !referenceHasGeneratedImage(reference);
     }).toList();
+
+    ProductionReferenceItem? existingCover;
+    for (final reference in project.references) {
+      if (reference.category.toUpperCase() == 'APP_COVER') {
+        existingCover = reference;
+        break;
+      }
+    }
+    final hasCover = project.coverAssetPath?.trim().isNotEmpty == true ||
+        project.coverUrl?.trim().isNotEmpty == true ||
+        (existingCover != null && referenceHasGeneratedImage(existingCover));
+    if (!regenerateExisting && hasCover) return targets;
+
+    targets.add(
+      ProductionReferenceItem(
+        id: existingCover?.id ?? '${project.id}-app-cover',
+        label: project.title,
+        category: 'APP_COVER',
+        assetPath: existingCover?.assetPath,
+        publicUrl: existingCover?.publicUrl,
+        description: project.description,
+        canonical: true,
+        metadata: {
+          ...?existingCover?.metadata,
+          'assetRole': 'APP_COVER',
+          'targetField': 'Series.coverUrl',
+          'aspectRatio': '2:3 portrait',
+          'seriesTitle': project.title,
+          'genre': project.genre,
+          'logline': project.description,
+          'protagonist': project.seriesBible['protagonist'],
+          'opposingForce': project.seriesBible['opposing_force'],
+          'centralQuestion': project.seriesBible['central_question'],
+          'stakes': project.seriesBible['stakes'],
+          'visualStyle': project.seriesBible['visual_style'],
+          'background': project.seriesBible['background'],
+          'trope': project.seriesBible['trope'],
+          'characterAnchors': project.references
+              .where((reference) {
+                final category = reference.category.toUpperCase();
+                return category.contains('CHARACTER') ||
+                    category.contains('OPPOSING_FORCE');
+              })
+              .take(4)
+              .map(
+                (reference) => {
+                  'name': reference.label,
+                  'description': reference.description,
+                  'visualLock':
+                      reference.metadata['visual_lock'] ??
+                      reference.metadata['visualLock'] ??
+                      reference.metadata['appearance'],
+                  'outfitLock':
+                      reference.metadata['outfit_lock'] ??
+                      reference.metadata['outfitLock'],
+                },
+              )
+              .toList(),
+          'environmentAnchors': project.references
+              .where((reference) {
+                final category = reference.category.toUpperCase();
+                return category.contains('LOCATION') ||
+                    category.contains('ENVIRONMENT') ||
+                    category.contains('WORLD');
+              })
+              .take(3)
+              .map(
+                (reference) => {
+                  'name': reference.label,
+                  'description': reference.description,
+                  'visualLock':
+                      reference.metadata['visual_lock'] ??
+                      reference.metadata['visualLock'],
+                  'layoutLock':
+                      reference.metadata['layout_lock'] ??
+                      reference.metadata['layoutLock'],
+                },
+              )
+              .toList(),
+        },
+      ),
+    );
+    return targets;
   }
 
   ProductionProject applyCodexProjectRevision(
@@ -2678,6 +3090,98 @@ class LocalProductionWorkspaceService {
     );
   }
 
+  /// Applies character, location and prop sheets without rewriting title or episodes.
+  ProductionProject applyCodexStorySheets(
+    ProductionProject project,
+    Map<String, dynamic> output, {
+    String family = 'all',
+  }) {
+    final result = _codexResult(output);
+    final nestedPatch = Map<String, dynamic>.from(
+      result['projectPatch'] as Map? ?? const {},
+    );
+    final rawPatch = <String, dynamic>{
+      ...Map<String, dynamic>.from(
+        result['seriesBiblePatch'] as Map? ?? const {},
+      ),
+      ...Map<String, dynamic>.from(
+        nestedPatch['seriesBiblePatch'] as Map? ?? const {},
+      ),
+    };
+    final allowedKeys = _storySheetBibleKeys(family);
+    final seriesBiblePatch = <String, dynamic>{
+      for (final key in allowedKeys)
+        if (rawPatch[key] != null) key: rawPatch[key],
+    };
+    if (seriesBiblePatch['characters'] != null) {
+      seriesBiblePatch['character_bible'] = seriesBiblePatch['characters'];
+    }
+    if (seriesBiblePatch['environments'] != null) {
+      seriesBiblePatch['location_bible'] = seriesBiblePatch['environments'];
+    }
+    if (seriesBiblePatch['props'] != null) {
+      seriesBiblePatch['object_bible'] = seriesBiblePatch['props'];
+    }
+    final references = <Map<String, dynamic>>[
+      ..._asObjectList(result['references']),
+      ..._asObjectList(nestedPatch['references']),
+    ];
+    _appendStorySheetReferences(
+      references,
+      entries: _asObjectList(seriesBiblePatch['characters']),
+      category: 'CHARACTER_MASTER',
+    );
+    _appendStorySheetReferences(
+      references,
+      entries: _asObjectList(seriesBiblePatch['environments']),
+      category: 'LOCATION_MASTER',
+    );
+    _appendStorySheetReferences(
+      references,
+      entries: _asObjectList(seriesBiblePatch['props']),
+      category: 'PROP_MASTER',
+    );
+    final filteredReferences = references
+        .where(
+          (item) => _storySheetCategoryMatches(
+            family,
+            item['category']?.toString() ?? '',
+          ),
+        )
+        .toList();
+    final workflow = Map<String, dynamic>.from(
+      project.seriesBible['workflow'] as Map? ?? const {},
+    );
+    if (seriesBiblePatch.containsKey('characters')) {
+      workflow['characters'] = 'GENERATED_REVIEW_REQUIRED';
+    }
+    if (seriesBiblePatch.containsKey('environments')) {
+      workflow['environments'] = 'GENERATED_REVIEW_REQUIRED';
+    }
+    if (seriesBiblePatch.containsKey('props')) {
+      workflow['props'] = 'GENERATED_REVIEW_REQUIRED';
+    }
+    if (family == 'all' ||
+        (seriesBiblePatch.containsKey('characters') &&
+            seriesBiblePatch.containsKey('environments') &&
+            seriesBiblePatch.containsKey('props'))) {
+      workflow['characters_locations_props'] = 'GENERATED_REVIEW_REQUIRED';
+    }
+
+    return applyCodexProjectRevision(project, {
+      ...output,
+      'result': {
+        'projectPatch': {
+          'seriesBiblePatch': {
+            ...seriesBiblePatch,
+            'workflow': workflow,
+          },
+          'references': filteredReferences,
+        },
+      },
+    });
+  }
+
   static Map<String, dynamic> _codexResult(Map<String, dynamic> output) {
     final result = output['result'];
     if (result is Map<String, dynamic>) return result;
@@ -2698,11 +3202,16 @@ class LocalProductionWorkspaceService {
     final episode = project.episodes.firstWhere(
       (item) => item.number == episodeNumber,
     );
-    final maxDuration =
-        (script['max_shot_duration_seconds'] as num?)?.toInt() ??
-        (project.seriesBible['config'] as Map?)?['max_shot_duration_seconds']
-            as int? ??
-        10;
+    final maxDuration = _maxShotDurationFromBible({
+      ...project.seriesBible,
+      if (script['max_shot_duration_seconds'] != null)
+        'max_shot_duration_seconds': script['max_shot_duration_seconds'],
+      if (script['shot_duration_mode'] != null)
+        'shot_duration_mode': script['shot_duration_mode'],
+    });
+    final shotDurationFixed =
+        script['shot_duration_mode']?.toString() == 'FIXED' ||
+        project.seriesBible['shot_duration_mode']?.toString() == 'FIXED';
     var total = 0;
     var expectedShot = 1;
     final scenes = (script['scenes'] as List<dynamic>? ?? const [])
@@ -2715,6 +3224,13 @@ class LocalProductionWorkspaceService {
         final duration = (shot['duration_seconds'] as num?)?.toInt() ?? 0;
         if (number != expectedShot) {
           throw StateError('A numeração dos shots não é contínua.');
+        }
+        if (shotDurationFixed &&
+            duration != maxDuration &&
+            !(maxDuration == 10 && duration == 5)) {
+          throw StateError(
+            'Shot $number possui ${duration}s; o preset exige ${maxDuration}s (ou 5s no recorte final).',
+          );
         }
         if (duration < 1 || duration > maxDuration) {
           throw StateError(
@@ -2839,7 +3355,9 @@ class LocalProductionWorkspaceService {
             'source_script_status': 'LOCKED_FOR_PRODUCTION',
             'delivery_mode': 'episode_segment',
             'take_count': takes.length,
-            'duration_mode': 'VARIABLE_UP_TO_LIMIT',
+            'duration_mode': config.shotDurationFixed
+                ? 'FIXED'
+                : 'VARIABLE_UP_TO_LIMIT',
             'max_take_duration_seconds': config.maxShotDurationSeconds,
             'prompt_contract': 'ai_short_core_plus_code_style_preset_v1',
             'ai_short_core': 'SCENE_SPECIFIC_DYNAMIC_PROSE',
@@ -2887,7 +3405,9 @@ class LocalProductionWorkspaceService {
             'preserve_exact_dialogue': true,
             'preserve_scene_and_shot_order': true,
             'preserve_cliffhanger_cut': true,
-            'provider_duration_mode': 'VARIABLE_UP_TO_LIMIT',
+            'provider_duration_mode': config.shotDurationFixed
+                ? 'FIXED'
+                : 'VARIABLE_UP_TO_LIMIT',
             'provider_duration_limit_seconds': config.maxShotDurationSeconds,
           },
         },
@@ -2911,6 +3431,7 @@ class LocalProductionWorkspaceService {
     required DateTime updatedAt,
   }) {
     final creativePackage = _buildMicroDramaCreativePackage(config, id);
+    final season = _microDramaSeasonPackage(config);
     final episodes = <ProductionEpisodeItem>[];
     final episodeCards = <Map<String, dynamic>>[];
     final pressureLedger = <Map<String, dynamic>>[];
@@ -2922,7 +3443,15 @@ class LocalProductionWorkspaceService {
       final duration = index == 0
           ? config.firstEpisodeDurationSeconds
           : config.episodeDurationSeconds;
-      final plan = _microDramaEpisodePlan(config, episodeNumber: episodeNumber);
+      final plan = _microDramaEpisodePlan(
+        config,
+        episodeNumber: episodeNumber,
+        block: SeasonArchitecture.blockForEpisode(
+          season.blocks,
+          episodeNumber,
+        ),
+        profile: season.profile,
+      );
       final openingPickup = _microDramaOpeningPickup(
         language: config.language,
         episodeNumber: episodeNumber,
@@ -2970,6 +3499,13 @@ class LocalProductionWorkspaceService {
         'stakes_and_why_now': config.stakes,
         'protagonist_step': plan.protagonistStep,
         'antagonist_countermove': plan.countermove,
+        'pressure_type': plan.pressureType,
+        'paywall_role': plan.paywallRole,
+        'withheld_answer': plan.withheldAnswer,
+        'beat_engine': (episodeNumber == 1
+                ? season.profile.beatEngineFirst
+                : season.profile.beatEngineOther)
+            .toJson(),
         'peak_action': plan.cliffhanger,
         'exact_cut_point': 'Cortar no pico, antes da reação ou explicação.',
         'next_episode_question': questions.first,
@@ -2978,10 +3514,15 @@ class LocalProductionWorkspaceService {
       });
       pressureLedger.add({
         'episode': episodeNumber,
-        'primary_pressure': plan.job,
+        'primary_pressure': plan.pressureType,
         'choice_type': plan.protagonistStep,
         'value_changed': plan.valueChange,
-        'adjacent_similarity': 'review_required',
+        'adjacent_similarity': episodeNumber == 1
+            ? 'none'
+            : SeasonArchitecture.pressureTypeFor(episodeNumber) ==
+                  SeasonArchitecture.pressureTypeFor(episodeNumber - 1)
+            ? 'review_required'
+            : 'distinct',
       });
       previousHook = plan.cliffhanger;
     }
@@ -3025,6 +3566,8 @@ class LocalProductionWorkspaceService {
         'style_decoration_source': 'CODE_OWNED_FIXED_PRESET',
         'max_shot_duration_seconds': config.maxShotDurationSeconds,
         'provider_duration_seconds': config.maxShotDurationSeconds,
+        if (config.videoGenerationPresetId.isNotEmpty)
+          ...config.videoGenerationPreset.toBibleFields(),
         'genre': config.genre,
         'background': config.background,
         'trope': config.trope,
@@ -3040,7 +3583,12 @@ class LocalProductionWorkspaceService {
         'antagonist_counterplay':
             '${config.opposingForce} aprende com cada avanço e responde de acordo com objetivo próprio.',
         'escalation_ceiling':
-            'A resposta completa para "${config.centralQuestion}" fica reservada ao bloco final.',
+            'A resposta completa para "${config.centralQuestion}" fica reservada ao bloco final (${season.profile.centralQuestionPayoffWindow}).',
+        'viewer_dramatic_irony':
+            'Até o EP${season.profile.episodeCount <= 3 ? 1 : 3}, o espectador já vê o que ${config.protagonist} ainda recusa admitir sobre ${config.opposingForce}.',
+        'free_episode_count': season.profile.freeEpisodeCount,
+        'paywall_position': season.profile.paywallEpisode,
+        'paywall_episode': season.profile.paywallEpisode,
         'audio_strategy':
             'Cada vídeo já contém diálogo, ambiente e efeitos; somente a música permanece em faixa separada.',
         'automatic_review': config.automaticReview,
@@ -3069,15 +3617,37 @@ class LocalProductionWorkspaceService {
         },
         'promise_ledger': [
           {
+            'id': 'central_question',
             'promise': config.centralQuestion,
             'opened_episode': 1,
-            'payoff_window':
-                '${config.episodeCount - 1}-${config.episodeCount}',
+            'payoff_window': season.profile.centralQuestionPayoffWindow,
             'planned_payoff':
                 'A escolha final de ${config.protagonist} responde à pergunta e cria uma consequência.',
-            'status': 'open',
+            'status': 'reserved',
           },
+          if (season.profile.paywallEpisode != null)
+            {
+              'id': 'paywall_promise',
+              'promise':
+                  'A pergunta aberta no EP${season.profile.paywallEpisode} que justifica o desbloqueio',
+              'opened_episode': season.profile.paywallEpisode,
+              'payoff_window':
+                  '${season.profile.payoffAfterPaywallEpisode}-${season.profile.payoffAfterPaywallEpisode}',
+              'planned_payoff':
+                  'Pagar rápido e abrir um problema maior, sem resolver a pergunta central.',
+              'status': 'reserved',
+            },
         ],
+        'reserved_reveals': season.reservedReveals,
+        'episode_spine': season.spine,
+        'season_architecture': SeasonArchitecture.architectureBible(
+          profile: season.profile,
+          blocks: season.blocks,
+          reservedReveals: season.reservedReveals,
+          spine: season.spine,
+          acquisitionClip:
+              'Close de ${config.protagonist} em ${config.background} nos primeiros 5-12s, com a consequência de "${config.logline}" já visível.',
+        ),
         'episode_cards': episodeCards,
         'hook_chain': hookChain,
         'pressure_ledger': pressureLedger,
@@ -3094,8 +3664,13 @@ class LocalProductionWorkspaceService {
           'scenes': 0,
           'shots': 0,
           'max_shot_duration_seconds': config.maxShotDurationSeconds,
+          'duration_mode': config.shotDurationFixed
+              ? 'FIXED'
+              : 'VARIABLE_UP_TO_LIMIT',
           'generation_order': [
-            'season_outline',
+            'season_architecture',
+            'episode_spine',
+            'episode_cards',
             'characters',
             'environments',
             'props',
@@ -3576,95 +4151,186 @@ class LocalProductionWorkspaceService {
     ],
   };
 
+  static _MicroDramaSeasonPackage _microDramaSeasonPackage(
+    MicroDramaProjectConfig config,
+  ) {
+    final profile = SeasonArchitecture.buildRetentionProfile(
+      episodeCount: config.episodeCount,
+      firstDuration: config.firstEpisodeDurationSeconds,
+      otherDuration: config.episodeDurationSeconds,
+      distributionProfile: config.distributionProfile == 'validation_pilot'
+          ? 'app_native'
+          : config.distributionProfile,
+    );
+    final blocks = SeasonArchitecture.plannedSeasonBlocks(
+      profile.episodeCount,
+      profile.paywallEpisode,
+    );
+    final reservedReveals = SeasonArchitecture.defaultReservedReveals(
+      centralQuestion: config.centralQuestion,
+      opposingForce: config.opposingForce,
+      profile: profile,
+      blocks: blocks,
+    );
+    final spine = [
+      for (var number = 1; number <= config.episodeCount; number++)
+        SeasonArchitecture.spineSlot(
+          episodeNumber: number,
+          block:
+              SeasonArchitecture.blockForEpisode(blocks, number) ??
+              blocks.last,
+          reservedReveals: reservedReveals,
+        ),
+    ];
+    return _MicroDramaSeasonPackage(
+      profile: profile,
+      blocks: blocks,
+      reservedReveals: reservedReveals,
+      spine: spine,
+    );
+  }
+
+  static ProductionProject _withSeasonArchitectureIfMissing(
+    ProductionProject project,
+  ) {
+    final bible = project.seriesBible;
+    if (bible['season_architecture'] is Map &&
+        (bible['season_architecture'] as Map).isNotEmpty) {
+      return project;
+    }
+    final config = _microDramaConfigFromProject(project);
+    final season = _microDramaSeasonPackage(config);
+    return project.copyWith(
+      seriesBible: {
+        ...bible,
+        'free_episode_count':
+            bible['free_episode_count'] ?? season.profile.freeEpisodeCount,
+        'paywall_position':
+            bible['paywall_position'] ?? season.profile.paywallEpisode,
+        'paywall_episode':
+            bible['paywall_episode'] ?? season.profile.paywallEpisode,
+        'viewer_dramatic_irony':
+            bible['viewer_dramatic_irony'] ??
+            'Até o EP${season.profile.episodeCount <= 3 ? 1 : 3}, o espectador já vê o que ${config.protagonist} ainda recusa admitir sobre ${config.opposingForce}.',
+        'reserved_reveals': bible['reserved_reveals'] ?? season.reservedReveals,
+        'episode_spine': bible['episode_spine'] ?? season.spine,
+        'season_architecture': SeasonArchitecture.architectureBible(
+          profile: season.profile,
+          blocks: season.blocks,
+          reservedReveals: season.reservedReveals,
+          spine: season.spine,
+        ),
+      },
+    );
+  }
+
   static _MicroDramaEpisodePlan _microDramaEpisodePlan(
     MicroDramaProjectConfig config, {
     required int episodeNumber,
+    SeasonBlockPlan? block,
+    SeasonRetentionProfile? profile,
   }) {
-    final progress = episodeNumber / config.episodeCount;
+    final resolvedProfile =
+        profile ??
+        SeasonArchitecture.buildRetentionProfile(
+          episodeCount: config.episodeCount,
+          firstDuration: config.firstEpisodeDurationSeconds,
+          otherDuration: config.episodeDurationSeconds,
+          distributionProfile: 'app_native',
+        );
+    final resolvedBlock =
+        block ??
+        SeasonArchitecture.blockForEpisode(
+          SeasonArchitecture.plannedSeasonBlocks(
+            resolvedProfile.episodeCount,
+            resolvedProfile.paywallEpisode,
+          ),
+          episodeNumber,
+        );
+    final role = resolvedBlock?.conversionRole ?? 'binge_midgame';
+    final suffix = config.episodeCount > 8
+        ? ' ${episodeNumber.toString().padLeft(2, '0')}'
+        : '';
     late final String stage;
     late final String job;
     late final String goal;
     late final String emotionalBeat;
     late final String action;
     late final String valueChange;
-    if (episodeNumber == 1) {
-      stage = 'O impacto';
-      job = 'Provar a premissa e tornar o conflito inevitável.';
-      goal =
-          '${config.protagonist} precisa sobreviver ao impacto inicial e escolher uma reação que torne o conflito inevitável.';
-      emotionalBeat = 'choque / urgência';
-      action = 'transforma a consequência inicial em uma escolha pública';
-      valueChange = 'segurança para risco';
-    } else if (progress <= 0.25) {
-      stage = 'A negação';
-      job = 'Pagar o choque e mostrar por que a solução simples não funciona.';
-      goal =
-          '${config.protagonist} tenta recuperar o controle antes que a consequência anterior se torne pública.';
-      emotionalBeat = 'resistência / ameaça crescente';
-      action = 'tenta preservar o controle e perde uma vantagem concreta';
-      valueChange = 'controle para exposição';
-    } else if (progress <= 0.42) {
-      stage = 'A proposta';
-      job = 'Criar proximidade forçada e um custo emocional verificável.';
-      goal =
-          '${config.protagonist} aceita uma condição perigosa para proteger o que ainda pode salvar.';
-      emotionalBeat = 'proximidade forçada / vulnerabilidade';
-      action = 'aceita uma condição que aproxima o perigo';
-      valueChange = 'distância para intimidade perigosa';
-    } else if (progress <= 0.58) {
-      stage = 'A prova';
-      job = 'Ativar uma pista ou objeto que mude a estratégia.';
-      goal =
-          '${config.protagonist} busca uma prova física capaz de mudar a estratégia do conflito.';
-      emotionalBeat = 'suspeita / validação perigosa';
-      action = 'usa uma prova física e força a força oposta a reagir';
-      valueChange = 'suspeita para evidência';
-    } else if (progress <= 0.72) {
-      stage = 'O preço';
-      job = 'Cobrar a decisão anterior e retirar uma rota de fuga.';
-      goal =
-          '${config.protagonist} tenta proteger o vínculo central sem perder a última vantagem disponível.';
-      emotionalBeat = 'esperança / perda';
-      action = 'protege o que mais importa e sacrifica uma vantagem';
-      valueChange = 'esperança para perda';
-    } else if (progress <= 0.86) {
-      stage = 'A contrajogada';
-      job = 'Dar à força oposta uma vitória real que reorganize o poder.';
-      goal =
-          '${config.protagonist} precisa responder à vitória de ${config.opposingForce} antes que a derrota se torne permanente.';
-      emotionalBeat = 'confiança rompida / desvantagem';
-      action = 'responde à contrajogada com uma decisão irreversível';
-      valueChange = 'equilíbrio para desvantagem';
-    } else if (episodeNumber < config.episodeCount) {
-      stage = 'Sem saída';
-      job = 'Preparar o clímax com agência, perdas e promessas convergentes.';
-      goal =
-          '${config.protagonist} abandona a solução fácil e prepara o confronto que decidirá a temporada.';
-      emotionalBeat = 'desespero / determinação';
-      action = 'recusa a solução fácil e escolhe o confronto final';
-      valueChange = 'reação para agência';
-    } else {
-      stage = 'A escolha final';
-      job =
-          'Pagar a pergunta central por uma escolha causada pelo protagonista.';
-      goal =
-          '${config.protagonist} faz a escolha irreversível que responde à grande expectativa da temporada.';
-      emotionalBeat = 'medo / catarse';
-      action = 'faz a escolha que responde à promessa da temporada';
-      valueChange = 'promessa aberta para consequência';
+    switch (role) {
+      case 'acquisition_clip':
+      case 'free_funnel':
+        stage = episodeNumber == 1 ? 'O impacto' : 'A prova da fantasia';
+        job =
+            'Detonar a premissa em 3s e provar que o conflito se renova sem gastar a pergunta central.';
+        goal =
+            '${config.protagonist} precisa tornar o conflito inevitável sem revelar o fim da temporada.';
+        emotionalBeat = 'choque / urgência';
+        action = 'transforma a consequência inicial em uma escolha pública';
+        valueChange = 'segurança para risco';
+      case 'paywall_cliffhanger':
+        stage = 'O corte do paywall';
+        job =
+            'Fazer a pergunta cara o bastante para o próximo toque, sem entregar a resposta.';
+        goal =
+            '${config.protagonist} chega a um ponto sem volta visível; a resposta fica para o episódio pago.';
+        emotionalBeat = 'investimento / recusa de alívio';
+        action = 'chega à beira da verdade e é cortado antes de cruzá-la';
+        valueChange = 'dúvida para pergunta irreversível';
+      case 'post_paywall_payoff':
+        stage = 'O preço do desbloqueio';
+        job =
+            'Pagar o gancho do paywall nos primeiros segundos e abrir um problema maior.';
+        goal =
+            '${config.protagonist} recebe a resposta local e descobre que o custo real só agora começa.';
+        emotionalBeat = 'alívio falso / nova ameaça';
+        action = 'paga a pergunta anterior e provoca uma contrajogada pior';
+        valueChange = 'resposta para novo risco';
+      case 'sunk_cost':
+        stage = 'Sem saída';
+        job =
+            'Afastar ${config.protagonist} da resolução e dar a ${config.opposingForce} uma vitória real.';
+        goal =
+            '${config.protagonist} perde uma rota de fuga que o público já acreditava segura.';
+        emotionalBeat = 'desespero / determinação';
+        action = 'sacrifica uma vantagem e recusa a solução fácil';
+        valueChange = 'esperança para perda';
+      case 'season_payoff':
+        stage = episodeNumber == config.episodeCount
+            ? 'A escolha final'
+            : 'A convergência';
+        job =
+            'Pagar a pergunta central por uma escolha causada pelo protagonista, deixando um gancho de renovação.';
+        goal =
+            '${config.protagonist} faz a escolha irreversível que responde à grande expectativa da temporada.';
+        emotionalBeat = 'medo / catarse';
+        action = 'faz a escolha que responde à promessa da temporada';
+        valueChange = 'promessa aberta para consequência';
+      default:
+        stage = 'A escalada';
+        job =
+            'Subir o custo com uma pressão diferente da dos episódios vizinhos, sem gastar o teto da temporada.';
+        goal =
+            '${config.protagonist} avança por uma decisão visível enquanto ${config.opposingForce} aprende e responde.';
+        emotionalBeat = 'proximidade forçada / ameaça crescente';
+        action = 'aceita uma condição que aproxima o perigo e muda o poder';
+        valueChange = 'controle para exposição';
     }
-    final suffix = config.episodeCount > 8
-        ? ' ${episodeNumber.toString().padLeft(2, '0')}'
-        : '';
     final coldOpen = episodeNumber == 1
         ? '${config.protagonist} já enfrenta a consequência visível de ${config.logline}'
         : '${config.protagonist} recebe a consequência do corte anterior antes de conseguir se recompor.';
+    final withheld = (resolvedBlock?.mustNotResolve.isNotEmpty ?? false)
+        ? resolvedBlock!.mustNotResolve.join(', ')
+        : 'Não responder "${config.centralQuestion}" neste episódio.';
     final summary =
         '$coldOpen Em ${config.background}, ${config.protagonist} $action. '
         '${config.opposingForce} responde por objetivo próprio, elevando o risco: ${config.stakes} '
-        'O episódio muda o valor de $valueChange e termina antes da reação.';
-    final cliffhanger = episodeNumber == config.episodeCount
+        'O episódio muda o valor de $valueChange, reserva ($withheld) e termina antes da reação.';
+    final cliffhanger = role == 'season_payoff' &&
+            episodeNumber == config.episodeCount
         ? '${config.protagonist} executa a escolha final ligada a "${config.centralQuestion}"; a consequência aparece no quadro e corta antes de explicar o futuro.'
+        : role == 'paywall_cliffhanger'
+        ? '${config.protagonist} está a um gesto da verdade; ${config.opposingForce} torna o próximo segundo irreversível e o corte cai na pergunta, não na resposta.'
         : '${config.protagonist} descobre uma consequência concreta da própria escolha enquanto ${config.opposingForce} ativa a próxima ameaça; corte no primeiro instante irreversível.';
     return _MicroDramaEpisodePlan(
       title: '$stage$suffix',
@@ -3678,6 +4344,9 @@ class LocalProductionWorkspaceService {
       valueChange: valueChange,
       summary: summary,
       cliffhanger: cliffhanger,
+      paywallRole: role,
+      pressureType: SeasonArchitecture.pressureTypeFor(episodeNumber),
+      withheldAnswer: withheld,
     );
   }
 
@@ -3688,10 +4357,11 @@ class LocalProductionWorkspaceService {
     required Map<String, dynamic> card,
     required _MicroDramaCreativePackage creativePackage,
   }) {
-    final shotLimit = config.maxShotDurationSeconds.clamp(5, 10).toInt();
+    final shotLimit = config.maxShotDurationSeconds.clamp(1, 30).toInt();
     final shotDurations = _microDramaShotDurations(
       episode.durationSeconds,
       shotLimit,
+      fixed: config.shotDurationFixed,
     );
     final shotCount = shotDurations.length;
     final sceneCount = shotCount.clamp(1, 3).toInt();
@@ -3883,6 +4553,9 @@ class LocalProductionWorkspaceService {
       'approved_by_user': false,
       'duration_seconds': episode.durationSeconds,
       'max_shot_duration_seconds': shotLimit,
+      'shot_duration_mode': config.shotDurationFixed
+          ? 'FIXED'
+          : 'VARIABLE_UP_TO_LIMIT',
       'scene_count': scenes.length,
       'shot_count': shotCount,
       'display_script': displayScript,
@@ -4008,8 +4681,22 @@ class LocalProductionWorkspaceService {
     return takes;
   }
 
-  static List<int> _microDramaShotDurations(int total, int maximum) {
+  static List<int> _microDramaShotDurations(
+    int total,
+    int maximum, {
+    bool fixed = false,
+  }) {
+    if (fixed) {
+      final shotLength = maximum.clamp(1, total).toInt();
+      final fullCount = total ~/ shotLength;
+      final remainder = total % shotLength;
+      if (fullCount <= 0) return [total];
+      if (remainder == 0) return List<int>.filled(fullCount, shotLength);
+      return [...List<int>.filled(fullCount, shotLength), remainder];
+    }
     final minimum = switch (maximum) {
+      >= 30 => 8,
+      >= 15 => 6,
       >= 10 => 6,
       >= 8 => 5,
       _ => 3,
@@ -4022,6 +4709,8 @@ class LocalProductionWorkspaceService {
         .clamp(minimumCount, maximumCount)
         .toInt();
     final pattern = switch (maximum) {
+      >= 30 => const [12, 22, 10, 28, 8, 18, 15],
+      >= 15 => const [10, 15, 8, 12, 7, 14],
       >= 10 => const [8, 10, 7, 9, 6],
       >= 8 => const [6, 8, 5, 7, 6],
       _ => const [4, 5, 3, 4, 5],
@@ -4609,6 +5298,17 @@ class LocalProductionWorkspaceService {
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-|-$'), '');
 
+  static int _maxShotDurationFromBible(Map<String, dynamic> bible) {
+    final preset = VideoGenerationPreset.fromBible(bible);
+    final profile = bible['video_generation_profile']?.toString() ?? '';
+    if (profile.isNotEmpty && preset.id == profile) {
+      return preset.maxShotDurationSeconds.clamp(1, 30).toInt();
+    }
+    return ((bible['max_shot_duration_seconds'] as num?)?.toInt() ?? 10)
+        .clamp(5, 10)
+        .toInt();
+  }
+
   static MicroDramaProjectConfig _microDramaConfigFromProject(
     ProductionProject project,
   ) {
@@ -4660,15 +5360,14 @@ class LocalProductionWorkspaceService {
       episodeDurationSeconds: project.episodes.length > 1
           ? project.episodes[1].durationSeconds
           : ((bible['episode_duration_seconds'] as num?)?.toInt() ?? 60),
-      maxShotDurationSeconds:
-          ((bible['max_shot_duration_seconds'] as num?)?.toInt() ?? 10)
-              .clamp(5, 10)
-              .toInt(),
+      maxShotDurationSeconds: _maxShotDurationFromBible(bible),
       automaticReview: _readBool(bible['automatic_review'], fallback: true),
       automaticPreparation: _readBool(
         bible['automatic_preparation_requested'],
         fallback: false,
       ),
+      videoGenerationPresetId:
+          bible['video_generation_profile']?.toString() ?? '',
     );
   }
 
@@ -4694,7 +5393,7 @@ class LocalProductionWorkspaceService {
         hasProps &&
         (workflowName == 'guided_microdrama_v3_outline_first' ||
             workflowName.startsWith('openrouter_'))) {
-      return project;
+      return _withSeasonArchitectureIfMissing(project);
     }
 
     final episodeCount = project.episodes.isNotEmpty
@@ -4781,69 +5480,71 @@ class LocalProductionWorkspaceService {
     final workflow = Map<String, dynamic>.from(
       bible['workflow'] as Map? ?? const {},
     );
-    return project.copyWith(
-      seriesBible: {
-        ...bible,
-        'creation_workflow': 'guided_microdrama_v3_outline_first',
-        'workflow': {
-          ...workflow,
-          'outline': workflow['outline'] ?? 'GENERATED_REVIEW_REQUIRED',
-          'characters': 'GENERATED_REVIEW_REQUIRED',
-          'environments': 'GENERATED_REVIEW_REQUIRED',
-          'props': 'GENERATED_REVIEW_REQUIRED',
-          'characters_locations_props': 'GENERATED_REVIEW_REQUIRED',
-          'scripts': scriptState,
-          'production': allScriptsCreated
-              ? workflow['production'] ?? 'NOT_STARTED'
-              : 'BLOCKED_BY_SCRIPT',
+    return _withSeasonArchitectureIfMissing(
+      project.copyWith(
+        seriesBible: {
+          ...bible,
+          'creation_workflow': 'guided_microdrama_v3_outline_first',
+          'workflow': {
+            ...workflow,
+            'outline': workflow['outline'] ?? 'GENERATED_REVIEW_REQUIRED',
+            'characters': 'GENERATED_REVIEW_REQUIRED',
+            'environments': 'GENERATED_REVIEW_REQUIRED',
+            'props': 'GENERATED_REVIEW_REQUIRED',
+            'characters_locations_props': 'GENERATED_REVIEW_REQUIRED',
+            'scripts': scriptState,
+            'production': allScriptsCreated
+                ? workflow['production'] ?? 'NOT_STARTED'
+                : 'BLOCKED_BY_SCRIPT',
+          },
+          'season_outline':
+              bible['season_outline'] ??
+              {
+                'title': config.title,
+                'logline': config.logline,
+                'central_question': config.centralQuestion,
+                'stakes': config.stakes,
+                'episode_count': episodeCount,
+                'status': 'DRAFT_REVIEW_REQUIRED',
+              },
+          'characters': hasCharacters
+              ? bible['characters']
+              : creativePackage.characters,
+          'character_bible':
+              bible['character_bible'] ??
+              (hasCharacters ? bible['characters'] : creativePackage.characters),
+          'environments': hasEnvironments
+              ? bible['environments']
+              : creativePackage.environments,
+          'location_bible':
+              bible['location_bible'] ??
+              (hasEnvironments
+                  ? bible['environments']
+                  : creativePackage.environments),
+          'props': hasProps ? bible['props'] : creativePackage.props,
+          'object_bible':
+              bible['object_bible'] ??
+              (hasProps ? bible['props'] : creativePackage.props),
+          'episode_cards': episodeCards,
+          'scene_cards': hasScenes ? bible['scene_cards'] : const [],
+          'script_package':
+              bible['script_package'] ??
+              {
+                'status': scriptedEpisodes == 0
+                    ? 'NOT_STARTED'
+                    : allScriptsCreated
+                    ? 'DRAFT_REVIEW_REQUIRED'
+                    : 'PARTIAL_DRAFT',
+                'episodes': scriptedEpisodes,
+                'scenes': sceneCards.length,
+                'beats': project.episodes.fold<int>(
+                  0,
+                  (total, episode) => total + episode.takes.length,
+                ),
+              },
         },
-        'season_outline':
-            bible['season_outline'] ??
-            {
-              'title': config.title,
-              'logline': config.logline,
-              'central_question': config.centralQuestion,
-              'stakes': config.stakes,
-              'episode_count': episodeCount,
-              'status': 'DRAFT_REVIEW_REQUIRED',
-            },
-        'characters': hasCharacters
-            ? bible['characters']
-            : creativePackage.characters,
-        'character_bible':
-            bible['character_bible'] ??
-            (hasCharacters ? bible['characters'] : creativePackage.characters),
-        'environments': hasEnvironments
-            ? bible['environments']
-            : creativePackage.environments,
-        'location_bible':
-            bible['location_bible'] ??
-            (hasEnvironments
-                ? bible['environments']
-                : creativePackage.environments),
-        'props': hasProps ? bible['props'] : creativePackage.props,
-        'object_bible':
-            bible['object_bible'] ??
-            (hasProps ? bible['props'] : creativePackage.props),
-        'episode_cards': episodeCards,
-        'scene_cards': hasScenes ? bible['scene_cards'] : const [],
-        'script_package':
-            bible['script_package'] ??
-            {
-              'status': scriptedEpisodes == 0
-                  ? 'NOT_STARTED'
-                  : allScriptsCreated
-                  ? 'DRAFT_REVIEW_REQUIRED'
-                  : 'PARTIAL_DRAFT',
-              'episodes': scriptedEpisodes,
-              'scenes': sceneCards.length,
-              'beats': project.episodes.fold<int>(
-                0,
-                (total, episode) => total + episode.takes.length,
-              ),
-            },
-      },
-      references: references,
+        references: references,
+      ),
     );
   }
 

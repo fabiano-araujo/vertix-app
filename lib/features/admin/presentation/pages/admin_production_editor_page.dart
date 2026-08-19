@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../core/constants/api_constants.dart';
@@ -12,7 +15,7 @@ import '../../../../core/services/dola_generation_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/services/micro_drama_theme_composer.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/fullscreen_image_viewer.dart';
 
 part 'admin_production_editor_studio_part.dart';
 part 'admin_production_editor_content_part.dart';
@@ -116,6 +119,15 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   int _activeAiProgress = 0;
   String? _activeAiAction;
   String? _activeAiMessage;
+  int? _activeReferenceImageJobId;
+  int _activeReferenceImageProgress = 0;
+  String? _activeReferenceImageMessage;
+  Uri? _activeReferenceImageBridgeUri;
+  DateTime? _activeReferenceImageBridgeLaunchAt;
+  bool _referenceImageBridgeNeedsRetry = false;
+  bool _referenceImageRetryAvailable = false;
+  Set<String> _referenceImageIdsInProgress = <String>{};
+  final Set<String> _appliedReferenceImageIds = <String>{};
   bool _isAutomaticPreparationRunning = false;
   bool _automaticPreparationScheduled = false;
   int _automaticPreparationCompleted = 0;
@@ -144,6 +156,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   String? _assistantStreamText;
   final List<_StudioChatTurn> _assistantTurns = [];
   final ScrollController _assistantScrollController = ScrollController();
+  bool _assistantFollowBottom = true;
   MicroDramaProjectConfig? _pendingChatContract;
   bool _allowPop = false;
   Future<void>? _ongoingSave;
@@ -152,6 +165,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
 
   bool get _isAdmin => _authService.currentUser?.isAdmin == true;
   bool get _isAiBusy => _activeAiAction != null;
+  bool get _isReferenceImageBusy => _activeReferenceImageJobId != null;
   bool get _isAnyGenerationBusy =>
       _isAiBusy ||
       _isAutomaticPreparationRunning ||
@@ -161,6 +175,23 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     final project = _project;
     if (project == null) return false;
     return LocalProductionWorkspaceService.isMicroDramaChatBrief(project);
+  }
+
+  bool get _storyReferencesReadyForVideo {
+    final project = _project;
+    if (project == null) return false;
+    return _workspaceService.areStoryReferencesReadyForVideo(project);
+  }
+
+  String get _missingStoryReferencesMessage {
+    final project = _project;
+    if (project == null) {
+      return 'Gere as referências de personagens, ambientes e objetos antes do vídeo.';
+    }
+    return _workspaceService.videoGenerationBlockedByReferencesReason(
+          project,
+        ) ??
+        'Gere as imagens de todas as referências antes do vídeo.';
   }
 
   ProductionEpisodeItem? get _episode {
@@ -433,7 +464,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-          'Faça login com uma conta administradora para usar o Codex.',
+          'Faça login com uma conta administradora para usar a geração com IA.',
         ),
       ),
     );
@@ -465,7 +496,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       _activeAiProgress = 0;
       _activeAiMessage = 'Enviando ação autenticada ao servidor...';
     });
-    _scrollAssistantToEnd();
+    _scrollAssistantToEnd(force: true);
     try {
       final job = await _adminService.startCodexWorkflow(
         action: action,
@@ -487,8 +518,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           if (!mounted) return;
           final output = current.outputData;
           final conversation = output?['conversation']?.toString().trim();
-          final message =
-              output?['message']?.toString() ?? 'Gerando com IA...';
+          final message = output?['message']?.toString() ?? 'Gerando com IA...';
           setState(() {
             _activeAiProgress = current.progress;
             _activeAiMessage = message;
@@ -512,9 +542,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       _finishLastAssistantTurn(
         conversation?.isNotEmpty == true
             ? conversation!
-            : (summary?.isNotEmpty == true
-                  ? summary!
-                  : 'Ação concluída.'),
+            : (summary?.isNotEmpty == true ? summary! : 'Ação concluída.'),
       );
       return output;
     } catch (error) {
@@ -532,11 +560,306 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     }
   }
 
+  Future<void> _generateReferenceImagesWithCodex({
+    ProductionReferenceItem? reference,
+    bool regenerateExisting = false,
+  }) async {
+    final initialProject = _project;
+    if (initialProject == null || _isReferenceImageBusy) return;
+    final targets = reference == null
+        ? _workspaceService.automaticReferenceTargets(
+            initialProject,
+            regenerateExisting: regenerateExisting,
+          )
+        : <ProductionReferenceItem>[reference];
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Todas as referências canônicas já possuem imagem.'),
+        ),
+      );
+      return;
+    }
+    if (!await _ensureAiAccess() || !mounted) return;
+
+    try {
+      final project = await _persistProject(initialProject);
+      if (!mounted) return;
+      if (project.virtualId <= 0) {
+        throw StateError('Salve a série na Vertix API antes de gerar imagens.');
+      }
+      final started = await _adminService.startReferenceImageJob(
+        seriesId: project.virtualId,
+        references: targets
+            .map(
+              (item) => <String, dynamic>{
+                'id': item.id,
+                'label': item.label,
+                'category': item.category,
+                'description': item.description,
+                'canonical': item.canonical,
+                'metadata': item.metadata,
+              },
+            )
+            .toList(),
+      );
+      if (!mounted) return;
+      final bridgeUri = Uri(
+        scheme: ApiConstants.codexReferenceBridgeScheme,
+        host: 'reference-images',
+        queryParameters: {
+          'apiBase': ApiConstants.baseUrl,
+          'jobId': started.job.id.toString(),
+          'token': started.capabilityToken,
+        },
+      );
+      setState(() {
+        _activeReferenceImageJobId = started.job.id;
+        _activeReferenceImageProgress = 0;
+        _activeReferenceImageMessage = 'Abrindo uma nova tarefa no Codex...';
+        _activeReferenceImageBridgeUri = bridgeUri;
+        _activeReferenceImageBridgeLaunchAt = null;
+        _referenceImageBridgeNeedsRetry = false;
+        _referenceImageRetryAvailable = false;
+        _referenceImageIdsInProgress = <String>{};
+        _appliedReferenceImageIds.clear();
+      });
+
+      unawaited(_watchReferenceImageJob(started.job.id));
+      final opened = await _openActiveReferenceImageBridge();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Solicitação enviada ao Codex. A tela confirmará quando a tarefa começar.'
+                : 'A ponte não respondeu. Use “Tentar abrir novamente”.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activeReferenceImageJobId = null;
+        _activeReferenceImageProgress = 0;
+        _activeReferenceImageMessage = null;
+        _activeReferenceImageBridgeUri = null;
+        _activeReferenceImageBridgeLaunchAt = null;
+        _referenceImageBridgeNeedsRetry = false;
+        _referenceImageRetryAvailable = true;
+        _referenceImageIdsInProgress = <String>{};
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível abrir o Codex: $error')),
+      );
+    }
+  }
+
+  Future<bool> _openActiveReferenceImageBridge() async {
+    final bridgeUri = _activeReferenceImageBridgeUri;
+    if (bridgeUri == null) return false;
+    try {
+      final opened = await launchUrl(
+        bridgeUri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!mounted) return opened;
+      setState(() {
+        _activeReferenceImageBridgeLaunchAt = DateTime.now();
+        _referenceImageBridgeNeedsRetry = !opened;
+        _activeReferenceImageMessage = opened
+            ? 'Solicitação enviada. Aguardando o Codex confirmar a tarefa...'
+            : 'A ponte local não respondeu. Tente abrir novamente.';
+      });
+      return opened;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _activeReferenceImageBridgeLaunchAt = DateTime.now();
+          _referenceImageBridgeNeedsRetry = true;
+          _activeReferenceImageMessage =
+              'Não foi possível abrir a ponte local. Tente novamente.';
+        });
+      }
+      return false;
+    }
+  }
+
+  Future<void> _retryOpeningReferenceImageJob() async {
+    if (_activeReferenceImageBridgeUri == null) {
+      if (mounted) {
+        setState(() {
+          _activeReferenceImageJobId = null;
+          _activeReferenceImageProgress = 0;
+          _activeReferenceImageMessage = null;
+          _activeReferenceImageBridgeLaunchAt = null;
+          _referenceImageBridgeNeedsRetry = false;
+          _referenceImageRetryAvailable = true;
+          _referenceImageIdsInProgress = <String>{};
+        });
+      }
+      await _generateReferenceImagesWithCodex();
+      return;
+    }
+    final opened = await _openActiveReferenceImageBridge();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          opened
+              ? 'Nova tentativa enviada ao Codex.'
+              : 'A ponte local ainda não respondeu.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _watchReferenceImageJob(int jobId) async {
+    var completedSuccessfully = false;
+    try {
+      final deadline = DateTime.now().add(const Duration(hours: 3));
+      GenerationJob? completed;
+      while (mounted &&
+          _activeReferenceImageJobId == jobId &&
+          DateTime.now().isBefore(deadline)) {
+        final response = await _adminService.getJobStatus(jobId);
+        if (!mounted || _activeReferenceImageJobId != jobId) return;
+        final current = response.data;
+        if (!response.success || current == null) {
+          throw StateError(
+            response.message ?? 'Não foi possível consultar o job de imagens.',
+          );
+        }
+        _applyReferenceImageJobProgress(current);
+        final bridge = current.outputData?['bridge'];
+        final bridgeStatus = bridge is Map
+            ? bridge['status']?.toString().toUpperCase()
+            : null;
+        final bridgeConfirmed =
+            bridgeStatus == 'STARTING' || bridgeStatus == 'STARTED';
+        final launchedAt = _activeReferenceImageBridgeLaunchAt;
+        final confirmationTimedOut =
+            current.isPending &&
+            !bridgeConfirmed &&
+            (launchedAt == null ||
+                DateTime.now().difference(launchedAt) >
+                    const Duration(seconds: 15));
+        if (confirmationTimedOut && !_referenceImageBridgeNeedsRetry) {
+          setState(() {
+            _referenceImageBridgeNeedsRetry = true;
+            _activeReferenceImageMessage =
+                'O Codex não confirmou o início. Tente abrir novamente.';
+          });
+        }
+        if (current.isCompleted) {
+          completed = current;
+          break;
+        }
+        if (current.isFailed) {
+          throw StateError(
+            current.errorMessage ?? 'A geração de imagens falhou.',
+          );
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 1200));
+      }
+      if (!mounted || _activeReferenceImageJobId != jobId) return;
+      if (completed == null) {
+        throw TimeoutException(
+          'A geração ainda não terminou. Consulte o job $jobId.',
+        );
+      }
+      _applyReferenceImageJobProgress(completed);
+      completedSuccessfully = true;
+      _referenceImageRetryAvailable = false;
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${completed.outputData?['completed'] ?? 0} imagens geradas e enviadas para a Vertix API.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _referenceImageRetryAvailable = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('O job de imagens terminou com pendências: $error'),
+        ),
+      );
+    } finally {
+      if (mounted && _activeReferenceImageJobId == jobId) {
+        setState(() {
+          _activeReferenceImageJobId = null;
+          _activeReferenceImageProgress = 0;
+          _activeReferenceImageMessage = null;
+          _activeReferenceImageBridgeUri = null;
+          _activeReferenceImageBridgeLaunchAt = null;
+          _referenceImageBridgeNeedsRetry = false;
+          if (!completedSuccessfully) _referenceImageRetryAvailable = true;
+          _referenceImageIdsInProgress = <String>{};
+        });
+      }
+    }
+  }
+
+  void _applyReferenceImageJobProgress(GenerationJob job) {
+    if (!mounted || _activeReferenceImageJobId != job.id) return;
+    final output = job.outputData;
+    final items = (output?['items'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    var updated = _project;
+    var changed = false;
+    for (final item in items) {
+      final id = item['id']?.toString() ?? '';
+      final rawReference = item['reference'];
+      if (item['status'] == 'COMPLETED' &&
+          id.isNotEmpty &&
+          rawReference is Map &&
+          !_appliedReferenceImageIds.contains(id) &&
+          updated != null) {
+        updated = _workspaceService.applyGeneratedReferenceImage(updated, {
+          'result': {'reference': Map<String, dynamic>.from(rawReference)},
+        });
+        _appliedReferenceImageIds.add(id);
+        changed = true;
+      }
+    }
+    final activeIds = items
+        .where(
+          (item) => const ['GENERATING', 'UPLOADING'].contains(item['status']),
+        )
+        .map((item) => item['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    setState(() {
+      if (changed && updated != null) _project = updated;
+      _activeReferenceImageProgress = job.progress;
+      _activeReferenceImageMessage =
+          output?['message']?.toString() ?? 'Gerando imagens no Codex...';
+      final bridge = output?['bridge'];
+      final bridgeStatus = bridge is Map
+          ? bridge['status']?.toString().toUpperCase()
+          : null;
+      if (bridgeStatus == 'STARTING' || bridgeStatus == 'STARTED') {
+        _referenceImageBridgeNeedsRetry = false;
+      }
+      _referenceImageIdsInProgress = activeIds;
+    });
+    if (changed) _schedulePersist();
+  }
+
   String _promptForAiAction(String action, {int? episodeNumber}) {
     final episode = _episode;
     switch (action) {
       case 'GENERATE_SERIES_OUTLINE':
-        return 'Gere o esboço completo da série, com contrato, episódios e corrente de gancho.';
+        return 'Gere o contrato, o mapa da temporada com paywall e revelações reservadas, a espinha de todos os episódios e só então cada cartão. Não gaste no EP inicial o que o bloco final precisa.';
+      case 'GENERATE_STORY_SHEETS':
+        return 'Gere as fichas de personagens, ambientes e adereços a partir do esboço já existente.';
       case 'GENERATE_EPISODE_SCRIPT':
         return 'Gere o roteiro completo do EP${episodeNumber ?? episode?.number ?? ''} · ${episode?.title ?? ''} em cenas e shots, seguindo o esboço deste episódio.';
       case 'GENERATE_PRODUCTION_SCENES':
@@ -550,13 +873,14 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
 
   void _beginAssistantTurn(String userText) {
     setState(() {
+      _assistantFollowBottom = true;
       _assistantRequest = userText;
       _assistantStreamText = '';
       _assistantTurns
         ..add(_StudioChatTurn(role: 'user', text: userText))
         ..add(const _StudioChatTurn(role: 'assistant', text: '', busy: true));
     });
-    _scrollAssistantToEnd();
+    _scrollAssistantToEnd(force: true);
   }
 
   void _updateLastAssistantTurn(String text, {bool busy = true}) {
@@ -584,15 +908,31 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     _scrollAssistantToEnd();
   }
 
-  void _scrollAssistantToEnd() {
+  void _scrollAssistantToEnd({bool force = false}) {
+    if (!force && !_assistantFollowBottom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_assistantScrollController.hasClients) return;
-      _assistantScrollController.animateTo(
-        _assistantScrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
+      if (!mounted || !_assistantScrollController.hasClients) return;
+      if (!force && !_assistantFollowBottom) return;
+      final position = _assistantScrollController.position;
+      final target = position.maxScrollExtent;
+      if ((target - position.pixels).abs() < 1) return;
+      _assistantScrollController.jumpTo(target);
     });
+  }
+
+  void _onAssistantScrollNotification(ScrollNotification notification) {
+    final dragged =
+        notification is ScrollUpdateNotification &&
+        notification.dragDetails != null;
+    final userScroll =
+        notification is UserScrollNotification &&
+        notification.direction != ScrollDirection.idle;
+    if (!dragged && !userScroll) return;
+    if (!_assistantScrollController.hasClients) return;
+    final position = _assistantScrollController.position;
+    final atBottom = position.pixels >= position.maxScrollExtent - 72;
+    if (atBottom == _assistantFollowBottom) return;
+    setState(() => _assistantFollowBottom = atBottom);
   }
 
   Future<void> _generateSeriesOutlineWithCodex() async {
@@ -602,7 +942,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       final output = await _runAiWorkflow(
         action: 'GENERATE_SERIES_OUTLINE',
         userPrompt:
-            'Gere o esboço completo da série, com contrato, episódios e corrente de gancho.',
+            'Gere o esboço completo da série: contrato, mapa da temporada, espinha de todos os episódios, cartões e corrente de gancho.',
         onPartial: _applyStreamingOutline,
       );
       _applyStreamingOutline(output, persist: true);
@@ -610,6 +950,83 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Não foi possível gerar o esboço: $error')),
+      );
+    }
+  }
+
+  Future<void> _generateStorySheetsWithCodex({String family = 'all'}) async {
+    final project = _project;
+    if (project == null || _isAnyGenerationBusy) return;
+    final prompt = switch (family) {
+      'characters' =>
+        'Gere as fichas de personagens desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+      'locations' =>
+        'Gere as fichas de ambientes desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+      'props' =>
+        'Gere as fichas de adereços desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+      _ =>
+        'Gere as fichas de personagens, ambientes e adereços a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+    };
+    try {
+      final output = await _runAiWorkflow(
+        action: 'GENERATE_STORY_SHEETS',
+        instruction: [
+          'SCOPE: $family',
+          prompt,
+          'Título travado: ${project.title}',
+          'Logline: ${project.seriesBible['logline'] ?? project.description}',
+        ].join('\n'),
+        userPrompt: prompt,
+      );
+      final updated = _workspaceService.applyCodexStorySheets(
+        _project ?? project,
+        output,
+        family: family,
+      );
+      if (!mounted) return;
+      setState(() {
+        _project = updated;
+        if (family == 'characters' || family == 'all') {
+          _studioTabIndex = 2;
+        } else if (family == 'locations') {
+          _studioTabIndex = 3;
+        } else if (family == 'props') {
+          _studioTabIndex = 4;
+        }
+      });
+      await _persistProject(updated);
+      if (!mounted) return;
+      final count = updated.references.where((item) {
+        final category = item.category.toUpperCase();
+        return switch (family) {
+          'characters' =>
+            category.contains('CHARACTER') ||
+                category.contains('OPPOSING_FORCE'),
+          'locations' =>
+            category.contains('LOCATION') || category.contains('ENVIRONMENT'),
+          'props' => category.contains('PROP') || category.contains('OBJECT'),
+          _ => true,
+        };
+      }).length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            count == 0
+                ? 'A IA não retornou fichas para esta aba.'
+                : family == 'characters'
+                ? '$count fichas de personagens prontas para revisão.'
+                : family == 'locations'
+                ? '$count fichas de ambientes prontas para revisão.'
+                : family == 'props'
+                ? '$count fichas de adereços prontas para revisão.'
+                : '$count fichas prontas para revisão.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível gerar as fichas: $error')),
       );
     }
   }
@@ -650,13 +1067,13 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
                       setDialogState(() => updateOutline = value ?? false),
                   title: const Text('Atualizar esboço e objetivos'),
                   subtitle: const Text(
-                    'Codex refina a temporada, os objetivos de cada episódio e as fichas de personagens, ambientes e adereços.',
+                    'A IA refina a temporada, os objetivos de cada episódio e as fichas de personagens, ambientes e adereços.',
                   ),
                 ),
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text(
-                    'As fichas textuais são criadas pelo Codex. Imagens não são geradas automaticamente nesta etapa; você pode anexá-las depois.',
+                    'As fichas textuais são criadas primeiro. Depois, use “Gerar imagens no Codex” na área de referências para abrir uma tarefa que produz e envia cada imagem automaticamente.',
                     style: TextStyle(
                       color: AppColors.textTertiary,
                       fontSize: 11,
@@ -812,7 +1229,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           'requested_at_creation': requestedAtCreation,
           'outline_and_objectives': updateOutline,
           'reference_images': false,
-          'image_generation': 'DISABLED_BY_DESIGN',
+          'image_generation': 'AVAILABLE_VIA_CODEX_TASK',
           'generated_images': 0,
           'failures': failures,
           'updated_at': DateTime.now().toUtc().toIso8601String(),
@@ -845,10 +1262,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         episodeNumber: episode.number,
         userPrompt:
             'Gere o roteiro completo do EP${episode.number} · ${episode.title} em cenas e shots, seguindo o esboço deste episódio — sem inventar outra história.',
-        onPartial: (partial) => _applyStreamingScript(
-          partial,
-          episodeNumber: episode.number,
-        ),
+        onPartial: (partial) =>
+            _applyStreamingScript(partial, episodeNumber: episode.number),
       );
       _applyStreamingScript(
         output,
@@ -1014,9 +1429,9 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       setState(() => _project = updated);
       await _persistProject(updated);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajuste aplicado pelo Codex.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Ajuste aplicado pela IA.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1040,6 +1455,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     int? maxShotDurationSeconds,
     bool? automaticReview,
     bool? automaticPreparation,
+    String? videoGenerationPresetId,
   }) async {
     final project = _project;
     if (project == null || !_isChatBrief) return;
@@ -1059,6 +1475,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       maxShotDurationSeconds: maxShotDurationSeconds,
       automaticReview: automaticReview,
       automaticPreparation: automaticPreparation,
+      videoGenerationPresetId: videoGenerationPresetId,
     );
     setState(() {
       _project = updated;
@@ -1077,10 +1494,38 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           maxShotDurationSeconds: maxShotDurationSeconds,
           automaticReview: automaticReview,
           automaticPreparation: automaticPreparation,
+          videoGenerationPresetId: videoGenerationPresetId,
         );
       }
     });
     await _persistProject(updated);
+  }
+
+  Future<void> _setVideoGenerationPreset(String presetId) async {
+    final project = _project;
+    if (project == null) return;
+    try {
+      final updated = _workspaceService.applyVideoGenerationPreset(
+        project,
+        presetId,
+      );
+      final preset = VideoGenerationPreset.byId(presetId);
+      setState(() {
+        _project = updated;
+        if (_pendingChatContract != null) {
+          _pendingChatContract = _pendingChatContract!.copyWith(
+            videoGenerationPresetId: preset.id,
+            maxShotDurationSeconds: preset.maxShotDurationSeconds,
+          );
+        }
+      });
+      await _persistProject(updated);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Não foi possível aplicar o gerador: $error')),
+      );
+    }
   }
 
   void _fillPendingChatContract(MicroDramaProjectConfig config) {
@@ -1109,10 +1554,13 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           (bible['first_episode_duration_seconds'] as num?)?.toInt() ?? 120,
       episodeDurationSeconds:
           (bible['episode_duration_seconds'] as num?)?.toInt() ?? 60,
-      maxShotDurationSeconds:
-          (bible['max_shot_duration_seconds'] as num?)?.toInt() ?? 10,
+      maxShotDurationSeconds: VideoGenerationPreset.fromBible(
+        bible,
+      ).maxShotDurationSeconds,
       automaticReview: bible['automatic_review'] != false,
       automaticPreparation: bible['automatic_preparation_requested'] == true,
+      videoGenerationPresetId:
+          bible['video_generation_profile']?.toString() ?? '',
     );
   }
 
@@ -1130,7 +1578,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         fillMissingSlots: output['partial'] == true && !persist,
       );
       final readyIndex = updated.episodes.lastIndexWhere(
-        (episode) => episode.status != 'GENERATING' && episode.summary.isNotEmpty,
+        (episode) =>
+            episode.status != 'GENERATING' && episode.summary.isNotEmpty,
       );
       setState(() {
         _project = updated;
@@ -1159,9 +1608,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     } catch (error) {
       if (persist && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Não foi possível salvar o esboço: $error'),
-          ),
+          SnackBar(content: Text('Não foi possível salvar o esboço: $error')),
         );
       }
     }
@@ -1189,7 +1636,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           'Duracao do EP1: ${bible['first_episode_duration_seconds'] ?? 120}s',
           'Duracao dos demais: ${bible['episode_duration_seconds'] ?? 60}s',
           'Crie um TITULO original da serie (2 a 6 palavras). Nao use a ideia crua como titulo quando ela for so um genero, tropo ou uma palavra, por exemplo Romance.',
-          'Gere o contrato completo, depois cada episodio em sequencia, com personagens, ambientes, aderecos e corrente de gancho.',
+          'Gere o contrato, o mapa da temporada com paywall e revelacoes reservadas, a espinha de todos os episodios, e so entao cada cartao em sequencia. Nao gaste no EP inicial o que o bloco final precisa.',
         ].join('\n'),
         onPartial: _applyStreamingOutline,
       );
@@ -1315,6 +1762,14 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   }) async {
     final episode = _episode;
     if (episode == null) return;
+    if (!_storyReferencesReadyForVideo) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_missingStoryReferencesMessage)));
+      }
+      return;
+    }
     var take = episode.takes[takeIndex];
     if (take.status == 'GENERATING' || take.status == 'QUEUED') return;
     final prompt = take.visualPrompt.trim();
@@ -1342,16 +1797,20 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         )
         .toList();
 
-    _replaceTake(
-      takeIndex,
-      take.copyWith(status: 'QUEUED', progress: 0.04),
-    );
+    _replaceTake(takeIndex, take.copyWith(status: 'QUEUED', progress: 0.04));
     try {
+      final preset = VideoGenerationPreset.fromBible(
+        _project?.seriesBible ?? const {},
+      );
+      final dolaDuration = preset.channel == 'dola' || preset.fixedShotDuration
+          ? (take.durationSeconds <= 5 ? 5 : 10)
+          : (take.durationSeconds >= 10 ? 10 : 5);
       final job = await _dolaGenerationService.startJob(
         prompt: prompt,
         takeId: take.id,
         takeTitle: take.title,
-        durationSeconds: take.durationSeconds,
+        durationSeconds: dolaDuration,
+        model: preset.dolaModel ?? 'Dreamina Seedance 2.5',
         references: references,
       );
       if (!mounted) return;
@@ -1408,13 +1867,12 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     } catch (error) {
       if (!mounted) return;
       take = _episode!.takes[takeIndex];
-      _replaceTake(
-        takeIndex,
-        take.copyWith(status: 'READY', progress: 0),
-      );
+      _replaceTake(takeIndex, take.copyWith(status: 'READY', progress: 0));
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+          ),
         );
       }
     }
@@ -1422,6 +1880,14 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
 
   Future<void> _generateAllTakes() async {
     if (_isGeneratingEpisode || _episode == null) return;
+    if (!_storyReferencesReadyForVideo) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_missingStoryReferencesMessage)));
+      }
+      return;
+    }
     if (_episode!.takes.isEmpty) {
       await _approveEpisodeScriptForProduction();
       if (!mounted || (_episode?.takes.isEmpty ?? true)) return;
@@ -1526,12 +1992,21 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     return _timecode(seconds);
   }
 
-  Widget _withDesktopNavOffset(Widget child) {
-    if (!Responsive.isDesktop(context)) return child;
-    return Padding(
-      padding: const EdgeInsets.only(top: Responsive.topNavHeight),
-      child: child,
-    );
+  Widget _withDesktopNavOffset(Widget child) => child;
+
+  void _openProjectBoard({int? sectionIndex}) {
+    setState(() {
+      if (sectionIndex != null) _sectionIndex = sectionIndex;
+      _showTechnicalEditor = true;
+    });
+  }
+
+  void _leaveEpisodeProduction() {
+    setState(() {
+      _episodeProductionMode = false;
+      _showEpisodeScriptEditor = false;
+      _showTechnicalEditor = false;
+    });
   }
 
   @override
@@ -1573,11 +2048,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ),
       );
     }
-    if (_episodeProductionMode) {
-      return _withDesktopNavOffset(_buildEpisodeProductionScaffold());
-    }
     if (_showTechnicalEditor) {
       return _withDesktopNavOffset(_buildTechnicalEditorScaffold());
+    }
+    if (_episodeProductionMode) {
+      return _withDesktopNavOffset(_buildEpisodeProductionScaffold());
     }
     return _withDesktopNavOffset(_buildStudioWorkbenchScaffold());
   }
