@@ -88,4 +88,85 @@ void main() {
       contains('central_question'),
     );
   });
+
+  test('paywall charging starts after the free cliffhanger episode', () {
+    final profile = SeasonArchitecture.buildRetentionProfile(episodeCount: 8);
+    expect(SeasonArchitecture.episodeRequiresUnlock(3, profile.freeEpisodeCount), isFalse);
+    expect(SeasonArchitecture.episodeRequiresUnlock(4, profile.freeEpisodeCount), isTrue);
+  });
+
+  test('outline batches ask for five cards without shrinking the season map', () {
+    final first = SeasonArchitecture.outlineBatchRange(
+      fromEpisode: 1,
+      targetEpisodeCount: 50,
+    );
+    expect(first['throughEpisode'], 5);
+    expect(first['remaining'], 45);
+    expect(first['nextFromEpisode'], 6);
+    expect(first['canContinue'], isTrue);
+    expect(first['isFullSeason'], isFalse);
+
+    expect(
+      SeasonArchitecture.nextOutlineEpisode(
+        outlinedNumbers: const [1, 2, 3, 4, 5],
+        targetEpisodeCount: 50,
+      ),
+      6,
+    );
+    expect(
+      SeasonArchitecture.isReadyOutline(
+        status: 'OUTLINE_REVIEW_REQUIRED',
+        title: 'O Terceiro Envolvido',
+        summary: 'Um vizinho entra na trama.',
+      ),
+      isTrue,
+    );
+    expect(
+      SeasonArchitecture.isReadyOutline(
+        status: 'GENERATING',
+        title: 'Gerando episódio 33...',
+        summary: '',
+      ),
+      isFalse,
+    );
+    expect(
+      SeasonArchitecture.isPlaceholderTitle('Gerando episódio 32...'),
+      isTrue,
+    );
+    expect(
+      SeasonArchitecture.nextOutlineEpisode(
+        outlinedNumbers: List.generate(30, (index) => index + 1),
+        targetEpisodeCount: 50,
+      ),
+      31,
+    );
+    expect(
+      SeasonArchitecture.outlineBatchRange(
+        fromEpisode: 31,
+        targetEpisodeCount: 50,
+      )['throughEpisode'],
+      35,
+    );
+    expect(
+      SeasonArchitecture.nextOutlineEpisode(
+        outlinedNumbers: List.generate(50, (index) => index + 1),
+        targetEpisodeCount: 50,
+      ),
+      isNull,
+    );
+
+    final last = SeasonArchitecture.outlineBatchRange(
+      fromEpisode: 46,
+      targetEpisodeCount: 50,
+    );
+    expect(last['throughEpisode'], 50);
+    expect(last['canContinue'], isFalse);
+    expect(
+      SeasonArchitecture.outlineBatchRange(
+        fromEpisode: 1,
+        targetEpisodeCount: 3,
+      )['isFullSeason'],
+      isTrue,
+    );
+  });
 }

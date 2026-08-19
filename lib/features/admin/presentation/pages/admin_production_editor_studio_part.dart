@@ -5,37 +5,148 @@ extension _AdminProductionEditorStudioExtension
   Widget _buildEpisodeProductionScaffold() {
     final episode = _episode!;
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        leading: IconButton(
-          tooltip: 'Voltar ao roteiro',
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => setState(() {
-            _episodeProductionMode = false;
-            _showEpisodeScriptEditor = true;
-          }),
+      backgroundColor: const Color(0xFF111214),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildEpisodeProductionTopBar(episode),
+            const Divider(height: 1, color: AppColors.surfaceLighter),
+            Expanded(child: _buildTakes()),
+          ],
         ),
-        title: Text(
-          'EP${episode.number} · ${episode.title} · Produção de vídeo',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Salvar na API',
-            onPressed: _isSaving ? null : _saveProject,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_outlined),
-          ),
-        ],
       ),
-      body: _buildEditor(),
+    );
+  }
+
+  Widget _buildEpisodeProductionTopBar(ProductionEpisodeItem episode) {
+    final beats = episode.takes.length;
+    final duration = episode.takes.fold<int>(
+      0,
+      (sum, take) => sum + take.durationSeconds,
+    );
+    final displayTitle = _episodeDisplayTitle(
+      episode,
+      _episodeCardFor(_project!, episode.number),
+    );
+    final backButton = TextButton.icon(
+      onPressed: _leaveEpisodeProduction,
+      icon: const Icon(Icons.arrow_back, size: 18),
+      label: const Text('De volta à bancada'),
+    );
+    final boardButton = OutlinedButton.icon(
+      onPressed: _openProjectBoard,
+      icon: const Icon(Icons.dashboard_customize_outlined, size: 18),
+      label: const Text('Abrir quadro do projeto'),
+    );
+    final exportButton = FilledButton(
+      onPressed: _showEpisodePreview,
+      child: const Text('Exportar'),
+    );
+    final saveButton = IconButton(
+      tooltip: 'Salvar',
+      onPressed: _isSaving ? null : _saveProject,
+      icon: _isSaving
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.save_outlined),
+    );
+    return ColoredBox(
+      color: const Color(0xFF17191D),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 900;
+          final title = Column(
+            children: [
+              Text(
+                'Episódio ${episode.number} $displayTitle',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '$beats batidas · ${duration}s',
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          );
+          if (compact) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 8, 8),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'De volta à bancada',
+                        onPressed: _leaveEpisodeProduction,
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(child: title),
+                      saveButton,
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 4, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _openProjectBoard,
+                            icon: const Icon(
+                              Icons.dashboard_customize_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('Quadro do projeto'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _showEpisodePreview,
+                          child: const Text('Exportar'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+          return SizedBox(
+            height: 64,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  backButton,
+                  TextButton(
+                    onPressed: () => _showStudioMessage(
+                      'Envie seu feedback pelo canal da equipe.',
+                    ),
+                    child: const Text('Feedback'),
+                  ),
+                  Expanded(child: title),
+                  boardButton,
+                  const SizedBox(width: 8),
+                  exportButton,
+                  saveButton,
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -486,6 +597,7 @@ extension _AdminProductionEditorStudioExtension
         emptyLabel: 'Nenhum personagem foi definido para esta obra.',
         addLabel: 'Adicionar personagem',
         initialCategory: 'CHARACTER_REFERENCE',
+        sheetFamily: 'characters',
       ),
       3 => _buildReferences(
         categories: const {
@@ -500,6 +612,7 @@ extension _AdminProductionEditorStudioExtension
         emptyLabel: 'Nenhum ambiente foi definido para esta obra.',
         addLabel: 'Adicionar ambiente',
         initialCategory: 'LOCATION_MASTER',
+        sheetFamily: 'locations',
       ),
       4 => _buildReferences(
         categories: const {
@@ -514,6 +627,7 @@ extension _AdminProductionEditorStudioExtension
         emptyLabel: 'Nenhum adereço foi definido para esta obra.',
         addLabel: 'Adicionar adereço',
         initialCategory: 'OBJECT_REFERENCE',
+        sheetFamily: 'props',
       ),
       _ => _buildScript(),
     };
@@ -528,7 +642,7 @@ extension _AdminProductionEditorStudioExtension
           icon: const Icon(Icons.arrow_back),
           onPressed: () => setState(() => _showTechnicalEditor = false),
         ),
-        title: Text('${_project?.title ?? 'Studio'} • editor tecnico'),
+        title: Text('${_project?.title ?? 'Studio'} · quadro do projeto'),
         actions: [
           IconButton(
             tooltip: 'Salvar na API',
@@ -853,11 +967,16 @@ extension _AdminProductionEditorStudioExtension
     }
     final hasDetailedScript = _hasEpisodeScriptDraft(project, episode.number);
     final productionReady = episode.takes.isNotEmpty;
+    final hasReadyOutline = _episodeHasReadyOutline(episode);
+    final continueBatch = _nextOutlineBatch(project);
     final characterCount = project.references
         .where((item) => item.category.contains('CHARACTER'))
         .length;
     final nextEpisodeIndex = _episodeIndex + 1;
     final hasNextEpisode = nextEpisodeIndex < project.episodes.length;
+    final nextEpisode = hasNextEpisode
+        ? project.episodes[nextEpisodeIndex]
+        : null;
     final previewText = _visibleText(episode.summary).isNotEmpty
         ? _visibleText(episode.summary)
         : _bibleText(project, 'logline', fallback: project.description);
@@ -875,7 +994,7 @@ extension _AdminProductionEditorStudioExtension
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Assistente de redação de AI',
+                    'Assistente de redação de IA',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -886,9 +1005,7 @@ extension _AdminProductionEditorStudioExtension
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView(
-              controller: _assistantScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: _assistantConversationScroller(
               children: [
                 _buildAssistantTurns(
                   fallback: Text(
@@ -904,11 +1021,15 @@ extension _AdminProductionEditorStudioExtension
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  productionReady
+                  continueBatch != null
+                      ? '${_readyOutlineCount(project)} de ${project.targetEpisodeCount} episódios têm texto-base. O próximo lote é EP${continueBatch['fromEpisode']}-${continueBatch['throughEpisode']}.'
+                      : productionReady
                       ? 'O EP${episode.number} · ${episode.title} está pronto para produção de vídeo.'
                       : hasDetailedScript
                       ? 'O roteiro do EP${episode.number} · ${episode.title} está pronto. Como você quer seguir?'
-                      : 'O esboço do EP${episode.number} · ${episode.title} está na área de trabalho. Escolha o próximo passo.',
+                      : hasReadyOutline
+                      ? 'O esboço do EP${episode.number} · ${episode.title} está na área de trabalho. Escolha o próximo passo.'
+                      : 'Este episódio ainda não tem o texto-base. Continue o esboço antes de gerar o roteiro.',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     height: 1.45,
@@ -916,6 +1037,18 @@ extension _AdminProductionEditorStudioExtension
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (continueBatch != null) ...[
+                  _assistantChoiceButton(
+                    label:
+                        'Continuar o texto-base EP${continueBatch['fromEpisode']}-${continueBatch['throughEpisode']}',
+                    onTap: _isAnyGenerationBusy
+                        ? null
+                        : () => _generateSeriesOutlineWithCodex(
+                            fromEpisode: continueBatch['fromEpisode'] as int,
+                          ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 _assistantChoiceButton(
                   label: characterCount == 0
                       ? 'Gerar personagens/locações/props antes de continuar'
@@ -924,7 +1057,7 @@ extension _AdminProductionEditorStudioExtension
                       ? null
                       : () {
                           if (characterCount == 0) {
-                            _showAutomaticPreparationDialog();
+                            _generateStorySheetsWithCodex();
                           } else {
                             setState(() => _studioTabIndex = 2);
                           }
@@ -932,24 +1065,47 @@ extension _AdminProductionEditorStudioExtension
                 ),
                 const SizedBox(height: 8),
                 _assistantChoiceButton(
-                  label: hasNextEpisode
-                      ? 'Continuar direto para o roteiro do Episódio ${project.episodes[nextEpisodeIndex].number}'
+                  label: continueBatch != null
+                      ? 'Quero revisar o texto-base do Episódio ${episode.number}'
+                      : hasNextEpisode &&
+                            nextEpisode != null &&
+                            _episodeHasReadyOutline(nextEpisode)
+                      ? 'Continuar direto para o roteiro do Episódio ${nextEpisode.number}'
                       : productionReady
                       ? 'Entrar na produção de vídeo deste episódio'
                       : hasDetailedScript
                       ? 'Aprovar e liberar a produção de vídeo'
-                      : 'Gerar o roteiro detalhado deste episódio',
+                      : hasReadyOutline
+                      ? 'Gerar o roteiro detalhado deste episódio'
+                      : 'Gerar o texto-base deste episódio',
                   onTap: _isAnyGenerationBusy
                       ? null
                       : () {
-                          if (hasNextEpisode) {
+                          if (continueBatch != null && !hasReadyOutline) {
+                            _generateSeriesOutlineWithCodex(
+                              fromEpisode: continueBatch['fromEpisode'] as int,
+                            );
+                            return;
+                          }
+                          if (hasNextEpisode &&
+                              nextEpisode != null &&
+                              _episodeHasReadyOutline(nextEpisode) &&
+                              continueBatch == null) {
                             setState(() => _episodeIndex = nextEpisodeIndex);
                             _generateEpisodeScript(nextEpisodeIndex);
-                          } else if (productionReady || hasDetailedScript) {
-                            _openEpisodeProduction();
-                          } else {
-                            _generateEpisodeScript(_episodeIndex);
+                            return;
                           }
+                          if (productionReady || hasDetailedScript) {
+                            _openEpisodeProduction();
+                            return;
+                          }
+                          if (hasReadyOutline) {
+                            _generateEpisodeScript(_episodeIndex);
+                            return;
+                          }
+                          _generateSeriesOutlineWithCodex(
+                            fromEpisode: episode.number,
+                          );
                         },
                 ),
                 const SizedBox(height: 8),
@@ -1007,7 +1163,7 @@ extension _AdminProductionEditorStudioExtension
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Assistente de redação de AI',
+                    'Assistente de redação de IA',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
@@ -1018,9 +1174,7 @@ extension _AdminProductionEditorStudioExtension
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView(
-              controller: _assistantScrollController,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: _assistantConversationScroller(
               children: [
                 const Text(
                   'Comece a criar seu drama curto',
@@ -1034,6 +1188,11 @@ extension _AdminProductionEditorStudioExtension
                 const Text(
                   'Ajustes básicos',
                   style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
+                _videoGenerationPresetPicker(
+                  selectedId:
+                      bible['video_generation_profile']?.toString() ?? '',
                 ),
                 const SizedBox(height: 10),
                 _creationEpisodeMode(episodeCount),
@@ -1348,6 +1507,111 @@ extension _AdminProductionEditorStudioExtension
     ),
   );
 
+  Widget _videoGenerationPresetPicker({required String selectedId}) {
+    final selected = VideoGenerationPreset.fromBible(
+      _project?.seriesBible ?? const {},
+    );
+    final effectiveId = selectedId.isNotEmpty ? selectedId : selected.id;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Geração de vídeo',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        ...VideoGenerationPreset.catalog.map((preset) {
+          final isSelected = effectiveId == preset.id;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              onTap: () => unawaited(_setVideoGenerationPreset(preset.id)),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF2A2D34)
+                      : const Color(0xFF1A1C21),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? Colors.white38
+                        : const Color(0xFF3A3D45),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                preset.modelLabel,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              _videoPresetBadge(
+                                preset.durationLabel,
+                                const Color(0xFF3A3D45),
+                              ),
+                              if (preset.recommended)
+                                _videoPresetBadge(
+                                  'Recomendado',
+                                  const Color(0xFF6D5AE6),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            preset.description,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isSelected)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 8, top: 2),
+                        child: Icon(Icons.check, size: 18),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _videoPresetBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
   Widget _creationSettingDropdown<T>({
     required String label,
     required T value,
@@ -1470,9 +1734,43 @@ extension _AdminProductionEditorStudioExtension
     );
   }
 
+  Widget _assistantConversationScroller({required List<Widget> children}) {
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            _onAssistantScrollNotification(notification);
+            return false;
+          },
+          child: ListView(
+            controller: _assistantScrollController,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            children: children,
+          ),
+        ),
+        if (!_assistantFollowBottom)
+          Positioned(
+            right: 12,
+            bottom: 8,
+            child: FloatingActionButton.small(
+              tooltip: 'Ir para o fim',
+              backgroundColor: const Color(0xFF2A2D34),
+              foregroundColor: AppColors.textPrimary,
+              onPressed: () {
+                setState(() => _assistantFollowBottom = true);
+                _scrollAssistantToEnd(force: true);
+              },
+              child: const Icon(Icons.arrow_downward, size: 18),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildAssistantTurns({required Widget fallback}) {
     if (_assistantTurns.isEmpty) {
       return _assistantAiBubble(
+        copyText: _assistantStreamText,
         child: _assistantConversationBody(fallback: fallback),
       );
     }
@@ -1485,6 +1783,7 @@ extension _AdminProductionEditorStudioExtension
             _assistantUserBubble(_assistantTurns[index].text)
           else
             _assistantAiBubble(
+              copyText: _assistantTurns[index].text,
               child: _buildAssistantTurnBody(_assistantTurns[index]),
             ),
         ],
@@ -1545,6 +1844,18 @@ extension _AdminProductionEditorStudioExtension
             ),
           ],
         ],
+        if (!turn.busy && turn.actions.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          for (var index = 0; index < turn.actions.length; index++) ...[
+            if (index > 0) const SizedBox(height: 8),
+            _assistantChoiceButton(
+              label: turn.actions[index].label,
+              onTap: _isAnyGenerationBusy
+                  ? null
+                  : () => _handleStudioChatAction(turn.actions[index].id),
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -1594,16 +1905,40 @@ extension _AdminProductionEditorStudioExtension
     ),
   );
 
-  Widget _assistantAiBubble({required Widget child}) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1C1E24),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: AppColors.surfaceLighter),
-    ),
-    child: child,
-  );
+  Widget _assistantAiBubble({required Widget child, String? copyText}) {
+    final trimmed = copyText?.trim() ?? '';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1E24),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.surfaceLighter),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+            child: child,
+          ),
+          if (trimmed.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Copiar mensagem',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                icon: const Icon(Icons.copy, size: 16),
+                color: AppColors.textSecondary,
+                onPressed: () => _copyChatText(trimmed),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget _assistantChoiceButton({
     required String label,
@@ -1647,13 +1982,20 @@ extension _AdminProductionEditorStudioExtension
             Expanded(
               child: TextField(
                 controller: _assistantController,
-                enabled: !_isAnyGenerationBusy,
                 minLines: 1,
                 maxLines: 4,
                 textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _submitAssistantRequest(),
+                onSubmitted: (_) {
+                  if (_canStopGeneration) {
+                    unawaited(_cancelActiveGeneration());
+                    return;
+                  }
+                  _submitAssistantRequest();
+                },
                 decoration: InputDecoration(
-                  hintText: _isChatBrief
+                  hintText: _canStopGeneration
+                      ? 'Gerando... toque em parar para interromper'
+                      : _isChatBrief
                       ? 'Converse sobre ideias...'
                       : 'Peça um ajuste no roteiro...',
                   border: InputBorder.none,
@@ -1697,18 +2039,13 @@ extension _AdminProductionEditorStudioExtension
             ),
             const Spacer(),
             IconButton.filled(
-              tooltip: 'Enviar',
-              onPressed: _isAnyGenerationBusy ? null : _submitAssistantRequest,
-              icon: _activeAiAction == 'REVISE_PROJECT'
-                  ? const SizedBox(
-                      width: 17,
-                      height: 17,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.arrow_upward),
+              tooltip: _canStopGeneration ? 'Parar' : 'Enviar',
+              onPressed: _canStopGeneration
+                  ? () => unawaited(_cancelActiveGeneration())
+                  : _submitAssistantRequest,
+              icon: Icon(
+                _canStopGeneration ? Icons.stop_rounded : Icons.arrow_upward,
+              ),
             ),
           ],
         ),
@@ -1725,6 +2062,13 @@ extension _AdminProductionEditorStudioExtension
       return;
     }
     unawaited(_reviseProjectWithCodex('[$_assistantWriterMode] $value'));
+  }
+
+  Future<void> _copyChatText(String text) async {
+    final value = text.trim();
+    if (value.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: value));
+    _showStudioMessage('Mensagem copiada');
   }
 
   void _showStudioMessage(String message) {

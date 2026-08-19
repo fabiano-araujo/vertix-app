@@ -2,21 +2,31 @@ import { prisma } from './prisma';
 import { generateText } from './openrouter.service';
 import { resolveModel } from '../config/ai-models.config';
 import {
+  JOB_CANCELLED_MESSAGE,
+  clearJobAbort,
+  registerJobAbort,
+} from './ai-generation.service';
+import {
   applyPlannedBlockRanges,
   beatEngineForDuration,
   buildRetentionProfileFromProject,
   clampReservedReveals,
   compactSpineForPrompt,
+  DEFAULT_OUTLINE_BATCH_SIZE,
   ensureFullSpine,
   episodeDurationSeconds,
+  hasLockedSeasonArchitecture,
   lockedRevealsForEpisode,
   mergeSpine,
+  outlineBatchRange,
   parseReservedReveals,
   plannedSeasonBlocks,
   recentCardsForPrompt,
   seasonContextForEpisode,
-  spineChunkRanges,
+  spineChunkRangesIn,
+  spineThroughForBatch,
   type EpisodeSpineSlot,
+  type OutlineBatchRange,
 } from './season-architecture.service';
 
 export const CODEX_WORKFLOW_ACTIONS = [
@@ -37,6 +47,8 @@ export interface CodexWorkflowRequest {
   action: CodexWorkflowAction;
   project: JsonMap;
   episodeNumber?: number;
+  fromEpisode?: number;
+  batchSize?: number;
   instruction?: string;
   codexThreadId?: string;
 }
@@ -475,19 +487,42 @@ const DEFAULT_STORY_REASONING = {
   exclude: true,
 };
 
+const isCancelledError = (error: unknown): boolean => {
+  const message = String((error as { message?: string })?.message || '').toLowerCase();
+  return (
+    message.includes('cancelled by user') ||
+    message.includes('cancelada pelo') ||
+    (error as { name?: string })?.name === 'AbortError' ||
+    (error as { name?: string })?.name === 'CanceledError' ||
+    (error as { code?: string })?.code === 'ERR_CANCELED'
+  );
+};
+
+const throwIfAborted = (abortController?: AbortController) => {
+  if (!abortController?.signal.aborted) return;
+  throw new Error(JOB_CANCELLED_MESSAGE);
+};
+
 const generateJson = async (
   model: string,
   prompt: string | Array<{ role: string; content: string }>,
   maxTokens: number,
+  abortController?: AbortController,
 ): Promise<JsonMap> => {
-  const text = await generateText(prompt, {
-    model,
-    temperature: 0.7,
-    max_tokens: maxTokens,
-    timeout: 180000,
-    response_format: { type: 'json_object' },
-    reasoning: DEFAULT_STORY_REASONING,
-  });
+  throwIfAborted(abortController);
+  const text = await generateText(
+    prompt,
+    {
+      model,
+      temperature: 0.7,
+      max_tokens: maxTokens,
+      timeout: 180000,
+      response_format: { type: 'json_object' },
+      reasoning: DEFAULT_STORY_REASONING,
+    },
+    abortController,
+  );
+  throwIfAborted(abortController);
   if (typeof text !== 'string' || !text.trim()) {
     throw new Error('OpenRouter retornou resposta vazia');
   }
@@ -529,10 +564,84 @@ const compactSeriesForEpisodeOutline = (
   },
 });
 
+const episodeNumberOf = (value: unknown): number | null =>
+  asEpisodeNumber(asMap(value).episode) || asEpisodeNumber(asMap(value).number);
+
+const asOutlineEpisode = (value: unknown): JsonMap | null => {
+  const row = asMap(value);
+  const number = asEpisodeNumber(row.number);
+  if (!number) return null;
+  const status = String(row.status || '');
+  if (status === 'GENERATING') return null;
+  return {
+    ...row,
+    number,
+    title: row.title,
+    summary: row.summary,
+    cliffhanger: row.cliffhanger,
+    durationSeconds: Number(row.durationSeconds || row.duration_seconds) || 60,
+    status: status || 'OUTLINE_REVIEW_REQUIRED',
+  };
+};
+
+const seedOutlineFromExisting = (
+  bible: JsonMap,
+  project: JsonMap,
+  batch: OutlineBatchRange,
+): { patch: JsonMap; episodes: JsonMap[]; references: any[] } => {
+  const keepBefore = (value: unknown) => {
+    const number = episodeNumberOf(value);
+    return number != null && number < batch.fromEpisode;
+  };
+  const patch: JsonMap = {
+    title: bible.title,
+    logline: bible.logline,
+    protagonist: bible.protagonist,
+    opposing_force: bible.opposing_force,
+    central_question: bible.central_question,
+    big_expectation: bible.big_expectation,
+    emotional_fantasy: bible.emotional_fantasy,
+    differentiating_mechanism: bible.differentiating_mechanism,
+    language: bible.language,
+    genre: bible.genre,
+    characters: bible.characters,
+    environments: bible.environments,
+    props: bible.props,
+    episode_engine: bible.episode_engine,
+    relationship_engine: bible.relationship_engine,
+    antagonist_counterplay: bible.antagonist_counterplay,
+    escalation_ceiling: bible.escalation_ceiling,
+    viewer_dramatic_irony: bible.viewer_dramatic_irony,
+    promise_ledger: bible.promise_ledger,
+    reserved_reveals: bible.reserved_reveals,
+    season_architecture: bible.season_architecture,
+    episode_cards: (Array.isArray(bible.episode_cards) ? bible.episode_cards : [])
+      .filter(keepBefore),
+    hook_chain: (Array.isArray(bible.hook_chain) ? bible.hook_chain : [])
+      .filter(keepBefore),
+    episode_spine: Array.isArray(bible.episode_spine) ? bible.episode_spine : [],
+    creation_workflow: bible.creation_workflow || 'openrouter_outline_architecture_v2',
+  };
+  const episodes = (Array.isArray(project.episodes) ? project.episodes : [])
+    .map(asOutlineEpisode)
+    .filter((item): item is JsonMap => {
+      if (!item) return false;
+      const number = asEpisodeNumber(item.number);
+      return number != null && number < batch.fromEpisode;
+    })
+    .sort((a, b) => Number(a.number) - Number(b.number));
+  return {
+    patch,
+    episodes,
+    references: Array.isArray(project.references) ? project.references : [],
+  };
+};
+
 const generateOutlineInStages = async (
   request: CodexWorkflowRequest,
   model: string,
   onProgress: ProgressCallback,
+  abortController?: AbortController,
 ): Promise<JsonMap> => {
   const project = asMap(request.project);
   const bible = asMap(project.seriesBible);
@@ -541,6 +650,16 @@ const generateOutlineInStages = async (
   const firstDuration = profile.first_episode_duration_seconds;
   const otherDuration = profile.other_episode_duration_seconds;
   const plannedBlocks = plannedSeasonBlocks(target, profile.paywall_episode);
+  const requestedFrom = asEpisodeNumber(request.fromEpisode) || 1;
+  const batchSize = asEpisodeNumber(request.batchSize) || DEFAULT_OUTLINE_BATCH_SIZE;
+  const isContinue =
+    requestedFrom > 1 &&
+    (hasLockedSeasonArchitecture(bible) ||
+      (Array.isArray(bible.episode_cards) && bible.episode_cards.length > 0) ||
+      (Array.isArray(project.episodes) && project.episodes.length > 0));
+  const batch = outlineBatchRange(isContinue ? requestedFrom : 1, target, batchSize);
+  const spineThrough = spineThroughForBatch(batch);
+
   const publish = async (
     progress: number,
     message: string,
@@ -548,10 +667,12 @@ const generateOutlineInStages = async (
     conversation: string,
     partial: boolean,
   ) => {
+    const withBatch = { ...result, outlineBatch: batch };
     await onProgress(progress, message, {
       action: request.action,
       summary: message,
-      result,
+      result: withBatch,
+      outlineBatch: batch,
       conversation,
       partial,
       provider: 'openrouter',
@@ -559,98 +680,140 @@ const generateOutlineInStages = async (
     });
   };
 
-  await onProgress(8, 'Inventando título e contrato da série...');
-  const bibleResult = await generateJson(model, buildPrompt(request), 4000);
-  const patch: JsonMap = {
-    ...asMap(bibleResult.seriesBiblePatch),
-    episode_cards: [] as JsonMap[],
-    hook_chain: [] as JsonMap[],
-    episode_spine: [] as EpisodeSpineSlot[],
-    creation_workflow: 'openrouter_outline_architecture_v2',
-  };
-  const title = String(bibleResult.title || patch.title || '').trim();
-  if (title) patch.title = title;
-  const result: JsonMap = {
-    title,
-    seriesBiblePatch: patch,
-    episodes: [] as JsonMap[],
-    references: Array.isArray(bibleResult.references) ? bibleResult.references : [],
-  };
-  let conversation = [
-    title || 'Série sem título',
-    String(patch.logline || '').trim(),
-    patch.protagonist
-      ? `${patch.protagonist} × ${patch.opposing_force || 'força oposta'}`
-      : '',
-  ].filter(Boolean).join('\n\n');
-  await publish(12, title ? `Título: ${title}` : 'Contrato da série pronto', result, conversation, true);
-
-  await publish(16, 'Mapeando a temporada, o paywall e as revelações reservadas...', result, conversation, true);
-  const architectureResult = await generateJson(
-    model,
-    `${commonContract(request)}\n${architectureContract(target)}\nRETENTION_PROFILE_JSON:\n${JSON.stringify(profile)}\nPLANNED_BLOCKS_JSON:\n${JSON.stringify(plannedBlocks)}\nSERIES_CONTRACT_JSON:\n${JSON.stringify({
-      title,
-      logline: patch.logline,
-      protagonist: patch.protagonist,
-      opposing_force: patch.opposing_force,
-      central_question: patch.central_question,
-      big_expectation: patch.big_expectation,
-      emotional_fantasy: patch.emotional_fantasy,
-      differentiating_mechanism: patch.differentiating_mechanism,
-      language: patch.language || bible.language,
-    })}`,
-    4500,
-  );
-  const architecturePatch = asMap(architectureResult.seriesBiblePatch);
-  const filledBlocks = applyPlannedBlockRanges(
-    asMap(architecturePatch.season_architecture).blocks,
-    plannedBlocks,
-  );
-  const reservedReveals = clampReservedReveals(
-    parseReservedReveals(architecturePatch.reserved_reveals),
-    filledBlocks,
-  );
-  Object.assign(patch, {
-    episode_engine: architecturePatch.episode_engine || patch.episode_engine,
-    relationship_engine: architecturePatch.relationship_engine || patch.relationship_engine,
-    antagonist_counterplay: architecturePatch.antagonist_counterplay || patch.antagonist_counterplay,
-    escalation_ceiling: architecturePatch.escalation_ceiling || patch.escalation_ceiling,
-    emotional_fantasy: architecturePatch.emotional_fantasy || patch.emotional_fantasy,
-    differentiating_mechanism:
-      architecturePatch.differentiating_mechanism || patch.differentiating_mechanism,
-    viewer_dramatic_irony: architecturePatch.viewer_dramatic_irony || patch.viewer_dramatic_irony,
-    promise_ledger: Array.isArray(architecturePatch.promise_ledger)
-      ? architecturePatch.promise_ledger
-      : patch.promise_ledger,
-    reserved_reveals: reservedReveals,
-    season_architecture: {
-      ...profile,
-      acquisition_clip: asMap(architecturePatch.season_architecture).acquisition_clip || '',
-      blocks: filledBlocks,
-      status: 'LOCKED_FOR_OUTLINE',
-    },
-  });
-  conversation = `${conversation}\n\nMapa: ${filledBlocks.map((item) => `${item.episodes} ${item.role}`).join(' · ')}${
-    profile.paywall_episode ? `\nPaywall no EP${profile.paywall_episode}` : ''
-  }`.trim();
-  await publish(22, 'Arquitetura da temporada pronta', result, conversation, true);
-
+  let patch: JsonMap;
+  let result: JsonMap;
+  let conversation: string;
+  let title: string;
+  let filledBlocks: ReturnType<typeof applyPlannedBlockRanges>;
+  let reservedReveals: ReturnType<typeof parseReservedReveals>;
   let spine: EpisodeSpineSlot[] = [];
-  const chunks = spineChunkRanges(target);
+
+  if (isContinue) {
+    const seeded = seedOutlineFromExisting(bible, project, batch);
+    patch = seeded.patch;
+    title = String(patch.title || project.title || '').trim();
+    if (title) patch.title = title;
+    result = {
+      title,
+      seriesBiblePatch: patch,
+      episodes: seeded.episodes,
+      references: seeded.references,
+      outlineBatch: batch,
+    };
+    filledBlocks = applyPlannedBlockRanges(
+      asMap(patch.season_architecture).blocks,
+      plannedBlocks,
+    );
+    reservedReveals = parseReservedReveals(patch.reserved_reveals);
+    spine = Array.isArray(patch.episode_spine) ? patch.episode_spine as EpisodeSpineSlot[] : [];
+    conversation = [
+      title || 'Série sem título',
+      `Continuando o esboço: EP${batch.fromEpisode}-${batch.throughEpisode} de ${target}.`,
+      'O mapa da temporada, o paywall e as revelações reservadas permanecem travados.',
+    ].filter(Boolean).join('\n\n');
+    await publish(
+      16,
+      `Continuando o esboço EP${batch.fromEpisode}-${batch.throughEpisode} de ${target}...`,
+      result,
+      conversation,
+      true,
+    );
+  } else {
+    await onProgress(8, 'Inventando título e contrato da série...');
+    const bibleResult = await generateJson(model, buildPrompt(request), 4000, abortController);
+    patch = {
+      ...asMap(bibleResult.seriesBiblePatch),
+      episode_cards: [] as JsonMap[],
+      hook_chain: [] as JsonMap[],
+      episode_spine: [] as EpisodeSpineSlot[],
+      creation_workflow: 'openrouter_outline_architecture_v2',
+    };
+    title = String(bibleResult.title || patch.title || '').trim();
+    if (title) patch.title = title;
+    result = {
+      title,
+      seriesBiblePatch: patch,
+      episodes: [] as JsonMap[],
+      references: Array.isArray(bibleResult.references) ? bibleResult.references : [],
+      outlineBatch: batch,
+    };
+    conversation = [
+      title || 'Série sem título',
+      String(patch.logline || '').trim(),
+      patch.protagonist
+        ? `${patch.protagonist} × ${patch.opposing_force || 'força oposta'}`
+        : '',
+    ].filter(Boolean).join('\n\n');
+    await publish(12, title ? `Título: ${title}` : 'Contrato da série pronto', result, conversation, true);
+
+    await publish(16, 'Mapeando a temporada, o paywall e as revelações reservadas...', result, conversation, true);
+    const architectureResult = await generateJson(
+      model,
+      `${commonContract(request)}\n${architectureContract(target)}\nRETENTION_PROFILE_JSON:\n${JSON.stringify(profile)}\nPLANNED_BLOCKS_JSON:\n${JSON.stringify(plannedBlocks)}\nSERIES_CONTRACT_JSON:\n${JSON.stringify({
+        title,
+        logline: patch.logline,
+        protagonist: patch.protagonist,
+        opposing_force: patch.opposing_force,
+        central_question: patch.central_question,
+        big_expectation: patch.big_expectation,
+        emotional_fantasy: patch.emotional_fantasy,
+        differentiating_mechanism: patch.differentiating_mechanism,
+        language: patch.language || bible.language,
+      })}`,
+      4500,
+      abortController,
+    );
+    const architecturePatch = asMap(architectureResult.seriesBiblePatch);
+    filledBlocks = applyPlannedBlockRanges(
+      asMap(architecturePatch.season_architecture).blocks,
+      plannedBlocks,
+    );
+    reservedReveals = clampReservedReveals(
+      parseReservedReveals(architecturePatch.reserved_reveals),
+      filledBlocks,
+    );
+    Object.assign(patch, {
+      episode_engine: architecturePatch.episode_engine || patch.episode_engine,
+      relationship_engine: architecturePatch.relationship_engine || patch.relationship_engine,
+      antagonist_counterplay: architecturePatch.antagonist_counterplay || patch.antagonist_counterplay,
+      escalation_ceiling: architecturePatch.escalation_ceiling || patch.escalation_ceiling,
+      emotional_fantasy: architecturePatch.emotional_fantasy || patch.emotional_fantasy,
+      differentiating_mechanism:
+        architecturePatch.differentiating_mechanism || patch.differentiating_mechanism,
+      viewer_dramatic_irony: architecturePatch.viewer_dramatic_irony || patch.viewer_dramatic_irony,
+      promise_ledger: Array.isArray(architecturePatch.promise_ledger)
+        ? architecturePatch.promise_ledger
+        : patch.promise_ledger,
+      reserved_reveals: reservedReveals,
+      season_architecture: {
+        ...profile,
+        acquisition_clip: asMap(architecturePatch.season_architecture).acquisition_clip || '',
+        blocks: filledBlocks,
+        status: 'LOCKED_FOR_OUTLINE',
+      },
+    });
+    conversation = `${conversation}\n\nMapa: ${filledBlocks.map((item) => `${item.episodes} ${item.role}`).join(' · ')}${
+      profile.paywall_episode ? `\nPaywall no EP${profile.paywall_episode}` : ''
+    }`.trim();
+    await publish(22, 'Arquitetura da temporada pronta', result, conversation, true);
+  }
+
+  const chunks = spineChunkRangesIn(batch.fromEpisode, spineThrough);
   for (let index = 0; index < chunks.length; index += 1) {
     const chunk = chunks[index];
     const pct = 22 + Math.round(((index + 1) / Math.max(chunks.length, 1)) * 12);
     await publish(
       pct,
-      `Espinha dos episódios ${chunk.start}-${chunk.end} de ${target}...`,
+      `Espinha dos episódios ${chunk.start}-${chunk.end} (lote ${batch.fromEpisode}-${batch.throughEpisode} de ${target})...`,
       result,
       `${conversation}\n\nEspinha ${chunk.start}-${chunk.end}...`,
       true,
     );
     const spineResult = await generateJson(
       model,
-      `${commonContract(request)}\n${spineChunkContract(chunk.start, chunk.end, target)}\nRETENTION_PROFILE_JSON:\n${JSON.stringify(profile)}\nSEASON_BLOCKS_JSON:\n${JSON.stringify(filledBlocks)}\nRESERVED_REVEALS_JSON:\n${JSON.stringify(reservedReveals)}\nPREVIOUS_SPINE_JSON:\n${JSON.stringify(compactSpineForPrompt(spine))}\nSERIES_TITLE: ${title}`,
+      `${commonContract(request)}\n${spineChunkContract(chunk.start, chunk.end, target)}\nOUTLINE_BATCH_JSON:\n${JSON.stringify(batch)}\nRETENTION_PROFILE_JSON:\n${JSON.stringify(profile)}\nSEASON_BLOCKS_JSON:\n${JSON.stringify(filledBlocks)}\nRESERVED_REVEALS_JSON:\n${JSON.stringify(reservedReveals)}\nPREVIOUS_SPINE_JSON:\n${JSON.stringify(compactSpineForPrompt(spine))}\nSERIES_TITLE: ${title}`,
       3200,
+      abortController,
     );
     spine = mergeSpine(
       spine,
@@ -661,28 +824,35 @@ const generateOutlineInStages = async (
       reservedReveals,
     );
   }
-  spine = ensureFullSpine(spine, target, filledBlocks, reservedReveals);
+  spine = ensureFullSpine(spine, spineThrough, filledBlocks, reservedReveals);
   patch.episode_spine = spine;
-  conversation = `${conversation}\n\nEspinha de ${spine.length} episódios travada.`.trim();
-  await publish(34, 'Mapa episódio a episódio pronto', result, conversation, true);
+  conversation = `${conversation}\n\nEspinha até o EP${spineThrough} pronta para este lote.`.trim();
+  await publish(34, `Espinha do lote EP${batch.fromEpisode}-${batch.throughEpisode} pronta`, result, conversation, true);
 
-  for (let number = 1; number <= target; number += 1) {
+  const cardCount = Math.max(1, batch.throughEpisode - batch.fromEpisode + 1);
+  for (let number = batch.fromEpisode; number <= batch.throughEpisode; number += 1) {
     const duration = episodeDurationSeconds(number, firstDuration, otherDuration);
-    const previous = (result.episodes as JsonMap[])[number - 2];
-    const previousHook = (patch.hook_chain as JsonMap[])[number - 2];
+    const previous = (result.episodes as JsonMap[]).find(
+      (item) => asEpisodeNumber(item.number) === number - 1,
+    );
+    const previousHook = (patch.hook_chain as JsonMap[]).find(
+      (item) => asEpisodeNumber(item.episode) === number - 1,
+    );
     const thisSlot = spine.find((item) => item.episode === number) || null;
-    const pct = 34 + Math.round((number / target) * 64);
+    const idx = number - batch.fromEpisode + 1;
+    const pct = 34 + Math.round((idx / cardCount) * 64);
     await publish(
       pct,
-      `Gerando EP${number}/${target}...`,
+      `Gerando EP${number}/${target} (lote ${batch.fromEpisode}-${batch.throughEpisode})...`,
       result,
       `${conversation}\n\nEP${number} · escrevendo...`,
       true,
     );
     const episodeResult = await generateJson(
       model,
-      `${commonContract({ ...request, episodeNumber: number })}\n${oneEpisodeContract(number, target, duration)}\nTHIS_SPINE_SLOT:\n${JSON.stringify(thisSlot)}\nNEXT_SPINE_SLOT:\n${JSON.stringify(spine.find((item) => item.episode === number + 1) || null)}\nLOCKED_REVEALS:\n${JSON.stringify(lockedRevealsForEpisode(reservedReveals, number))}\nBEAT_ENGINE_JSON:\n${JSON.stringify(beatEngineForDuration(duration))}\nRECENT_CARDS_JSON:\n${JSON.stringify(recentCardsForPrompt(patch.episode_cards as JsonMap[], number))}\nPREVIOUS_EPISODE_JSON:\n${JSON.stringify(previous || null)}\nPREVIOUS_HOOK_JSON:\n${JSON.stringify(previousHook || null)}\nSERIES_TITLE: ${title}\nPROJECT_DATA_JSON:\n${JSON.stringify(compactSeriesForEpisodeOutline(title, target, patch, spine, number))}`,
+      `${commonContract({ ...request, episodeNumber: number })}\n${oneEpisodeContract(number, target, duration)}\nOUTLINE_BATCH_JSON:\n${JSON.stringify(batch)}\nTHIS_SPINE_SLOT:\n${JSON.stringify(thisSlot)}\nNEXT_SPINE_SLOT:\n${JSON.stringify(spine.find((item) => item.episode === number + 1) || null)}\nLOCKED_REVEALS:\n${JSON.stringify(lockedRevealsForEpisode(reservedReveals, number))}\nBEAT_ENGINE_JSON:\n${JSON.stringify(beatEngineForDuration(duration))}\nRECENT_CARDS_JSON:\n${JSON.stringify(recentCardsForPrompt(patch.episode_cards as JsonMap[], number))}\nPREVIOUS_EPISODE_JSON:\n${JSON.stringify(previous || null)}\nPREVIOUS_HOOK_JSON:\n${JSON.stringify(previousHook || null)}\nSERIES_TITLE: ${title}\nPROJECT_DATA_JSON:\n${JSON.stringify(compactSeriesForEpisodeOutline(title, target, patch, spine, number))}`,
       2600,
+      abortController,
     );
     const episodePayload = asMap(episodeResult.episode);
     const episode: JsonMap = {
@@ -713,14 +883,18 @@ const generateOutlineInStages = async (
       `EP${number} · ${episode.title || `Episódio ${number}`} pronto`,
       result,
       conversation,
-      number < target,
+      number < batch.throughEpisode || batch.canContinue,
     );
   }
 
+  const summary = batch.canContinue
+    ? `${title}: EP${batch.fromEpisode}-${batch.throughEpisode} de ${target} no esboço. Faltam ${batch.remaining}.`
+    : `${title}: ${target} episódios gerados com mapa da temporada`;
   return {
     action: request.action,
-    summary: `${title}: ${target} episódios gerados com mapa da temporada`,
+    summary,
     result,
+    outlineBatch: batch,
     conversation,
     partial: false,
     provider: 'openrouter',
@@ -751,6 +925,7 @@ const generateEpisodeScriptInStages = async (
   request: CodexWorkflowRequest,
   model: string,
   onProgress: ProgressCallback,
+  abortController?: AbortController,
 ): Promise<JsonMap> => {
   const episodeNumber = asEpisodeNumber(request.episodeNumber);
   if (!episodeNumber) throw new Error('episodeNumber e obrigatorio para esta acao');
@@ -846,6 +1021,7 @@ Cold open must be freeze-frame clear at 3s. Cut 2 seconds early on the unanswere
       lockedEpisode: locked,
     })}`,
     1800,
+    abortController,
   );
   const scenePlan: JsonMap[] = (Array.isArray(planResult.scene_plan) ? planResult.scene_plan : [])
     .map((item: any, index: number) => {
@@ -891,6 +1067,7 @@ Cold open must be freeze-frame clear at 3s. Cut 2 seconds early on the unanswere
       model,
       `${commonContract(request)}\n${episodeScriptContract}\n${lockRule}\nWrite ONLY scene ${plannedScene.scene} of ${planned.length} for episode ${episodeNumber}. Scene duration must be exactly ${plannedScene.duration_seconds}s. Shot numbers must start at ${shotNumber} and be contiguous. ${shotFixed ? `Each shot must last exactly ${maxShot}s.` : `Each shot 1-${maxShot}s.`} Row durations must sum to the shot. Return result shape: {"scene":{"episode":${episodeNumber},"scene":${plannedScene.scene},"title":${JSON.stringify(plannedScene.title || '')},"location_id":${JSON.stringify(plannedScene.location_id || '')},"location":${JSON.stringify(plannedScene.location || '')},"time_of_day":${JSON.stringify(plannedScene.time_of_day || 'DAY')},"interior_exterior":${JSON.stringify(plannedScene.interior_exterior || 'INT')},"dramatic_beat":${JSON.stringify(plannedScene.dramatic_beat || '')},"cast_ids":${JSON.stringify(plannedScene.cast_ids || [])},"cast":${JSON.stringify(plannedScene.cast || [])},"story":${JSON.stringify(plannedScene.story || '')},"status":"DRAFT_REVIEW_REQUIRED","shots":[{"number":${shotNumber},"title":"...","duration_seconds":8,"status":"DRAFT_REVIEW_REQUIRED","final_state":"...","rows":[{"type":"action","text":"...","duration_seconds":2}]}]}}\nPREVIOUS_SCENES_JSON:\n${JSON.stringify(scriptBase.scenes)}\nSCENE_PLAN_JSON:\n${JSON.stringify(plannedScene)}\nLOCKED_STORY_JSON:\n${JSON.stringify({ ...compact, lockedEpisode: locked })}`,
       3200,
+      abortController,
     );
     const scene = asMap(sceneResult.scene || sceneResult);
     const shots = (Array.isArray(scene.shots) ? scene.shots : []).map((item: any, shotIndex: number) => {
@@ -976,6 +1153,7 @@ const generateStorySheets = async (
   request: CodexWorkflowRequest,
   model: string,
   onProgress: ProgressCallback,
+  abortController?: AbortController,
 ): Promise<JsonMap> => {
   const message = storySheetsProgressMessage(request.instruction);
   await onProgress(12, message, {
@@ -986,7 +1164,7 @@ const generateStorySheets = async (
     provider: 'openrouter',
     model,
   });
-  const raw = await generateJson(model, buildPrompt(request), 5000);
+  const raw = await generateJson(model, buildPrompt(request), 5000, abortController);
   const result = sanitizeStorySheetsResult(raw);
   const characters = Array.isArray(result.seriesBiblePatch.characters)
     ? result.seriesBiblePatch.characters.length
@@ -1012,6 +1190,7 @@ const generateStorySheets = async (
 const runCodexTextAction = async (
   request: CodexWorkflowRequest,
   onProgress: ProgressCallback,
+  abortController?: AbortController,
 ): Promise<JsonMap> => {
   if (!process.env.OPENROUTER_API_KEY?.trim()) {
     throw new Error('OPENROUTER_API_KEY nao configurada no servidor');
@@ -1020,24 +1199,30 @@ const runCodexTextAction = async (
     process.env.OPENROUTER_STORY_MODEL || 'deepseek/deepseek-chat',
   );
   if (request.action === 'GENERATE_SERIES_OUTLINE') {
-    return generateOutlineInStages(request, model, onProgress);
+    return generateOutlineInStages(request, model, onProgress, abortController);
   }
   if (request.action === 'GENERATE_STORY_SHEETS') {
-    return generateStorySheets(request, model, onProgress);
+    return generateStorySheets(request, model, onProgress, abortController);
   }
   if (request.action === 'GENERATE_EPISODE_SCRIPT') {
-    return generateEpisodeScriptInStages(request, model, onProgress);
+    return generateEpisodeScriptInStages(request, model, onProgress, abortController);
   }
 
+  throwIfAborted(abortController);
   await onProgress(25, `OpenRouter (${model}) gerando o pacote narrativo`);
-  const text = await generateText(buildPrompt(request), {
-    model,
-    temperature: 0.7,
-    max_tokens: 8000,
-    timeout: 240000,
-    response_format: { type: 'json_object' },
-    reasoning: DEFAULT_STORY_REASONING,
-  });
+  const text = await generateText(
+    buildPrompt(request),
+    {
+      model,
+      temperature: 0.7,
+      max_tokens: 8000,
+      timeout: 240000,
+      response_format: { type: 'json_object' },
+      reasoning: DEFAULT_STORY_REASONING,
+    },
+    abortController,
+  );
+  throwIfAborted(abortController);
   if (typeof text !== 'string' || !text.trim()) {
     throw new Error('OpenRouter retornou resposta vazia');
   }
@@ -1087,11 +1272,29 @@ export const startWorkflowJob = async (
 };
 
 export const processWorkflowJob = async (jobId: number): Promise<void> => {
+  const abortController = new AbortController();
+  registerJobAbort(jobId, abortController);
   const job = await prisma.aIGenerationJob.findUnique({ where: { id: jobId } });
-  if (!job) throw new Error('Job Codex nao encontrado');
+  if (!job) {
+    clearJobAbort(jobId);
+    throw new Error('Job Codex nao encontrado');
+  }
+  if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+    clearJobAbort(jobId);
+    return;
+  }
   const request = JSON.parse(job.inputData) as CodexWorkflowRequest;
   let snapshot: JsonMap = {};
   const onProgress: ProgressCallback = async (progress, message, extra) => {
+    throwIfAborted(abortController);
+    const current = await prisma.aIGenerationJob.findUnique({
+      where: { id: jobId },
+      select: { status: true, errorMessage: true },
+    });
+    if (current?.status === 'FAILED') {
+      abortController.abort();
+      throw new Error(current.errorMessage || JOB_CANCELLED_MESSAGE);
+    }
     snapshot = { ...snapshot, ...(extra || {}), message };
     await prisma.aIGenerationJob.update({
       where: { id: jobId },
@@ -1105,7 +1308,8 @@ export const processWorkflowJob = async (jobId: number): Promise<void> => {
 
   try {
     await onProgress(8, 'Job autenticado e iniciado');
-    const output = await runCodexTextAction(request, onProgress);
+    const output = await runCodexTextAction(request, onProgress, abortController);
+    throwIfAborted(abortController);
     await prisma.aIGenerationJob.update({
       where: { id: jobId },
       data: {
@@ -1117,16 +1321,27 @@ export const processWorkflowJob = async (jobId: number): Promise<void> => {
       },
     });
   } catch (error: any) {
-    const message = String(error?.message || 'Falha na geracao com IA').slice(0, 2000);
+    const cancelled = abortController.signal.aborted || isCancelledError(error);
+    const current = await prisma.aIGenerationJob.findUnique({
+      where: { id: jobId },
+      select: { status: true, errorMessage: true },
+    });
+    if (current?.status === 'FAILED' && current.errorMessage === JOB_CANCELLED_MESSAGE) {
+      return;
+    }
     await prisma.aIGenerationJob.update({
       where: { id: jobId },
       data: {
         status: 'FAILED',
-        errorMessage: message,
+        errorMessage: cancelled
+          ? JOB_CANCELLED_MESSAGE
+          : String(error?.message || 'Falha na geracao com IA').slice(0, 2000),
         completedAt: new Date(),
       },
     });
-    throw error;
+    if (!cancelled) throw error;
+  } finally {
+    clearJobAbort(jobId);
   }
 };
 

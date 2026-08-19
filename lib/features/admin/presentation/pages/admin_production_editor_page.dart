@@ -14,6 +14,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/dola_generation_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/services/micro_drama_theme_composer.dart';
+import '../../../../core/services/season_architecture.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/fullscreen_image_viewer.dart';
 
@@ -64,21 +65,35 @@ int? _studioEpisodeNumber(dynamic value) {
   return int.tryParse(value?.toString().trim() ?? '');
 }
 
+class _StudioChatAction {
+  const _StudioChatAction({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
 class _StudioChatTurn {
   const _StudioChatTurn({
     required this.role,
     required this.text,
     this.busy = false,
+    this.actions = const [],
   });
 
   final String role;
   final String text;
   final bool busy;
+  final List<_StudioChatAction> actions;
 
-  _StudioChatTurn copyWith({String? text, bool? busy}) => _StudioChatTurn(
+  _StudioChatTurn copyWith({
+    String? text,
+    bool? busy,
+    List<_StudioChatAction>? actions,
+  }) => _StudioChatTurn(
     role: role,
     text: text ?? this.text,
     busy: busy ?? this.busy,
+    actions: actions ?? this.actions,
   );
 }
 
@@ -116,6 +131,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   bool _isApprovingScript = false;
   int? _generatingScriptEpisodeNumber;
   int? _activeAiJobId;
+  int? _interruptedOutlineJobId;
   int _activeAiProgress = 0;
   String? _activeAiAction;
   String? _activeAiMessage;
@@ -161,7 +177,10 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   bool _allowPop = false;
   Future<void>? _ongoingSave;
   Timer? _persistDebounce;
+  Timer? _outlinePersistDebounce;
   String? _error;
+  bool _generationCancelRequested = false;
+  Completer<void>? _generationCancelGate;
 
   bool get _isAdmin => _authService.currentUser?.isAdmin == true;
   bool get _isAiBusy => _activeAiAction != null;
@@ -171,6 +190,10 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       _isAutomaticPreparationRunning ||
       _generatingScriptEpisodeNumber != null ||
       _isApprovingScript;
+  bool get _canStopGeneration =>
+      _isAiBusy ||
+      _generatingScriptEpisodeNumber != null ||
+      _isAutomaticPreparationRunning;
   bool get _isChatBrief {
     final project = _project;
     if (project == null) return false;
@@ -212,6 +235,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   @override
   void dispose() {
     _persistDebounce?.cancel();
+    _outlinePersistDebounce?.cancel();
     final project = _project;
     if (project != null) {
       unawaited(_workspaceService.saveProject(_projectWithSession(project)));
@@ -271,7 +295,13 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _isLoading = false;
       });
       _restoreStudioSession(project);
-      _scheduleAutomaticPreparationIfRequested(project);
+      final cleaned = _withoutGeneratingPlaceholders(_project ?? project);
+      if (!identical(cleaned, _project)) {
+        setState(() => _project = cleaned);
+        unawaited(_persistProject(cleaned));
+      }
+      _scheduleAutomaticPreparationIfRequested(_project ?? cleaned);
+      unawaited(_recoverInterruptedOutline());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -375,6 +405,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         'assistantWriterMode': _assistantWriterMode,
         'sectionIndex': _sectionIndex,
         'selectedTakeIndex': _selectedTakeIndex,
+        if (_interruptedOutlineJobId != null)
+          'lastOutlineJobId': _interruptedOutlineJobId,
       },
     );
   }
@@ -417,6 +449,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       if (writerMode != null && writerMode.isNotEmpty) {
         _assistantWriterMode = writerMode;
       }
+      final lastJobId = _readStudioInt(ui['lastOutlineJobId'], fallback: 0);
+      _interruptedOutlineJobId = lastJobId > 0 ? lastJobId : null;
     });
     if (shouldPersistUnlockedTakes) _schedulePersist();
   }
@@ -471,11 +505,45 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     return false;
   }
 
+  bool _isGenerationCancelled(Object error) {
+    if (error is GenerationCancelledException) return true;
+    final text = error.toString().toLowerCase();
+    return text.contains('cancelled by user') ||
+        text.contains('geração cancelada') ||
+        text.contains('cancelada pelo');
+  }
+
+  void _notifyGenerationFailure(Object error, String message) {
+    if (!mounted || _isGenerationCancelled(error)) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _requestGenerationCancel() {
+    _generationCancelRequested = true;
+    final gate = _generationCancelGate;
+    if (gate != null && !gate.isCompleted) {
+      gate.complete();
+    }
+  }
+
+  Future<void> _cancelActiveGeneration() async {
+    if (!_canStopGeneration) return;
+    _requestGenerationCancel();
+    final jobId = _activeAiJobId;
+    if (jobId == null) return;
+    try {
+      await _adminService.cancelJob(jobId);
+    } catch (_) {}
+  }
+
   Future<Map<String, dynamic>> _runAiWorkflow({
     required String action,
     int? episodeNumber,
+    int? fromEpisode,
+    int? batchSize,
     String? instruction,
     String? userPrompt,
+    int? resumeJobId,
     void Function(Map<String, dynamic> output)? onPartial,
   }) async {
     final project = _project;
@@ -494,26 +562,81 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     setState(() {
       _activeAiAction = action;
       _activeAiProgress = 0;
-      _activeAiMessage = 'Enviando ação autenticada ao servidor...';
+      _activeAiMessage = resumeJobId == null
+          ? 'Enviando ação autenticada ao servidor...'
+          : 'Retomando o job $resumeJobId...';
     });
+    _generationCancelRequested = false;
+    _generationCancelGate = Completer<void>();
     _scrollAssistantToEnd(force: true);
     try {
-      final job = await _adminService.startCodexWorkflow(
-        action: action,
-        project: project.toJson(),
-        episodeNumber: episodeNumber,
-        instruction: instruction,
-        codexThreadId: project.seriesBible['codex_thread_id']?.toString(),
-      );
+      late GenerationJob job;
+      if (resumeJobId != null) {
+        final response = await _adminService.getJobStatus(resumeJobId);
+        final existing = response.data;
+        if (!response.success || existing == null) {
+          throw StateError(
+            response.message ?? 'Não foi possível consultar o job $resumeJobId.',
+          );
+        }
+        job = existing;
+        if (job.isCancelled) {
+          throw const GenerationCancelledException();
+        }
+        if (job.isFailed) {
+          throw StateError(
+            job.errorMessage ?? 'A geração falhou no servidor.',
+          );
+        }
+      } else {
+        job = await _adminService.startCodexWorkflow(
+          action: action,
+          project: project.toJson(),
+          episodeNumber: episodeNumber,
+          fromEpisode: fromEpisode,
+          batchSize: batchSize,
+          instruction: instruction,
+          codexThreadId: project.seriesBible['codex_thread_id']?.toString(),
+        );
+      }
       if (!mounted) throw StateError('Editor fechado.');
+      if (_generationCancelRequested) {
+        try {
+          await _adminService.cancelJob(job.id);
+        } catch (_) {}
+        throw const GenerationCancelledException();
+      }
       setState(() {
         _activeAiJobId = job.id;
-        _activeAiMessage = 'Job ${job.id} criado';
+        _interruptedOutlineJobId = action == 'GENERATE_SERIES_OUTLINE'
+            ? job.id
+            : _interruptedOutlineJobId;
+        _activeAiMessage = resumeJobId == null
+            ? 'Job ${job.id} criado'
+            : 'Acompanhando o job ${job.id}';
       });
-      _updateLastAssistantTurn('Job ${job.id} criado. Aguardando a IA...');
+      _updateLastAssistantTurn(
+        resumeJobId == null
+            ? 'Job ${job.id} criado. Aguardando a IA...'
+            : 'Retomando o job ${job.id}. Aguardando a IA...',
+      );
+      if (action == 'GENERATE_SERIES_OUTLINE') {
+        _scheduleOutlinePersist();
+      }
+      if (job.outputData != null) onPartial?.call(job.outputData!);
+      if (job.isCompleted) {
+        final output = job.outputData;
+        if (output == null) {
+          throw StateError('O job terminou sem resultado estruturado.');
+        }
+        _finishCompletedWorkflow(output);
+        return output;
+      }
       final completed = await _adminService.waitForGenerationJob(
         job.id,
         pollInterval: const Duration(milliseconds: 700),
+        isCancelled: () => _generationCancelRequested,
+        cancelled: _generationCancelGate?.future,
         onProgress: (current) {
           if (!mounted) return;
           final output = current.outputData;
@@ -537,16 +660,33 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       if (output == null) {
         throw StateError('O job terminou sem resultado estruturado.');
       }
-      final conversation = output['conversation']?.toString().trim();
-      final summary = output['summary']?.toString().trim();
-      _finishLastAssistantTurn(
-        conversation?.isNotEmpty == true
-            ? conversation!
-            : (summary?.isNotEmpty == true ? summary! : 'Ação concluída.'),
-      );
+      _finishCompletedWorkflow(output);
       return output;
+    } on GenerationJobTimeoutException catch (error) {
+      final output = error.lastJob?.outputData;
+      if (output != null) onPartial?.call(output);
+      _interruptedOutlineJobId = error.jobId;
+      _finishLastAssistantTurn(
+        _outlineTimeoutMessage(error),
+        actions: _outlineResumeActions(jobId: error.jobId),
+      );
+      rethrow;
     } catch (error) {
-      _finishLastAssistantTurn('Não foi possível concluir: $error');
+      if (_isGenerationCancelled(error)) {
+        final current = _assistantStreamText?.trim();
+        _finishLastAssistantTurn(
+          current == null || current.isEmpty
+              ? 'Geração interrompida.'
+              : '$current\n\nGeração interrompida.',
+        );
+        rethrow;
+      }
+      _finishLastAssistantTurn(
+        'Não foi possível concluir: $error',
+        actions: action == 'GENERATE_SERIES_OUTLINE'
+            ? _outlineResumeActions(jobId: _activeAiJobId)
+            : const [],
+      );
       rethrow;
     } finally {
       if (mounted) {
@@ -558,6 +698,16 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         });
       }
     }
+  }
+
+  void _finishCompletedWorkflow(Map<String, dynamic> output) {
+    final conversation = output['conversation']?.toString().trim();
+    final summary = output['summary']?.toString().trim();
+    _finishLastAssistantTurn(
+      conversation?.isNotEmpty == true
+          ? conversation!
+          : (summary?.isNotEmpty == true ? summary! : 'Ação concluída.'),
+    );
   }
 
   Future<void> _generateReferenceImagesWithCodex({
@@ -857,7 +1007,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     final episode = _episode;
     switch (action) {
       case 'GENERATE_SERIES_OUTLINE':
-        return 'Gere o contrato, o mapa da temporada com paywall e revelações reservadas, a espinha de todos os episódios e só então cada cartão. Não gaste no EP inicial o que o bloco final precisa.';
+        return 'Gere o contrato e o mapa completo da temporada (paywall e revelações reservadas). Depois gere só o lote atual de cartões, sem gastar no EP inicial o que o bloco final precisa.';
       case 'GENERATE_STORY_SHEETS':
         return 'Gere as fichas de personagens, ambientes e adereços a partir do esboço já existente.';
       case 'GENERATE_EPISODE_SCRIPT':
@@ -887,7 +1037,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     _replaceLastAssistantTurn(text, busy: busy);
   }
 
-  void _replaceLastAssistantTurn(String text, {required bool busy}) {
+  void _replaceLastAssistantTurn(
+    String text, {
+    required bool busy,
+    List<_StudioChatAction>? actions,
+  }) {
     if (_assistantTurns.isEmpty) return;
     final index = _assistantTurns.lastIndexWhere(
       (turn) => turn.role == 'assistant',
@@ -896,14 +1050,18 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     _assistantTurns[index] = _assistantTurns[index].copyWith(
       text: text,
       busy: busy,
+      actions: actions,
     );
   }
 
-  void _finishLastAssistantTurn(String text) {
+  void _finishLastAssistantTurn(
+    String text, {
+    List<_StudioChatAction> actions = const [],
+  }) {
     if (!mounted) return;
     setState(() {
       _assistantStreamText = text;
-      _replaceLastAssistantTurn(text, busy: false);
+      _replaceLastAssistantTurn(text, busy: false, actions: actions);
     });
     _scrollAssistantToEnd();
   }
@@ -935,22 +1093,351 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     setState(() => _assistantFollowBottom = atBottom);
   }
 
-  Future<void> _generateSeriesOutlineWithCodex() async {
+  Future<void> _generateSeriesOutlineWithCodex({int? fromEpisode}) async {
     final project = _project;
     if (project == null || _isAnyGenerationBusy) return;
+    final target = project.targetEpisodeCount;
+    final startFrom = fromEpisode ?? 1;
+    final batch = SeasonArchitecture.outlineBatchRange(
+      fromEpisode: startFrom,
+      targetEpisodeCount: target,
+    );
+    final through = batch['throughEpisode'] as int;
+    final continuing = startFrom > 1;
     try {
       final output = await _runAiWorkflow(
         action: 'GENERATE_SERIES_OUTLINE',
-        userPrompt:
-            'Gere o esboço completo da série: contrato, mapa da temporada, espinha de todos os episódios, cartões e corrente de gancho.',
+        fromEpisode: startFrom,
+        batchSize: SeasonArchitecture.defaultOutlineBatchSize,
+        userPrompt: continuing
+            ? 'Gerar os próximos episódios do esboço: EP$startFrom-$through de $target.'
+            : 'Gere o contrato, o mapa completo da temporada e o primeiro lote de cartões (EP${batch['fromEpisode']}-$through de $target).',
+        instruction: continuing
+            ? [
+                'Continue o esboço a partir do EP$startFrom até o EP$through de $target.',
+                'Mantenha o mapa da temporada, o paywall, as revelações reservadas e os cartões já gerados.',
+                'Não regenere o contrato nem os episódios anteriores.',
+              ].join('\n')
+            : [
+                'Gere o contrato e o mapa completo da temporada (blocos, paywall, revelações reservadas).',
+                'Depois gere só os cartões EP${batch['fromEpisode']}-$through de $target.',
+                'Não gaste no EP inicial o que o bloco final precisa.',
+              ].join('\n'),
         onPartial: _applyStreamingOutline,
       );
+      _interruptedOutlineJobId = null;
       _applyStreamingOutline(output, persist: true);
     } catch (error) {
-      if (!mounted) return;
+      await _persistInterruptedOutline();
+      if (!mounted || _isGenerationCancelled(error)) return;
+      final continueLabel = _outlineContinueBatchLabel();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível gerar o esboço: $error')),
+        SnackBar(
+          duration: const Duration(seconds: 10),
+          content: Text(
+            error is GenerationJobTimeoutException
+                ? _outlineTimeoutMessage(error)
+                : 'Não foi possível gerar o esboço: $error',
+          ),
+          action: _interruptedOutlineJobId == null && continueLabel == null
+              ? null
+              : SnackBarAction(
+                  label: 'Continuar',
+                  onPressed: _resumeOutlineGeneration,
+                ),
+        ),
       );
+    }
+  }
+
+  ProductionProject _withoutGeneratingPlaceholders(ProductionProject project) {
+    final episodes = <ProductionEpisodeItem>[];
+    var changed = false;
+    for (final episode in project.episodes) {
+      if (episode.status != 'GENERATING') {
+        episodes.add(episode);
+        continue;
+      }
+      if (_isAiBusy) {
+        episodes.add(episode);
+        continue;
+      }
+      if (episode.summary.trim().isEmpty &&
+          SeasonArchitecture.isPlaceholderTitle(episode.title)) {
+        changed = true;
+        continue;
+      }
+      changed = true;
+      episodes.add(episode.copyWith(status: 'OUTLINE_REVIEW_REQUIRED'));
+    }
+    if (!changed) return project;
+    return project.copyWith(episodes: episodes);
+  }
+
+  Future<void> _persistInterruptedOutline() async {
+    final project = _project;
+    if (project == null) return;
+    final cleaned = _withoutGeneratingPlaceholders(project);
+    if (!identical(cleaned, project) && mounted) {
+      setState(() => _project = cleaned);
+    }
+    try {
+      await _persistProject(cleaned);
+    } catch (_) {}
+  }
+
+  void _scheduleOutlinePersist() {
+    _outlinePersistDebounce?.cancel();
+    _outlinePersistDebounce = Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      final project = _project;
+      if (project == null) return;
+      unawaited(_persistProject(_withoutGeneratingPlaceholders(project)));
+    });
+  }
+
+  String _outlineTimeoutMessage(GenerationJobTimeoutException error) {
+    final nextLabel = _outlineContinueBatchLabel();
+    final saved = _readyOutlineCount(_project);
+    final target = _project?.targetEpisodeCount ?? 0;
+    return [
+      'O job ${error.jobId} ainda estava gerando o esboço ($saved de $target episódios prontos).',
+      'Os cartões já escritos foram salvos.',
+      if (nextLabel != null)
+        'Você pode continuar aguardando este job ou $nextLabel.'
+      else
+        'Você pode continuar aguardando este job.',
+    ].join(' ');
+  }
+
+  int _readyOutlineCount(ProductionProject? project) {
+    if (project == null) return 0;
+    return project.episodes.where(_episodeHasReadyOutline).length;
+  }
+
+  String? _outlineContinueBatchLabel() {
+    final project = _project;
+    if (project == null) return null;
+    final next = _nextOutlineEpisode(project);
+    if (next == null) return null;
+    final batch = SeasonArchitecture.outlineBatchRange(
+      fromEpisode: next,
+      targetEpisodeCount: project.targetEpisodeCount,
+    );
+    return 'continuar o esboço (EP${batch['fromEpisode']}-${batch['throughEpisode']})';
+  }
+
+  List<_StudioChatAction> _outlineResumeActions({int? jobId}) {
+    final actions = <_StudioChatAction>[];
+    final resumeJobId = jobId ?? _interruptedOutlineJobId;
+    if (resumeJobId != null) {
+      actions.add(
+        _StudioChatAction(
+          id: 'resume_outline_job',
+          label: 'Continuar aguardando o job $resumeJobId',
+        ),
+      );
+    }
+    final next = _project == null ? null : _nextOutlineEpisode(_project!);
+    if (next != null) {
+      final batch = SeasonArchitecture.outlineBatchRange(
+        fromEpisode: next,
+        targetEpisodeCount: _project!.targetEpisodeCount,
+      );
+      actions.add(
+        _StudioChatAction(
+          id: 'continue_outline_next',
+          label:
+              'Continuar esboço (EP${batch['fromEpisode']}-${batch['throughEpisode']})',
+        ),
+      );
+    }
+    return actions;
+  }
+
+  Future<void> _handleStudioChatAction(String id) async {
+    switch (id) {
+      case 'resume_outline_job':
+        await _resumeInterruptedOutlineJob();
+        return;
+      case 'continue_outline_next':
+        final next = _project == null ? null : _nextOutlineEpisode(_project!);
+        if (next == null) return;
+        await _generateSeriesOutlineWithCodex(fromEpisode: next);
+        return;
+    }
+  }
+
+  Future<void> _resumeOutlineGeneration() async {
+    if (_interruptedOutlineJobId != null) {
+      await _resumeInterruptedOutlineJob();
+      return;
+    }
+    final next = _project == null ? null : _nextOutlineEpisode(_project!);
+    if (next == null) return;
+    await _generateSeriesOutlineWithCodex(fromEpisode: next);
+  }
+
+  Future<void> _resumeInterruptedOutlineJob() async {
+    final jobId = _interruptedOutlineJobId;
+    if (jobId == null || _isAnyGenerationBusy) return;
+    final project = _project;
+    if (project == null) return;
+    try {
+      final output = await _runAiWorkflow(
+        action: 'GENERATE_SERIES_OUTLINE',
+        resumeJobId: jobId,
+        onPartial: _applyStreamingOutline,
+      );
+      _interruptedOutlineJobId = null;
+      _applyStreamingOutline(output, persist: true);
+    } catch (error) {
+      await _persistInterruptedOutline();
+      if (!mounted || _isGenerationCancelled(error)) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is GenerationJobTimeoutException
+                ? _outlineTimeoutMessage(error)
+                : 'Não foi possível retomar o job $jobId: $error',
+          ),
+          action: SnackBarAction(
+            label: 'Continuar',
+            onPressed: _resumeOutlineGeneration,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _recoverInterruptedOutline() async {
+    if (!mounted || _isAnyGenerationBusy) return;
+    final jobId = _interruptedOutlineJobId;
+    if (jobId == null) {
+      _appendOutlineResumePrompt();
+      return;
+    }
+    try {
+      final response = await _adminService.getJobStatus(jobId);
+      if (!mounted) return;
+      final job = response.data;
+      if (job == null) {
+        _interruptedOutlineJobId = null;
+        _appendOutlineResumePrompt();
+        return;
+      }
+      if (job.isCompleted && job.outputData != null) {
+        _applyStreamingOutline(job.outputData!, persist: true);
+        _interruptedOutlineJobId = null;
+        return;
+      }
+      if (job.isActive) {
+        _appendOutlineResumePrompt(jobId: job.id, stillRunning: true);
+        return;
+      }
+      _interruptedOutlineJobId = null;
+      _appendOutlineResumePrompt();
+    } catch (_) {
+      if (!mounted) return;
+      _appendOutlineResumePrompt(jobId: jobId);
+    }
+  }
+
+  void _appendOutlineResumePrompt({int? jobId, bool stillRunning = false}) {
+    final project = _project;
+    if (project == null) return;
+    if (!_canContinueOutline(project) && jobId == null) return;
+    final alreadyPrompted = _assistantTurns.any(
+      (turn) => turn.actions.any(
+        (action) =>
+            action.id == 'continue_outline_next' ||
+            action.id == 'resume_outline_job',
+      ),
+    );
+    if (alreadyPrompted && !stillRunning) return;
+    final saved = _readyOutlineCount(project);
+    final actions = _outlineResumeActions(jobId: jobId);
+    if (actions.isEmpty) return;
+    final text = stillRunning
+        ? 'A geração do job $jobId ainda está em andamento ($saved de ${project.targetEpisodeCount} episódios no esboço). Continuar de onde parou?'
+        : '$saved de ${project.targetEpisodeCount} episódios já estão no esboço. Continuar de onde a geração parou?';
+    setState(() {
+      _assistantTurns.add(
+        _StudioChatTurn(role: 'assistant', text: text, actions: actions),
+      );
+      _assistantStreamText = text;
+    });
+    _scrollAssistantToEnd();
+  }
+
+  int? _nextOutlineEpisode(ProductionProject project) {
+    return SeasonArchitecture.nextOutlineEpisode(
+      outlinedNumbers: project.episodes
+          .where(_episodeHasReadyOutline)
+          .map((episode) => episode.number),
+      targetEpisodeCount: project.targetEpisodeCount,
+    );
+  }
+
+  bool _episodeHasReadyOutline(ProductionEpisodeItem episode) {
+    return SeasonArchitecture.isReadyOutline(
+      status: episode.status,
+      title: episode.title,
+      summary: episode.summary,
+    );
+  }
+
+  bool _canContinueOutline(ProductionProject project) {
+    return _nextOutlineEpisode(project) != null;
+  }
+
+  Map<String, dynamic>? _nextOutlineBatch(ProductionProject project) {
+    final next = _nextOutlineEpisode(project);
+    if (next == null) return null;
+    return SeasonArchitecture.outlineBatchRange(
+      fromEpisode: next,
+      targetEpisodeCount: project.targetEpisodeCount,
+    );
+  }
+
+  Future<void> _offerContinueOutline(
+    ProductionProject project,
+    Map<String, dynamic> batch,
+  ) async {
+    if (!mounted || _isAutomaticPreparationRunning || _isAnyGenerationBusy) {
+      return;
+    }
+    final nextFrom = (batch['nextFromEpisode'] as num?)?.toInt() ??
+        _nextOutlineEpisode(project);
+    if (nextFrom == null) return;
+    final nextBatch = SeasonArchitecture.outlineBatchRange(
+      fromEpisode: nextFrom,
+      targetEpisodeCount: project.targetEpisodeCount,
+    );
+    final through = nextBatch['throughEpisode'] as int;
+    final shouldContinue = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Gerar o próximo lote?'),
+        content: Text(
+          'EP${batch['fromEpisode']}-${batch['throughEpisode']} de ${project.targetEpisodeCount} já estão no esboço. '
+          'O mapa da temporada (paywall e revelações) continua travado. '
+          'Gerar EP$nextFrom-$through?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Agora não'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Gerar EP$nextFrom-$through'),
+          ),
+        ],
+      ),
+    );
+    if (shouldContinue == true && mounted) {
+      await _generateSeriesOutlineWithCodex(fromEpisode: nextFrom);
     }
   }
 
@@ -1024,10 +1511,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ),
       );
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível gerar as fichas: $error')),
-      );
+      _notifyGenerationFailure(error, 'Não foi possível gerar as fichas: $error');
     }
   }
 
@@ -1148,11 +1632,14 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         try {
           final output = await _runAiWorkflow(
             action: 'GENERATE_SERIES_OUTLINE',
+            fromEpisode: 1,
+            batchSize: SeasonArchitecture.defaultOutlineBatchSize,
             onPartial: _applyStreamingOutline,
           );
           _applyStreamingOutline(output, persist: true);
           current = _project ?? current;
         } catch (error) {
+          if (_isGenerationCancelled(error)) rethrow;
           failures.add('Esboço e objetivos: $error');
         } finally {
           completed += 1;
@@ -1195,7 +1682,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       );
       if (mounted) setState(() => _project = current);
       await _persistProject(current);
-      if (mounted) {
+      if (mounted && !_isGenerationCancelled(error)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('A preparação automática foi interrompida: $error'),
@@ -1279,6 +1766,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ),
       );
     } catch (error) {
+      if (_isGenerationCancelled(error)) {
+        final project = _project;
+        if (project != null) unawaited(_persistProject(project));
+        return;
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Não foi possível gerar o roteiro: $error')),
@@ -1307,7 +1799,6 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       setState(() {
         _project = updated;
         _showEpisodeScriptEditor = true;
-        _studioTabIndex = 1;
         final conversation = output['conversation']?.toString().trim();
         if (conversation != null && conversation.isNotEmpty) {
           _assistantStreamText = conversation;
@@ -1433,9 +1924,9 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Ajuste aplicado pela IA.')));
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível aplicar o ajuste: $error')),
+      _notifyGenerationFailure(
+        error,
+        'Não foi possível aplicar o ajuste: $error',
       );
     }
   }
@@ -1584,8 +2075,9 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       setState(() {
         _project = updated;
         _pendingChatContract = null;
-        _studioTabIndex = 1;
-        if (readyIndex >= 0) _episodeIndex = readyIndex;
+        if (readyIndex >= 0 && _studioTabIndex == 1) {
+          _episodeIndex = readyIndex;
+        }
         final conversation = output['conversation']?.toString().trim();
         if (conversation != null && conversation.isNotEmpty) {
           _assistantStreamText = conversation;
@@ -1595,15 +2087,34 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           );
         }
       });
-      if (persist) {
+      if (!persist) {
+        _scheduleOutlinePersist();
+      } else {
         unawaited(_persistProject(updated));
+        final readyCount = updated.episodes
+            .where((item) => item.status != 'GENERATING')
+            .length;
+        final batch = output['outlineBatch'] is Map
+            ? Map<String, dynamic>.from(output['outlineBatch'] as Map)
+            : (output['result'] is Map &&
+                  (output['result'] as Map)['outlineBatch'] is Map
+              ? Map<String, dynamic>.from(
+                  (output['result'] as Map)['outlineBatch'] as Map,
+                )
+              : <String, dynamic>{});
+        final canContinue = batch['canContinue'] == true;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Série "${updated.title}" gerada com IA: ${updated.episodes.where((item) => item.status != 'GENERATING').length} episódios no esboço.',
+              canContinue
+                  ? 'Série "${updated.title}": $readyCount de ${updated.targetEpisodeCount} episódios no esboço.'
+                  : 'Série "${updated.title}" gerada com IA: $readyCount episódios no esboço.',
             ),
           ),
         );
+        if (canContinue && !_isAutomaticPreparationRunning) {
+          unawaited(_offerContinueOutline(updated, batch));
+        }
       }
     } catch (error) {
       if (persist && mounted) {
@@ -1621,6 +2132,8 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     try {
       final output = await _runAiWorkflow(
         action: 'GENERATE_SERIES_OUTLINE',
+        fromEpisode: 1,
+        batchSize: SeasonArchitecture.defaultOutlineBatchSize,
         userPrompt: idea.trim(),
         instruction: [
           'Ideia do usuario: ${idea.trim()}',
@@ -1636,15 +2149,29 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           'Duracao do EP1: ${bible['first_episode_duration_seconds'] ?? 120}s',
           'Duracao dos demais: ${bible['episode_duration_seconds'] ?? 60}s',
           'Crie um TITULO original da serie (2 a 6 palavras). Nao use a ideia crua como titulo quando ela for so um genero, tropo ou uma palavra, por exemplo Romance.',
-          'Gere o contrato, o mapa da temporada com paywall e revelacoes reservadas, a espinha de todos os episodios, e so entao cada cartao em sequencia. Nao gaste no EP inicial o que o bloco final precisa.',
+          'Gere o contrato e o mapa completo da temporada com paywall e revelacoes reservadas.',
+          'Depois gere so o primeiro lote de cartoes (ate 5 episodios). Nao gaste no EP inicial o que o bloco final precisa.',
         ].join('\n'),
         onPartial: _applyStreamingOutline,
       );
+      _interruptedOutlineJobId = null;
       _applyStreamingOutline(output, persist: true);
     } catch (error) {
-      if (!mounted) return;
+      await _persistInterruptedOutline();
+      if (!mounted || _isGenerationCancelled(error)) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Não foi possível gerar a série: $error')),
+        SnackBar(
+          duration: const Duration(seconds: 10),
+          content: Text(
+            error is GenerationJobTimeoutException
+                ? _outlineTimeoutMessage(error)
+                : 'Não foi possível gerar a série: $error',
+          ),
+          action: SnackBarAction(
+            label: 'Continuar',
+            onPressed: _resumeOutlineGeneration,
+          ),
+        ),
       );
     }
   }

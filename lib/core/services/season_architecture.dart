@@ -532,6 +532,9 @@ class SeasonArchitecture {
     };
   }
 
+  static bool episodeRequiresUnlock(int episodeNumber, int freeEpisodeCount) =>
+      episodeNumber > freeEpisodeCount;
+
   static Map<String, dynamic> architectureBible({
     required SeasonRetentionProfile profile,
     required List<SeasonBlockPlan> blocks,
@@ -545,4 +548,75 @@ class SeasonArchitecture {
     'blocks': blocks.map((item) => item.toJson()).toList(),
     'reserved_reveal_count': reservedReveals.length,
   };
+
+  static const defaultOutlineBatchSize = 5;
+
+  static Map<String, dynamic> outlineBatchRange({
+    required int fromEpisode,
+    required int targetEpisodeCount,
+    int batchSize = defaultOutlineBatchSize,
+  }) {
+    final target = targetEpisodeCount < 1 ? 1 : targetEpisodeCount;
+    final size = batchSize < 1
+        ? defaultOutlineBatchSize
+        : (batchSize > 20 ? 20 : batchSize);
+    final from = fromEpisode < 1
+        ? 1
+        : (fromEpisode > target ? target : fromEpisode);
+    final through = (from + size - 1) > target ? target : (from + size - 1);
+    final remaining = target - through;
+    return {
+      'fromEpisode': from,
+      'throughEpisode': through,
+      'targetEpisodeCount': target,
+      'remaining': remaining < 0 ? 0 : remaining,
+      'canContinue': remaining > 0,
+      'nextFromEpisode': remaining > 0 ? through + 1 : null,
+      'batchSize': size,
+      'isFullSeason': from == 1 && through == target,
+    };
+  }
+
+  static int? nextOutlineEpisode({
+    required Iterable<int> outlinedNumbers,
+    required int targetEpisodeCount,
+  }) {
+    if (targetEpisodeCount < 1) return null;
+    final numbers = outlinedNumbers.toSet();
+    var next = 1;
+    while (next <= targetEpisodeCount && numbers.contains(next)) {
+      next += 1;
+    }
+    return next > targetEpisodeCount ? null : next;
+  }
+
+  static final placeholderTitlePattern = RegExp(
+    r'^gerando epis[oó]dio',
+    caseSensitive: false,
+  );
+
+  static bool isPlaceholderTitle(String title) {
+    final value = title.trim();
+    if (value.isEmpty) return true;
+    return placeholderTitlePattern.hasMatch(value) ||
+        RegExp(r'^epis[oó]dio\s*\d+$', caseSensitive: false).hasMatch(value);
+  }
+
+  static bool isReadyOutline({
+    required String status,
+    required String title,
+    required String summary,
+  }) {
+    if (status == 'GENERATING') return false;
+    if (summary.trim().isEmpty) return false;
+    if (isPlaceholderTitle(title)) return false;
+    return true;
+  }
+
+  static bool hasLockedSeasonArchitecture(Map<String, dynamic> bible) {
+    final architecture = bible['season_architecture'];
+    if (architecture is! Map) return false;
+    final blocks = architecture['blocks'];
+    return blocks is List && blocks.isNotEmpty;
+  }
 }

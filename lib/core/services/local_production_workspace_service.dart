@@ -2321,6 +2321,20 @@ class LocalProductionWorkspaceService {
       throw StateError('A IA não retornou o esboço dos episódios.');
     }
 
+    final outlineBatch = _outlineBatchOf(output, result);
+    final generatedNumbers = generatedEpisodes
+        .map((item) => (item['number'] as num?)?.toInt() ?? 0)
+        .where((number) => number > 0);
+    final fromEpisode =
+        (outlineBatch['fromEpisode'] as num?)?.toInt() ??
+        (generatedNumbers.isEmpty
+            ? 1
+            : generatedNumbers.reduce((min, number) => number < min ? number : min));
+    final throughEpisode = (outlineBatch['throughEpisode'] as num?)?.toInt();
+    final batchIncomplete =
+        throughEpisode != null &&
+        throughEpisode < project.targetEpisodeCount;
+
     final existingByNumber = {
       for (final episode in project.episodes) episode.number: episode,
     };
@@ -2335,7 +2349,26 @@ class LocalProductionWorkspaceService {
                   (existing.takes.isNotEmpty ||
                       existing.status.contains('PRODUCTION') ||
                       existing.status.contains('LOCKED'))) {
-                return existing;
+                final nextTitle = item['title']?.toString().trim() ?? '';
+                final nextSummary = item['summary']?.toString() ?? '';
+                final nextCliffhanger = item['cliffhanger']?.toString() ?? '';
+                if (!_isPlaceholderEpisodeTitle(existing.title) &&
+                    existing.summary.trim().isNotEmpty) {
+                  return existing;
+                }
+                return existing.copyWith(
+                  title: nextTitle.isNotEmpty ? nextTitle : existing.title,
+                  summary: nextSummary.trim().isNotEmpty
+                      ? nextSummary
+                      : existing.summary,
+                  cliffhanger: nextCliffhanger.trim().isNotEmpty
+                      ? nextCliffhanger
+                      : existing.cliffhanger,
+                  status: existing.status.contains('PRODUCTION') ||
+                          existing.status.contains('LOCKED')
+                      ? existing.status
+                      : 'OUTLINE_REVIEW_REQUIRED',
+                );
               }
               return ProductionEpisodeItem(
                 number: number,
@@ -2362,8 +2395,30 @@ class LocalProductionWorkspaceService {
                 ambienceVolume: existing?.ambienceVolume ?? 0.48,
               );
             })
-            .toList()
-          ..sort((a, b) => a.number.compareTo(b.number));
+            .toList();
+
+    final byNumber = {for (final episode in episodes) episode.number: episode};
+    for (final existing in project.episodes) {
+      if (byNumber.containsKey(existing.number)) continue;
+      final locked =
+          existing.takes.isNotEmpty ||
+          existing.status.contains('PRODUCTION') ||
+          existing.status.contains('LOCKED');
+      if (locked) {
+        byNumber[existing.number] = existing;
+        continue;
+      }
+      if (fromEpisode > 1 &&
+          existing.status != 'GENERATING' &&
+          existing.summary.trim().isNotEmpty &&
+          (throughEpisode == null ||
+              existing.number < fromEpisode ||
+              existing.number > throughEpisode)) {
+        byNumber[existing.number] = existing;
+      }
+    }
+    episodes = byNumber.values.toList()
+      ..sort((a, b) => a.number.compareTo(b.number));
 
     if (fillMissingSlots) {
       final firstDuration =
@@ -2373,10 +2428,8 @@ class LocalProductionWorkspaceService {
       final otherDuration =
           (project.seriesBible['episode_duration_seconds'] as num?)?.toInt() ??
           60;
-      final byNumber = {
-        for (final episode in episodes) episode.number: episode,
-      };
-      for (var number = 1; number <= project.targetEpisodeCount; number++) {
+      final fillUntil = throughEpisode ?? project.targetEpisodeCount;
+      for (var number = 1; number <= fillUntil; number++) {
         if (byNumber.containsKey(number)) continue;
         final existing = existingByNumber[number];
         if (existing != null &&
@@ -2408,6 +2461,7 @@ class LocalProductionWorkspaceService {
       episodes = byNumber.values.toList()
         ..sort((a, b) => a.number.compareTo(b.number));
     } else if (!allowPartial &&
+        !batchIncomplete &&
         episodes.length != project.targetEpisodeCount) {
       throw StateError(
         'A IA retornou ${episodes.length} episódios; o projeto exige ${project.targetEpisodeCount}.',
@@ -2473,6 +2527,7 @@ class LocalProductionWorkspaceService {
       if (_codexThreadId(output) != null)
         'codex_thread_id': _codexThreadId(output),
       'codex_outline_summary': output['summary'],
+      if (outlineBatch.isNotEmpty) 'outline_batch': outlineBatch,
     };
     mergedBible['hook_chain'] = _syncMicroDramaHookChain(
       episodes: episodes,
@@ -2484,11 +2539,15 @@ class LocalProductionWorkspaceService {
       centralQuestion: mergedBible['central_question']?.toString() ?? '',
       language: mergedBible['language']?.toString() ?? 'Português (Brasil)',
     );
+    final outlinedNumbers = {for (final episode in episodes) episode.number};
     mergedBible['episode_cards'] = _syncedEpisodeCards(
       episodes: episodes,
       existing: _asObjectList(project.seriesBible['episode_cards']),
       generated: generatedEpisodeCards,
-    );
+    ).where((card) {
+      final number = _asEpisodeNumber(card['episode']);
+      return number != null && outlinedNumbers.contains(number);
+    }).toList();
 
     final generatedTitle = [result['title'], biblePatch['title']]
         .map((value) => value?.toString().trim() ?? '')
@@ -2504,13 +2563,18 @@ class LocalProductionWorkspaceService {
             episode.status.contains('LOCKED'))
           episode.number,
     };
+    bool keepExistingStoryAsset(int? number) {
+      if (number == null) return false;
+      if (lockedNumbers.contains(number)) return true;
+      return fromEpisode > 1 && number < fromEpisode;
+    }
+
     mergedBible['episode_scripts'] =
         (project.seriesBible['episode_scripts'] as List<dynamic>? ?? const [])
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
             .where(
-              (item) =>
-                  lockedNumbers.contains(_asEpisodeNumber(item['episode'])),
+              (item) => keepExistingStoryAsset(_asEpisodeNumber(item['episode'])),
             )
             .toList();
     mergedBible['scene_cards'] =
@@ -2518,8 +2582,7 @@ class LocalProductionWorkspaceService {
             .whereType<Map>()
             .map((item) => Map<String, dynamic>.from(item))
             .where(
-              (item) =>
-                  lockedNumbers.contains(_asEpisodeNumber(item['episode'])),
+              (item) => keepExistingStoryAsset(_asEpisodeNumber(item['episode'])),
             )
             .toList();
 
@@ -3187,6 +3250,17 @@ class LocalProductionWorkspaceService {
     if (result is Map<String, dynamic>) return result;
     if (result is Map) return Map<String, dynamic>.from(result);
     throw StateError('Resultado estruturado da IA ausente.');
+  }
+
+  static Map<String, dynamic> _outlineBatchOf(
+    Map<String, dynamic> output,
+    Map<String, dynamic> result,
+  ) {
+    final fromResult = result['outlineBatch'];
+    if (fromResult is Map) return Map<String, dynamic>.from(fromResult);
+    final fromOutput = output['outlineBatch'];
+    if (fromOutput is Map) return Map<String, dynamic>.from(fromOutput);
+    return <String, dynamic>{};
   }
 
   static String? _codexThreadId(Map<String, dynamic> output) {

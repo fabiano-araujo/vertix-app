@@ -188,16 +188,18 @@ class AdminService {
     }
   }
 
-  /// Send an authenticated project action to the server-side Codex worker.
+  /// Send an authenticated project action to the server-side story model (OpenRouter).
   Future<GenerationJob> startCodexWorkflow({
     required String action,
     required Map<String, dynamic> project,
     int? episodeNumber,
+    int? fromEpisode,
+    int? batchSize,
     String? instruction,
     String? codexThreadId,
   }) async {
     if (!await _client.isAuthenticated()) {
-      throw StateError('Faça login para usar a geração com Codex.');
+      throw StateError('Faça login para usar a geração com IA.');
     }
     try {
       final response = await _client.post(
@@ -206,6 +208,8 @@ class AdminService {
           'action': action,
           'project': project,
           if (episodeNumber != null) 'episodeNumber': episodeNumber,
+          if (fromEpisode != null) 'fromEpisode': fromEpisode,
+          if (batchSize != null) 'batchSize': batchSize,
           if (instruction?.trim().isNotEmpty == true)
             'instruction': instruction!.trim(),
           if (codexThreadId?.trim().isNotEmpty == true)
@@ -215,7 +219,7 @@ class AdminService {
       final payload = Map<String, dynamic>.from(response.data as Map);
       if (payload['success'] != true || payload['data'] is! Map) {
         throw StateError(
-          payload['message']?.toString() ?? 'A ação não foi aceita pelo Codex.',
+          payload['message']?.toString() ?? 'A ação não foi aceita pela IA.',
         );
       }
       return GenerationJob.fromJson(
@@ -226,15 +230,56 @@ class AdminService {
     }
   }
 
-  /// Poll a queued Codex job until it reaches a terminal state.
+  /// Create a capability-scoped image job to be processed by a local Codex task.
+  Future<ReferenceImageJobLaunch> startReferenceImageJob({
+    required int seriesId,
+    required List<Map<String, dynamic>> references,
+  }) async {
+    if (!await _client.isAuthenticated()) {
+      throw StateError('Faça login para gerar referências com o Codex.');
+    }
+    try {
+      final response = await _client.post(
+        '${ApiConstants.admin}/series/$seriesId/reference-image-jobs',
+        data: {'references': references},
+      );
+      final payload = Map<String, dynamic>.from(response.data as Map);
+      if (payload['success'] != true || payload['data'] is! Map) {
+        throw StateError(
+          payload['message']?.toString() ??
+              'O job de imagens não foi aceito pela API.',
+        );
+      }
+      return ReferenceImageJobLaunch.fromJson(
+        Map<String, dynamic>.from(payload['data'] as Map),
+      );
+    } on DioException catch (error) {
+      throw StateError(_apiErrorMessage(error));
+    }
+  }
+
+  /// Poll a queued story-generation job until it reaches a terminal state.
+  ///
+  /// A season of 50 outline cards can keep a job busy for far longer than 20
+  /// minutes. We only abort when the job stops reporting progress, or after
+  /// the hard ceiling.
   Future<GenerationJob> waitForGenerationJob(
     int jobId, {
-    Duration timeout = const Duration(minutes: 20),
+    Duration timeout = const Duration(hours: 3),
+    Duration stallTimeout = const Duration(minutes: 40),
     Duration pollInterval = const Duration(milliseconds: 1400),
     void Function(GenerationJob job)? onProgress,
+    bool Function()? isCancelled,
+    Future<void>? cancelled,
   }) async {
     final deadline = DateTime.now().add(timeout);
+    var lastChange = DateTime.now();
+    var lastFingerprint = '';
+    GenerationJob? latest;
     while (DateTime.now().isBefore(deadline)) {
+      if (isCancelled?.call() == true) {
+        throw const GenerationCancelledException();
+      }
       final response = await getJobStatus(jobId);
       final job = response.data;
       if (!response.success || job == null) {
@@ -242,16 +287,43 @@ class AdminService {
           response.message ?? 'Não foi possível consultar o job.',
         );
       }
+      latest = job;
       onProgress?.call(job);
+      if (job.isCancelled || isCancelled?.call() == true) {
+        throw const GenerationCancelledException();
+      }
       if (job.isCompleted) return job;
       if (job.isFailed) {
         throw StateError(job.errorMessage ?? 'A geração falhou no servidor.');
       }
-      await Future<void>.delayed(pollInterval);
+      final fingerprint =
+          '${job.status}|${job.progress}|${job.outputData?['message']}|${job.outputData?['conversation']?.toString().length ?? 0}';
+      if (fingerprint != lastFingerprint) {
+        lastFingerprint = fingerprint;
+        lastChange = DateTime.now();
+      } else if (DateTime.now().difference(lastChange) > stallTimeout) {
+        throw GenerationJobTimeoutException(jobId, lastJob: job);
+      }
+      final delay = Future<void>.delayed(pollInterval);
+      if (cancelled == null) {
+        await delay;
+      } else {
+        await Future.any<void>([delay, cancelled]);
+      }
     }
-    throw TimeoutException(
-      'A geração ainda não terminou. Consulte o job $jobId.',
-    );
+    throw GenerationJobTimeoutException(jobId, lastJob: latest);
+  }
+
+  /// Stop a pending or processing generation job.
+  Future<void> cancelJob(int jobId) async {
+    if (!await _client.isAuthenticated()) {
+      throw StateError('Faça login para cancelar a geração.');
+    }
+    try {
+      await _client.delete('${ApiConstants.adminJobs}/$jobId');
+    } on DioException catch (error) {
+      throw StateError(_apiErrorMessage(error));
+    }
   }
 
   String _apiErrorMessage(DioException error) {
@@ -263,7 +335,7 @@ class AdminService {
       return 'Sua sessão expirou. Faça login novamente.';
     }
     if (error.response?.statusCode == 403) {
-      return 'A geração com Codex exige uma conta administradora.';
+      return 'Essa geração exige uma conta administradora.';
     }
     return error.message ?? 'Falha de comunicação com o servidor.';
   }
@@ -771,6 +843,55 @@ class GenerationJob {
   bool get isFailed => status == 'FAILED';
   bool get isPending => status == 'PENDING';
   bool get isProcessing => status == 'PROCESSING';
+  bool get isActive => isPending || isProcessing;
+  bool get isCancelled {
+    if (!isFailed) return false;
+    final message = (errorMessage ?? '').toLowerCase();
+    return message.contains('cancelled by user') ||
+        message.contains('cancelada pelo');
+  }
+}
+
+class GenerationCancelledException implements Exception {
+  const GenerationCancelledException();
+
+  @override
+  String toString() => 'Geração cancelada.';
+}
+
+class GenerationJobTimeoutException extends TimeoutException {
+  GenerationJobTimeoutException(this.jobId, {this.lastJob})
+    : super('A geração ainda não terminou. Consulte o job $jobId.');
+
+  final int jobId;
+  final GenerationJob? lastJob;
+}
+
+class ReferenceImageJobLaunch {
+  final GenerationJob job;
+  final String capabilityToken;
+  final DateTime capabilityExpiresAt;
+
+  const ReferenceImageJobLaunch({
+    required this.job,
+    required this.capabilityToken,
+    required this.capabilityExpiresAt,
+  });
+
+  factory ReferenceImageJobLaunch.fromJson(Map<String, dynamic> json) {
+    final token = json['capabilityToken']?.toString() ?? '';
+    final expiresAt = DateTime.tryParse(
+      json['capabilityExpiresAt']?.toString() ?? '',
+    );
+    if (token.isEmpty || expiresAt == null) {
+      throw const FormatException('Credencial do job de imagens inválida.');
+    }
+    return ReferenceImageJobLaunch(
+      job: GenerationJob.fromJson(json),
+      capabilityToken: token,
+      capabilityExpiresAt: expiresAt,
+    );
+  }
 }
 
 /// Generation Response

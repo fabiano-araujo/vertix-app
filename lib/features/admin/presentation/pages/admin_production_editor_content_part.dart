@@ -472,6 +472,10 @@ extension _AdminProductionEditorContentExtension
         children: [
           _buildOutlineToolbar(),
           const SizedBox(height: 16),
+          if (_project != null && _canContinueOutline(_project!)) ...[
+            _buildContinueOutlineBanner(_project!),
+            const SizedBox(height: 16),
+          ],
           if (project.episodes.isEmpty)
             _buildChatBriefEmptyState()
           else if (_showHookChain)
@@ -554,11 +558,40 @@ extension _AdminProductionEditorContentExtension
           ),
           _outlineToolButton(
             icon: Icons.auto_awesome,
-            label: compact ? 'Esboço' : 'Gerar esboço com IA',
+            label: compact
+                ? 'Esboço'
+                : _project != null && _canContinueOutline(_project!)
+                ? () {
+                    final batch = _nextOutlineBatch(_project!)!;
+                    return 'Continuar esboço (EP${batch['fromEpisode']}-${batch['throughEpisode']})';
+                  }()
+                : 'Gerar esboço com IA',
             onTap: _isAnyGenerationBusy || _isChatBrief
                 ? null
-                : _generateSeriesOutlineWithCodex,
+                : () {
+                    final next = _project == null
+                        ? null
+                        : _nextOutlineEpisode(_project!);
+                    _generateSeriesOutlineWithCodex(
+                      fromEpisode: next != null && next > 1 ? next : 1,
+                    );
+                  },
           ),
+          if (_project != null && _canContinueOutline(_project!))
+            _outlineToolButton(
+              icon: Icons.playlist_add,
+              label: compact
+                  ? 'Mais 5'
+                  : () {
+                      final batch = _nextOutlineBatch(_project!)!;
+                      return 'Continuar esboço (EP${batch['fromEpisode']}-${batch['throughEpisode']})';
+                    }(),
+              onTap: _isAnyGenerationBusy
+                  ? null
+                  : () => _generateSeriesOutlineWithCodex(
+                      fromEpisode: _nextOutlineEpisode(_project!),
+                    ),
+            ),
           _outlineToolButton(
             icon: Icons.ios_share_outlined,
             label: compact ? 'Exportar' : 'Exportar script e ativos',
@@ -592,6 +625,42 @@ extension _AdminProductionEditorContentExtension
         }
         return Wrap(spacing: 8, runSpacing: 8, children: buttons);
       },
+    );
+  }
+
+  Widget _buildContinueOutlineBanner(ProductionProject project) {
+    final batch = _nextOutlineBatch(project);
+    if (batch == null) return const SizedBox.shrink();
+    final ready = _readyOutlineCount(project);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2438),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF9B8CFF).withAlpha(160)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.playlist_add, color: Color(0xFF9B8CFF)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'O texto-base parou: $ready de ${project.targetEpisodeCount} episódios. '
+              'Continuar EP${batch['fromEpisode']}-${batch['throughEpisode']}.',
+              style: const TextStyle(height: 1.35, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton(
+            onPressed: _isAnyGenerationBusy
+                ? null
+                : () => _generateSeriesOutlineWithCodex(
+                    fromEpisode: batch['fromEpisode'] as int,
+                  ),
+            child: Text('Continuar EP${batch['fromEpisode']}-${batch['throughEpisode']}'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -720,7 +789,13 @@ extension _AdminProductionEditorContentExtension
     final payoffWindow = architecture['central_question_payoff_window']
         ?.toString()
         .trim();
-    final irony = _bibleText(project, 'viewer_dramatic_irony', fallback: '');
+    final outlinedCount = project.episodes.where(_episodeHasReadyOutline).length;
+    final irony = _bibleText(
+      project,
+      'viewer_dramatic_irony',
+      fallback: '',
+    ).trim();
+    final canContinue = _canContinueOutline(project);
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -747,7 +822,7 @@ extension _AdminProductionEditorContentExtension
           ),
           const SizedBox(height: 8),
           const Text(
-            'A espinha é travada antes dos cartões: o EP1 não gasta o que o bloco final precisa, e o paywall entra como decisão de roteiro.',
+            'O mapa da temporada (paywall e revelações) é travado inteiro. Os cartões saem em lotes; o EP1 não gasta o que o bloco final precisa.',
             style: TextStyle(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -766,6 +841,12 @@ extension _AdminProductionEditorContentExtension
                 _pill('Pergunta central: EP$payoffWindow', gold),
               if (reveals.isNotEmpty)
                 _pill('${reveals.length} revelações reservadas', gold),
+              if (outlinedCount > 0 &&
+                  outlinedCount < project.targetEpisodeCount)
+                _pill(
+                  '$outlinedCount de ${project.targetEpisodeCount} cartões no esboço',
+                  gold,
+                ),
             ],
           ),
           if (irony.isNotEmpty) ...[
@@ -842,6 +923,24 @@ extension _AdminProductionEditorContentExtension
               );
             }),
           ],
+          if (canContinue) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _isAnyGenerationBusy
+                    ? null
+                    : () => _generateSeriesOutlineWithCodex(
+                        fromEpisode: _nextOutlineEpisode(project),
+                      ),
+                icon: const Icon(Icons.playlist_add, size: 18),
+                label: Text(() {
+                  final batch = _nextOutlineBatch(project)!;
+                  return 'Continuar texto-base EP${batch['fromEpisode']}-${batch['throughEpisode']}';
+                }()),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -870,6 +969,51 @@ extension _AdminProductionEditorContentExtension
     _schedulePersist();
   }
 
+  ({String label, VoidCallback? onPressed}) _episodePrimaryAction({
+    required ProductionEpisodeItem episode,
+    required int episodeIndex,
+    required bool generatingScript,
+    required bool hasDetailedScript,
+    required bool productionReady,
+  }) {
+    if (!_episodeHasReadyOutline(episode)) {
+      final batch = _project == null ? null : _nextOutlineBatch(_project!);
+      return (
+        label: batch == null
+            ? 'Gerar texto-base'
+            : 'Continuar texto-base EP${batch['fromEpisode']}-${batch['throughEpisode']}',
+        onPressed: _isAnyGenerationBusy
+            ? null
+            : () {
+                setState(() => _episodeIndex = episodeIndex);
+                _generateSeriesOutlineWithCodex(
+                  fromEpisode: _nextOutlineEpisode(_project!),
+                );
+              },
+      );
+    }
+    return (
+      label: generatingScript
+          ? 'Gerando roteiro...'
+          : hasDetailedScript || productionReady
+          ? 'Ver/Editar script'
+          : 'Gerar script',
+      onPressed: generatingScript
+          ? null
+          : () {
+              setState(() => _episodeIndex = episodeIndex);
+              if (productionReady || hasDetailedScript) {
+                setState(() {
+                  _studioTabIndex = 1;
+                  _showEpisodeScriptEditor = true;
+                });
+              } else {
+                _generateEpisodeScript(episodeIndex);
+              }
+            },
+    );
+  }
+
   Widget _buildOutlineEpisodeCard(
     ProductionEpisodeItem episode,
     int episodeIndex,
@@ -886,10 +1030,21 @@ extension _AdminProductionEditorContentExtension
     final hasDetailedScript = _hasEpisodeScriptDraft(_project!, episode.number);
     final productionReady = episode.takes.isNotEmpty;
     final generatingScript = _generatingScriptEpisodeNumber == episode.number;
+    final hasReadyOutline = _episodeHasReadyOutline(episode);
+    final waitingOutline =
+        episode.status == 'GENERATING' &&
+        _activeAiAction == 'GENERATE_SERIES_OUTLINE';
     final displayTitle = _episodeDisplayTitle(episode, outlineCard);
     final displaySummary = _episodeDisplaySummary(episode, outlineCard);
     final displayCliffhanger = _episodeDisplayCliffhanger(episode, outlineCard);
     final compact = MediaQuery.sizeOf(context).width < 720;
+    final primary = _episodePrimaryAction(
+      episode: episode,
+      episodeIndex: episodeIndex,
+      generatingScript: generatingScript,
+      hasDetailedScript: hasDetailedScript,
+      productionReady: productionReady,
+    );
     return Card(
       color: const Color(0xFF1A1C22),
       margin: const EdgeInsets.only(bottom: 14),
@@ -934,7 +1089,7 @@ extension _AdminProductionEditorContentExtension
                       ),
                     ),
                   ),
-                  if (episode.status == 'GENERATING')
+                  if (waitingOutline)
                     const SizedBox(
                       width: 16,
                       height: 16,
@@ -965,12 +1120,13 @@ extension _AdminProductionEditorContentExtension
                 ),
                 const SizedBox(height: 8),
               ],
-              if (displaySummary.isNotEmpty ||
-                  episode.status == 'GENERATING') ...[
+              if (displaySummary.isNotEmpty || waitingOutline || !hasReadyOutline) ...[
                 Text(
                   displaySummary.isNotEmpty
                       ? displaySummary
-                      : 'A IA está escrevendo este episódio...',
+                      : waitingOutline
+                      ? 'A IA está escrevendo este episódio...'
+                      : 'Ainda não há o texto-base deste episódio.',
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -1046,32 +1202,14 @@ extension _AdminProductionEditorContentExtension
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: generatingScript
-                            ? null
-                            : () {
-                                setState(() => _episodeIndex = episodeIndex);
-                                if (productionReady || hasDetailedScript) {
-                                  setState(() {
-                                    _studioTabIndex = 1;
-                                    _showEpisodeScriptEditor = true;
-                                  });
-                                } else {
-                                  _generateEpisodeScript(episodeIndex);
-                                }
-                              },
+                        onPressed: primary.onPressed,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                           side: const BorderSide(color: Colors.white24),
                           backgroundColor: Colors.white10,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
-                        child: Text(
-                          generatingScript
-                              ? 'Gerando roteiro...'
-                              : hasDetailedScript || productionReady
-                              ? 'Ver roteiro'
-                              : 'Gerar roteiro',
-                        ),
+                        child: Text(primary.label),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1096,32 +1234,14 @@ extension _AdminProductionEditorContentExtension
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: generatingScript
-                            ? null
-                            : () {
-                                setState(() => _episodeIndex = episodeIndex);
-                                if (productionReady || hasDetailedScript) {
-                                  setState(() {
-                                    _studioTabIndex = 1;
-                                    _showEpisodeScriptEditor = true;
-                                  });
-                                } else {
-                                  _generateEpisodeScript(episodeIndex);
-                                }
-                              },
+                        onPressed: primary.onPressed,
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.white,
                           side: const BorderSide(color: Colors.white24),
                           backgroundColor: Colors.white10,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: Text(
-                          generatingScript
-                              ? 'Gerando roteiro...'
-                              : hasDetailedScript || productionReady
-                              ? 'Ver/Editar script'
-                              : 'Gerar script',
-                        ),
+                        child: Text(primary.label),
                       ),
                     ),
                     const SizedBox(width: 8),
