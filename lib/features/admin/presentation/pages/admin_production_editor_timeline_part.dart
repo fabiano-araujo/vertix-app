@@ -185,21 +185,64 @@ extension _AdminProductionEditorTimelineExtension
 
   Widget _projectPreview() {
     final project = _project!;
+    final generatingCover =
+        _activeCoverImageStatus == 'GENERATING' ||
+        _activeCoverImageStatus == 'UPLOADING';
+    Widget preview;
     if (project.coverAssetPath?.isNotEmpty == true) {
-      return Image.asset(
+      preview = Image.asset(
         project.coverAssetPath!,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => _projectPreviewFallback(),
       );
-    }
-    if (project.coverUrl?.isNotEmpty == true) {
-      return CachedNetworkImage(
+    } else if (project.coverUrl?.isNotEmpty == true) {
+      preview = CachedNetworkImage(
         imageUrl: project.coverUrl!,
         fit: BoxFit.cover,
         errorWidget: (_, __, ___) => _projectPreviewFallback(),
       );
+    } else {
+      preview = _projectPreviewFallback();
     }
-    return _projectPreviewFallback();
+    if (!generatingCover && _activeCoverImageStatus != 'PENDING') {
+      return preview;
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        preview,
+        ColoredBox(
+          color: Colors.black.withAlpha(130),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (generatingCover)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const Icon(Icons.image_outlined, color: Colors.white),
+                const SizedBox(height: 8),
+                Text(
+                  generatingCover
+                      ? 'Gerando a arte da capa da série'
+                      : 'Capa da série na fila',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _projectPreviewFallback() => const DecoratedBox(

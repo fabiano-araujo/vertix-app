@@ -46,11 +46,24 @@ class ApiConstants {
   static const String adminAvailableSeries = '$admin/series/available';
   static const String adminJobs = '$admin/jobs';
   static const String adminCodexJobs = '$admin/codex/jobs';
+  static const String codexReferenceBridgeScheme = 'vertixcodex';
   static const String adminAnalytics = '$admin/analytics';
   static const String adminUsers = '$admin/users';
 
+  /// Local Dola generator used by the production take screen.
+  static const String dolaBaseUrl = String.fromEnvironment(
+    'VERTIX_DOLA_API_BASE_URL',
+    defaultValue: 'http://127.0.0.1:3847',
+  );
+  static const String dolaProfiles = '/dola-api/profiles';
+  static const String dolaJobs = '/dola-api/jobs';
+  static const String dolaBridgeScheme = 'vertixdola';
+
   // User Profile
   static const String userProfile = '$auth/me';
+
+  // Credits / paywall
+  static const String creditsMe = '/credits/me';
 
   // Timeouts
   static const Duration connectionTimeout = Duration(seconds: 30);

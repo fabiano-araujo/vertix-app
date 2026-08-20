@@ -10,8 +10,17 @@ class FeaturedBanner extends StatelessWidget {
   final SeriesModel? series;
   final VoidCallback? onPlay;
   final VoidCallback? onInfo;
+  final VoidCallback? onMyList;
+  final bool inWatchlist;
 
-  const FeaturedBanner({super.key, this.series, this.onPlay, this.onInfo});
+  const FeaturedBanner({
+    super.key,
+    this.series,
+    this.onPlay,
+    this.onInfo,
+    this.onMyList,
+    this.inWatchlist = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -182,9 +191,9 @@ class FeaturedBanner extends StatelessWidget {
           infoButton,
           const SizedBox(width: 12),
           IconButton(
-            onPressed: () {},
-            tooltip: 'Minha lista',
-            icon: const Icon(Icons.add),
+            onPressed: onMyList,
+            tooltip: inWatchlist ? 'Na Minha Lista' : 'Minha lista',
+            icon: Icon(inWatchlist ? Icons.check : Icons.add),
             style: IconButton.styleFrom(
               backgroundColor: Colors.black.withValues(alpha: 0.45),
               foregroundColor: AppColors.textPrimary,
@@ -201,8 +210,8 @@ class FeaturedBanner extends StatelessWidget {
         Expanded(child: playButton),
         const SizedBox(width: 12),
         IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.add),
+          onPressed: onMyList,
+          icon: Icon(inWatchlist ? Icons.check : Icons.add),
           style: IconButton.styleFrom(
             backgroundColor: AppColors.surfaceLight,
             foregroundColor: AppColors.textPrimary,

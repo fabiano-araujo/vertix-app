@@ -8,6 +8,7 @@ import '../../../../core/services/feed_service.dart';
 import '../../../../core/services/episode_service.dart';
 import '../../../../core/models/episode_model.dart';
 import '../../../player/presentation/widgets/comments_sheet.dart';
+import '../../../player/presentation/widgets/vertical_video_view.dart';
 
 /// For You Page - TikTok-style vertical video feed
 /// Full-screen vertical swipe navigation with autoplay
@@ -27,6 +28,7 @@ class _ForYouPageState extends State<ForYouPage> {
   bool _isLoading = true;
   List<EpisodeModel> _episodes = [];
   Map<int, VideoPlayerController> _controllers = {};
+  bool _advancing = false;
 
   @override
   void initState() {
@@ -51,7 +53,7 @@ class _ForYouPageState extends State<ForYouPage> {
 
     if (response.success) {
       setState(() {
-        _episodes = response.data;
+        _episodes = response.data.where((item) => !item.isLocked).toList();
         _isLoading = false;
       });
 
@@ -67,15 +69,19 @@ class _ForYouPageState extends State<ForYouPage> {
     // Preload current and next 2 videos
     for (int i = currentIndex; i <= currentIndex + 2 && i < _episodes.length; i++) {
       if (!_controllers.containsKey(i)) {
+        if (_episodes[i].isLocked || _episodes[i].videoUrl.isEmpty) continue;
         final controller = VideoPlayerController.networkUrl(
           Uri.parse(_episodes[i].videoUrl),
         );
         _controllers[i] = controller;
         controller.initialize().then((_) {
+          if (!mounted) return;
+          controller.setLooping(false);
+          controller.addListener(() => _onVideoTick(i));
           if (i == currentIndex && mounted) {
             controller.play();
-            controller.setLooping(true);
           }
+          setState(() {});
         });
       }
     }
@@ -90,11 +96,36 @@ class _ForYouPageState extends State<ForYouPage> {
     });
   }
 
+  void _onVideoTick(int index) {
+    if (!mounted || index != _currentIndex || _advancing) return;
+    final controller = _controllers[index];
+    if (controller == null || !controller.value.isInitialized) return;
+    final ended =
+        !controller.value.isPlaying &&
+        controller.value.duration > Duration.zero &&
+        controller.value.position >=
+            controller.value.duration - const Duration(milliseconds: 400);
+    if (!ended) return;
+    if (index < _episodes.length - 1) {
+      _advancing = true;
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      controller.seekTo(Duration.zero);
+      controller.play();
+    }
+  }
+
   void _onPageChanged(int index) {
     // Pause previous video
     _controllers[_currentIndex]?.pause();
 
-    setState(() => _currentIndex = index);
+    setState(() {
+      _currentIndex = index;
+      _advancing = false;
+    });
 
     // Play current video
     _controllers[index]?.play();
@@ -131,10 +162,16 @@ class _ForYouPageState extends State<ForYouPage> {
     final response = await _episodeService.toggleLike(episode.id);
 
     if (response.success) {
+      var likes = episode.likesCount;
+      if (response.isLiked && !episode.isLiked) likes += 1;
+      if (!response.isLiked && episode.isLiked) {
+        likes = (likes - 1).clamp(0, 1 << 30);
+      }
+      if (response.likesCount > 0) likes = response.likesCount;
       setState(() {
         _episodes[index] = episode.copyWith(
           isLiked: response.isLiked,
-          likesCount: response.likesCount,
+          likesCount: likes,
         );
       });
     }
@@ -240,12 +277,7 @@ class _ForYouPageState extends State<ForYouPage> {
               }
               setState(() {});
             },
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
-            ),
+            child: VerticalVideoView(controller: controller),
           )
         else
           Container(
@@ -380,9 +412,9 @@ class _ForYouPageState extends State<ForYouPage> {
 
               // More
               _buildActionButton(
-                icon: Icons.more_horiz,
-                label: '',
-                onTap: () {},
+                icon: Icons.play_circle_outline,
+                label: 'Serie',
+                onTap: () => context.push('/player/${episode.id}'),
               ),
             ],
           ),

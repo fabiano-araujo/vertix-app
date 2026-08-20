@@ -298,6 +298,12 @@ extension _AdminProductionEditorContentExtension
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
       children: [
         _panel(
+          title: 'Capa da série',
+          icon: Icons.image_outlined,
+          child: _buildSeriesCoverStatusCard(),
+        ),
+        const SizedBox(height: 12),
+        _panel(
           title: 'Geração de vídeo',
           icon: Icons.movie_filter_outlined,
           child: _videoGenerationPresetPicker(

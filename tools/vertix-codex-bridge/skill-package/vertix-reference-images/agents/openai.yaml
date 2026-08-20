@@ -1,0 +1,4 @@
+interface:
+  display_name: "Imagens de referencia Vertix"
+  short_description: "Gera masters visuais e envia para a Vertix API"
+  default_prompt: "Use $vertix-reference-images para processar o job de imagens pendente do Vertix."

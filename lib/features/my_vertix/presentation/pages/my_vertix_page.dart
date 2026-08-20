@@ -5,9 +5,11 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/feed_service.dart';
+import '../../../../core/services/watchlist_service.dart';
 import '../../../../core/models/user_model.dart';
 import '../../../../core/models/episode_model.dart';
 import '../../../../core/utils/logger.dart';
+import '../../../home/presentation/widgets/series_carousel.dart';
 
 /// My Vertix Page - User profile and library
 /// Shows: Profile, Continue Watching, Likes, History, Downloads
@@ -21,6 +23,7 @@ class MyVertixPage extends StatefulWidget {
 class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver {
   final AuthService _authService = AuthService();
   final FeedService _feedService = FeedService();
+  final WatchlistService _watchlist = WatchlistService();
 
   UserModel? _user;
   List<EpisodeModel> _continueWatching = [];
@@ -33,13 +36,19 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _watchlist.revision.addListener(_onWatchlistChanged);
     _loadData();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _watchlist.revision.removeListener(_onWatchlistChanged);
     super.dispose();
+  }
+
+  void _onWatchlistChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -66,6 +75,7 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
     setState(() => _isLoading = true);
 
     _isLoggedIn = await _authService.isAuthenticated();
+    await _watchlist.ensureLoaded();
     Logger.i('MY_VERTIX', 'isLoggedIn: $_isLoggedIn');
 
     if (_isLoggedIn) {
@@ -172,6 +182,23 @@ class _MyVertixPageState extends State<MyVertixPage> with WidgetsBindingObserver
                     _buildProfileSection(context),
 
                     const SizedBox(height: 24),
+
+                    if (_watchlist.items.isNotEmpty)
+                      SeriesCarousel(
+                        title: 'Minha Lista',
+                        icon: Icons.bookmark,
+                        items: _watchlist.items
+                            .map(
+                              (series) => {
+                                'id': series.id,
+                                'title': series.title,
+                                'coverUrl': series.coverUrl,
+                                'genre': series.genre,
+                              },
+                            )
+                            .toList(),
+                        onItemTap: (id) => context.push('/series/$id'),
+                      ),
 
                     if (!_isLoggedIn) ...[
                       _buildLoginPrompt(context),

@@ -12,6 +12,14 @@ extension _AdminProductionEditorTakesExtension
     return _selectedTakeIndex.clamp(0, episode.takes.length - 1);
   }
 
+  String _takeSceneLabel(ProductionTakeItem take) {
+    final title = take.title.trim();
+    if (title.isEmpty) return 'Cena ${take.number}';
+    final lower = title.toLowerCase();
+    if (lower.startsWith('cena ')) return title;
+    return 'Cena ${take.number} · $title';
+  }
+
   Widget _buildTakes() {
     final episode = _episode!;
     final hasScriptDraft = _hasEpisodeScriptDraft(_project!, episode.number);
@@ -143,6 +151,10 @@ extension _AdminProductionEditorTakesExtension
       child: Column(
         children: [
           _buildTakePromptToolbar(episode, takeIndex, take),
+          if (!_storyReferencesReadyForVideo) ...[
+            const SizedBox(height: 10),
+            _buildMissingReferencesBanner(),
+          ],
           const SizedBox(height: 10),
           Expanded(
             child: DecoratedBox(
@@ -195,6 +207,22 @@ extension _AdminProductionEditorTakesExtension
                 backgroundColor: AppColors.surfaceLighter,
               ),
             ),
+            if ((_activeDolaMessages[take.id] ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                _activeDolaMessages[take.id]!,
+                style: const TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 12,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+          if (take.status == 'FAILED') ...[
+            const SizedBox(height: 10),
+            _buildDolaErrorBanner(take),
           ],
           const SizedBox(height: 10),
           _buildTakePromptFooter(episode, takeIndex, take),
@@ -219,12 +247,12 @@ extension _AdminProductionEditorTakesExtension
         ),
         _studioMenuChip(
           icon: Icons.movie_filter_outlined,
-          label: 'Cena ${take.number} · ${take.title}',
+          label: _takeSceneLabel(take),
           items: [
             for (final item in episode.takes)
               PopupMenuItem(
                 value: item.number - 1,
-                child: Text('Cena ${item.number} · ${item.title}'),
+                child: Text(_takeSceneLabel(item)),
               ),
           ],
           onSelected: (value) => setState(() => _selectedTakeIndex = value),
@@ -233,36 +261,109 @@ extension _AdminProductionEditorTakesExtension
           icon: Icons.notes_outlined,
           label: _takeEditorField == 'audio'
               ? 'Formato: Áudio e voz'
-              : 'Formato: Prompt visual',
+              : 'Formato: Descrição Natural',
           items: const [
-            PopupMenuItem(value: 'visual', child: Text('Prompt visual')),
+            PopupMenuItem(
+              value: 'visual',
+              child: Text('Descrição Natural'),
+            ),
             PopupMenuItem(value: 'audio', child: Text('Áudio e voz')),
           ],
           onSelected: (value) => setState(() => _takeEditorField = value),
         ),
         TextButton.icon(
           onPressed: () => _showTakeAdvancedSheet(episode, takeIndex, take),
-          icon: const Icon(Icons.tune, size: 16),
-          label: const Text('Mais opções'),
-        ),
-        FilledButton.icon(
-          onPressed: _isGeneratingEpisode ? null : _generateAllTakes,
-          style: FilledButton.styleFrom(
-            backgroundColor: _generateGold,
-            foregroundColor: Colors.black,
-            disabledBackgroundColor: _generateGold.withAlpha(90),
-          ),
-          icon: Icon(
-            _isGeneratingEpisode ? Icons.hourglass_top : Icons.auto_awesome,
-            size: 16,
-          ),
-          label: Text(
-            _isGeneratingEpisode
-                ? 'Gerando todos...'
-                : 'Gerar todos os takes',
-          ),
+          icon: const Icon(Icons.replay, size: 16),
+          label: const Text('Solicitação de regeneração'),
         ),
       ],
+    );
+  }
+
+  Widget _buildMissingReferencesBanner() {
+    return Material(
+      color: const Color(0xFF2A2218),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => _openProjectBoard(sectionIndex: 3),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_outline, size: 18, color: Color(0xFFE6D3A8)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _missingStoryReferencesMessage,
+                  style: const TextStyle(
+                    color: Color(0xFFE6D3A8),
+                    fontSize: 12,
+                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Abrir referências',
+                style: TextStyle(
+                  color: Color(0xFFE6D3A8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDolaErrorBanner(ProductionTakeItem take) {
+    final message = take.errorMessage.trim().isEmpty
+        ? 'A geração no Dola falhou.'
+        : take.errorMessage.trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.error.withAlpha(22),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.error.withAlpha(90)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Erro na geração do Dola',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    height: 1.45,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -271,19 +372,40 @@ extension _AdminProductionEditorTakesExtension
     int takeIndex,
     ProductionTakeItem take,
   ) {
-    final generating =
-        take.status == 'GENERATING' ||
-        take.status == 'QUEUED' ||
-        _isGeneratingEpisode;
+    final generatingThis =
+        take.status == 'GENERATING' || take.status == 'QUEUED';
+    final generating = generatingThis || _isGeneratingEpisode;
+    final referencesReady = _storyReferencesReadyForVideo;
+    final failed = take.status == 'FAILED';
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
-          'Dola Pre-Writes · Seedance 2.5 · ${take.durationSeconds}s · 720p · ${_transitionLabel(take.transitionMode)}',
-          style: const TextStyle(
-            color: AppColors.textTertiary,
+          () {
+            final preset = VideoGenerationPreset.fromBible(
+              _project?.seriesBible ?? const {},
+            );
+            final channel = preset.channel == 'dola' ? 'Dola Pre-Writes' : 'API';
+            final profiles = _dolaProfiles;
+            final profileBit = preset.channel == 'dola'
+                ? (profiles == null
+                      ? 'Playwright local'
+                      : profiles.availableCount == 0
+                      ? 'sem perfis hoje'
+                      : '${profiles.availableCount} perfis livres')
+                : preset.modelLabel;
+            if (generatingThis) {
+              return '$channel · $profileBit · gerando';
+            }
+            if (failed) {
+              return '$channel · $profileBit · erro';
+            }
+            return '$channel · $profileBit · ${take.durationSeconds}s · 720p · ${_transitionLabel(take.transitionMode)}';
+          }(),
+          style: TextStyle(
+            color: failed ? AppColors.error : AppColors.textTertiary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -299,24 +421,38 @@ extension _AdminProductionEditorTakesExtension
           label: const Text('Take mental'),
         ),
         FilledButton.icon(
-          onPressed: generating ? null : () => _generateTakeWithDola(takeIndex),
+          onPressed: generatingThis
+              ? () => unawaited(_stopDolaGeneration(take.id))
+              : generating || !referencesReady
+              ? null
+              : () => _generateTakeWithDola(takeIndex),
           style: FilledButton.styleFrom(
-            backgroundColor: _generateGold,
-            foregroundColor: Colors.black,
+            backgroundColor: generatingThis ? AppColors.error : _generateGold,
+            foregroundColor: generatingThis ? Colors.white : Colors.black,
             disabledBackgroundColor: _generateGold.withAlpha(90),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           icon: Icon(
-            generating
+            generatingThis
+                ? Icons.stop_rounded
+                : generating
                 ? Icons.hourglass_top
-                : take.status == 'COMPLETED'
+                : !referencesReady
+                ? Icons.lock_outline
+                : failed || take.status == 'COMPLETED'
                 ? Icons.replay
                 : Icons.auto_awesome,
             size: 18,
           ),
           label: Text(
-            generating
+            generatingThis
+                ? 'Parar geração'
+                : generating
                 ? 'Gerando...'
+                : !referencesReady
+                ? 'Gere as referências primeiro'
+                : failed
+                ? 'Tentar de novo'
                 : take.status == 'COMPLETED'
                 ? 'Refazer vídeo'
                 : 'Gerar vídeo',
@@ -328,7 +464,6 @@ extension _AdminProductionEditorTakesExtension
 
   Widget _buildTakePreviewPane(ProductionTakeItem take) {
     final references = _referencesForTake(take);
-    final cover = references.isNotEmpty ? references.first : null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 12, 10, 10),
       child: Column(
@@ -340,7 +475,9 @@ extension _AdminProductionEditorTakesExtension
                 child: _InlineTakePlayer(
                   key: _inlineTakePlayerKey,
                   take: take,
-                  cover: cover == null ? null : _referencePreview(cover),
+                  cover: references.isEmpty
+                      ? null
+                      : _takeReferenceCollage(references, openOnTap: true),
                   onMentalTake: () => _showMentalTake(_currentTakeIndex),
                   onAdjust: () => _showTakeAdvancedSheet(
                     _episode!,
@@ -357,6 +494,22 @@ extension _AdminProductionEditorTakesExtension
           const SizedBox(height: 10),
           _buildTakePlaybackBar(take),
         ],
+      ),
+    );
+  }
+
+  Widget _takeReferenceCollage(
+    List<ProductionReferenceItem> references, {
+    bool openOnTap = false,
+    bool compact = false,
+  }) {
+    return _TakeReferenceCollage(
+      references: references,
+      compact: compact,
+      itemBuilder: (reference) => _referencePreview(
+        reference,
+        openOnTap: openOnTap,
+        gallery: references,
       ),
     );
   }
@@ -442,7 +595,7 @@ extension _AdminProductionEditorTakesExtension
           _versionRailButton(
             icon: Icons.dashboard_outlined,
             label: 'Quadro',
-            onTap: () => setState(() => _showTechnicalEditor = true),
+            onTap: _openProjectBoard,
           ),
           if (take.status == 'COMPLETED') ...[
             const SizedBox(height: 12),
@@ -519,7 +672,10 @@ extension _AdminProductionEditorTakesExtension
                           fit: StackFit.expand,
                           children: [
                             if (references.isNotEmpty)
-                              _referencePreview(references.first)
+                              _takeReferenceCollage(
+                                references,
+                                compact: true,
+                              )
                             else
                               ColoredBox(
                                 color: AppColors.surfaceLight,
@@ -542,6 +698,18 @@ extension _AdminProductionEditorTakesExtension
                                     Icons.check_circle,
                                     size: 14,
                                     color: AppColors.success,
+                                  ),
+                                ),
+                              ),
+                            if (take.status == 'FAILED')
+                              const Align(
+                                alignment: Alignment.topRight,
+                                child: Padding(
+                                  padding: EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.error,
+                                    size: 14,
+                                    color: AppColors.error,
                                   ),
                                 ),
                               ),
@@ -711,7 +879,10 @@ extension _AdminProductionEditorTakesExtension
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: references.isNotEmpty
-                      ? _referencePreview(references.first)
+                      ? _takeReferenceCollage(
+                          references,
+                          openOnTap: true,
+                        )
                       : const ColoredBox(
                           color: Color(0xFF1C1E24),
                           child: Center(
@@ -751,7 +922,35 @@ extension _AdminProductionEditorTakesExtension
                       child: SizedBox(
                         width: 42,
                         height: 58,
-                        child: _referencePreview(references[index]),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _referencePreview(
+                              references[index],
+                              gallery: references,
+                            ),
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: ColoredBox(
+                                color: const Color(0x99000000),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 2,
+                                  ),
+                                  child: Text(
+                                    '@Image${index + 1}',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -766,11 +965,17 @@ extension _AdminProductionEditorTakesExtension
             child: const Text('Fechar'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _generateTakeWithDola(takeIndex);
-            },
-            child: const Text('Gerar vídeo'),
+            onPressed: _storyReferencesReadyForVideo
+                ? () {
+                    Navigator.pop(dialogContext);
+                    _generateTakeWithDola(takeIndex);
+                  }
+                : null,
+            child: Text(
+              _storyReferencesReadyForVideo
+                  ? 'Gerar vídeo'
+                  : 'Gere as referências primeiro',
+            ),
           ),
         ],
       ),
@@ -802,7 +1007,7 @@ extension _AdminProductionEditorTakesExtension
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Cena ${take.number} · ${take.title}',
+                  _takeSceneLabel(take),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -817,6 +1022,34 @@ extension _AdminProductionEditorTakesExtension
                 ),
                 const SizedBox(height: 14),
                 _buildTakeReferences(takeIndex, _referencesForTake(take)),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: !_storyReferencesReadyForVideo
+                        ? null
+                        : _isGeneratingEpisode
+                        ? () {
+                            Navigator.pop(sheetContext);
+                            unawaited(_stopDolaGeneration());
+                          }
+                        : () {
+                            Navigator.pop(sheetContext);
+                            _generateAllTakes();
+                          },
+                    icon: Icon(
+                      _isGeneratingEpisode
+                          ? Icons.stop_rounded
+                          : Icons.auto_awesome,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _isGeneratingEpisode
+                          ? 'Parar geração'
+                          : 'Gerar todos os takes',
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -833,7 +1066,13 @@ extension _AdminProductionEditorTakesExtension
   }) {
     final canInherit = takeIndex > 0;
     final previousTake = canInherit ? episode.takes[takeIndex - 1] : null;
-    final durations = {5, 8, 10, 12, 15, take.durationSeconds}.toList()..sort();
+    final preset = VideoGenerationPreset.fromBible(
+      _project?.seriesBible ?? const {},
+    );
+    final durations = preset.channel == 'dola' || preset.fixedShotDuration
+        ? {5, 10, take.durationSeconds}.toList()
+        : {5, 8, 10, 12, 15, 30, take.durationSeconds}.toList()
+      ..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1025,11 +1264,13 @@ extension _AdminProductionEditorTakesExtension
   }
 
   List<ProductionReferenceItem> _referencesForTake(ProductionTakeItem take) {
-    final references =
-        _project?.references ?? const <ProductionReferenceItem>[];
-    return references
-        .where((reference) => take.referenceIds.contains(reference.id))
-        .toList();
+    final project = _project;
+    if (project == null) return const [];
+    return _workspaceService.storyReferencesForTake(
+      project,
+      take,
+      episodeNumber: _episode?.number,
+    );
   }
 
   Widget _buildTakeReferences(
@@ -1094,7 +1335,10 @@ extension _AdminProductionEditorTakesExtension
                             child: SizedBox(
                               width: 178,
                               height: 102,
-                              child: _referencePreview(reference),
+                              child: _referencePreview(
+                                reference,
+                                gallery: references,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 7),
@@ -1132,7 +1376,15 @@ extension _AdminProductionEditorTakesExtension
     final episode = _episode;
     if (project == null || episode == null) return;
     final take = episode.takes[takeIndex];
-    final selected = take.referenceIds.toSet();
+    final required = _workspaceService.storyReferencesForTake(
+      project,
+      take,
+      episodeNumber: episode.number,
+    );
+    final selected = {
+      ...take.referenceIds,
+      ...required.map((item) => item.id),
+    };
     final result = await showDialog<List<String>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -1164,7 +1416,10 @@ extension _AdminProductionEditorTakesExtension
                           child: SizedBox(
                             width: 58,
                             height: 48,
-                            child: _referencePreview(reference),
+                            child: _referencePreview(
+                              reference,
+                              gallery: project.references,
+                            ),
                           ),
                         ),
                         title: Text(reference.label),
@@ -1187,7 +1442,14 @@ extension _AdminProductionEditorTakesExtension
       ),
     );
     if (result == null || !mounted) return;
-    _replaceTake(takeIndex, take.copyWith(referenceIds: result));
+    _replaceTake(
+      takeIndex,
+      _workspaceService.syncTakeStoryReferences(
+        project,
+        take.copyWith(referenceIds: result),
+        episodeNumber: episode.number,
+      ),
+    );
   }
 }
 
@@ -1449,12 +1711,14 @@ class _InlineTakePlayerState extends State<_InlineTakePlayer> {
                 ),
               ),
             if (!_fullscreen && !isPlaying && !_isLoading)
-              const DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0x22000000), Color(0x99000000)],
+              const IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x22000000), Color(0x99000000)],
+                    ),
                   ),
                 ),
               ),
@@ -1474,44 +1738,12 @@ class _InlineTakePlayerState extends State<_InlineTakePlayer> {
                 ),
               ),
             if (!_fullscreen && !isPlaying && !_isLoading)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _source == null
-                            ? 'Edite o prompt e clique em Gerar vídeo'
-                            : widget.take.title,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _TakePreviewGhostButton(
-                            icon: Icons.visibility_outlined,
-                            label: 'Ver take mental',
-                            onTap: widget.onMentalTake,
-                          ),
-                          _TakePreviewGhostButton(
-                            icon: Icons.tune,
-                            label: 'Ajustar cena',
-                            onTap: widget.onAdjust,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+              _TakePreviewIdleOverlay(
+                take: widget.take,
+                hasCover: widget.cover != null,
+                hasVideo: _source != null,
+                onMentalTake: widget.onMentalTake,
+                onAdjust: widget.onAdjust,
               ),
             Positioned(
               top: 8,
@@ -1568,6 +1800,204 @@ class _TakePreviewGhostButton extends StatelessWidget {
       ),
       icon: Icon(icon, size: 16),
       label: Text(label),
+    );
+  }
+}
+
+class _TakePreviewIdleOverlay extends StatelessWidget {
+  const _TakePreviewIdleOverlay({
+    required this.take,
+    required this.hasCover,
+    required this.hasVideo,
+    required this.onMentalTake,
+    required this.onAdjust,
+  });
+
+  final ProductionTakeItem take;
+  final bool hasCover;
+  final bool hasVideo;
+  final VoidCallback onMentalTake;
+  final VoidCallback onAdjust;
+
+  bool get _busy =>
+      take.status == 'GENERATING' || take.status == 'QUEUED';
+
+  bool get _failed => take.status == 'FAILED';
+
+  bool get _showStatusMessage => _failed || _busy || !hasCover;
+
+  String get _message {
+    if (_failed) {
+      final error = take.errorMessage.trim();
+      return error.isEmpty ? 'Erro na geração do Dola' : error;
+    }
+    if (_busy) return 'Gerando no Dola...';
+    if (!hasVideo) return 'Edite o prompt e clique em Gerar vídeo';
+    return take.title;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final buttons = Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _TakePreviewGhostButton(
+          icon: Icons.visibility_outlined,
+          label: 'Ver take mental',
+          onTap: onMentalTake,
+        ),
+        _TakePreviewGhostButton(
+          icon: Icons.tune,
+          label: 'Ajustar cena',
+          onTap: onAdjust,
+        ),
+      ],
+    );
+    if (!_showStatusMessage) {
+      return Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          child: buttons,
+        ),
+      );
+    }
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                height: 1.35,
+                color: _failed ? const Color(0xFFFECACA) : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            buttons,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TakeReferenceCollage extends StatelessWidget {
+  const _TakeReferenceCollage({
+    required this.references,
+    required this.itemBuilder,
+    this.compact = false,
+  });
+
+  final List<ProductionReferenceItem> references;
+  final Widget Function(ProductionReferenceItem reference) itemBuilder;
+  final bool compact;
+
+  static const _maxVisible = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    if (references.isEmpty) {
+      return const ColoredBox(color: Color(0xFF15171B));
+    }
+    if (references.length == 1) {
+      return itemBuilder(references.first);
+    }
+    final visible = references.take(_maxVisible).toList();
+    final hidden = references.length - visible.length;
+    return ColoredBox(
+      color: const Color(0xFF0C0D10),
+      child: Column(
+        children: [
+          for (var index = 0; index < visible.length; index++) ...[
+            if (index > 0)
+              const ColoredBox(
+                color: Color(0xFF111214),
+                child: SizedBox(height: 1),
+              ),
+            Expanded(
+              flex: _flexFor(visible[index]),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  itemBuilder(visible[index]),
+                  if (!compact)
+                    Positioned(
+                      left: 8,
+                      bottom: 8,
+                      right: 8,
+                      child: _TakeReferenceBadge(
+                        index: index + 1,
+                        label: visible[index].label,
+                        extra: index == visible.length - 1 && hidden > 0
+                            ? hidden
+                            : 0,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  int _flexFor(ProductionReferenceItem reference) {
+    final category = reference.category.toUpperCase();
+    if (category.contains('CHARACTER') || category.contains('OPPOSING')) {
+      return 3;
+    }
+    if (category.contains('PROP') || category.contains('OBJECT')) {
+      return 1;
+    }
+    return 2;
+  }
+}
+
+class _TakeReferenceBadge extends StatelessWidget {
+  const _TakeReferenceBadge({
+    required this.index,
+    required this.label,
+    this.extra = 0,
+  });
+
+  final int index;
+  final String label;
+  final int extra;
+
+  @override
+  Widget build(BuildContext context) {
+    final suffix = extra > 0 ? '  +$extra' : '';
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xCC0C0D10),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Text(
+            '@Image$index  $label$suffix',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              height: 1.2,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

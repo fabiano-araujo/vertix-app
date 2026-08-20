@@ -7,6 +7,7 @@ import '../../../../core/services/auth_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/fullscreen_image_viewer.dart';
 
 class AdminProductionPage extends StatefulWidget {
   const AdminProductionPage({super.key});
@@ -620,8 +621,27 @@ class _ProductionSeriesCardState extends State<_ProductionSeriesCard> {
     );
   }
 
+  bool _coverHasImage(ProductionCatalogItem series) {
+    return series.coverAssetPath?.trim().isNotEmpty == true ||
+        series.coverUrl?.trim().isNotEmpty == true;
+  }
+
+  Future<void> _openCoverFullscreen(ProductionCatalogItem series) {
+    return showFullscreenImageViewer(
+      context,
+      images: [
+        FullscreenImageSource(
+          title: series.title,
+          subtitle: 'Capa da série',
+          assetPath: series.coverAssetPath,
+          networkUrl: series.coverUrl,
+        ),
+      ],
+    );
+  }
+
   Widget _buildCover(ProductionCatalogItem series) {
-    return ClipRRect(
+    final cover = ClipRRect(
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: 90,
@@ -644,6 +664,15 @@ class _ProductionSeriesCardState extends State<_ProductionSeriesCard> {
               _CoverFallback(series: series),
           ],
         ),
+      ),
+    );
+    if (!_coverHasImage(series)) return cover;
+    return MouseRegion(
+      cursor: SystemMouseCursors.zoomIn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openCoverFullscreen(series),
+        child: cover,
       ),
     );
   }

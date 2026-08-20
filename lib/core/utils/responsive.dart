@@ -5,7 +5,7 @@ class Responsive {
   Responsive._();
 
   static const double desktopBreakpoint = 960;
-  static const double topNavHeight = 68;
+  static const double topNavHeight = 88;
 
   static bool isDesktop(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= desktopBreakpoint;
@@ -30,7 +30,10 @@ class Responsive {
     return Size(cardWidth, cardWidth * 1.5);
   }
 
-  static EdgeInsets pageInsets(BuildContext context, {bool overlayNav = false}) {
+  static EdgeInsets pageInsets(
+    BuildContext context, {
+    bool overlayNav = false,
+  }) {
     final horizontal = horizontalPadding(context);
     final top = isDesktop(context) && !overlayNav ? topNavHeight : 0.0;
     return EdgeInsets.fromLTRB(horizontal, top, horizontal, 0);

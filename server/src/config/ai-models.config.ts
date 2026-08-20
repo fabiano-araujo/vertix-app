@@ -47,12 +47,15 @@ export const MODEL_ALIASES = {
 const looksLikeOpenRouterModel = (value: string): boolean =>
   /^[a-z0-9._-]+\/[a-z0-9._:+-]+$/i.test(value.trim());
 
+const stripOpenRouterRouting = (value: string): string =>
+  value.replace(/:(nitro|floor|exacto)\b/gi, '').trim();
+
 export const resolveModel = (modelName?: string | null): string => {
   if (!modelName || !modelName.trim()) {
     return DEFAULT_OPENROUTER_MODEL;
   }
 
-  const trimmed = modelName.trim();
+  const trimmed = stripOpenRouterRouting(modelName.trim());
   if (trimmed in MODEL_ALIASES) {
     return MODEL_ALIASES[trimmed as keyof typeof MODEL_ALIASES];
   }

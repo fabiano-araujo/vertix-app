@@ -27,8 +27,13 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
 
     if (kDebugMode) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _loginAsDevelopmentAdmin();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        if (await _authService.isAuthenticated()) {
+          _finishLogin();
+          return;
+        }
+        _loginAsDevelopmentAdmin();
       });
     }
   }

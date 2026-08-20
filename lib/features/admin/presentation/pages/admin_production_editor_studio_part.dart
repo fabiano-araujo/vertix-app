@@ -592,8 +592,6 @@ extension _AdminProductionEditorStudioExtension
           'OPPOSING_FORCE_MASTER',
         },
         title: 'Personagens',
-        description:
-            'Fichas canônicas de aparência, personalidade, função dramática, arco e variações visuais.',
         emptyLabel: 'Nenhum personagem foi definido para esta obra.',
         addLabel: 'Adicionar personagem',
         initialCategory: 'CHARACTER_REFERENCE',
@@ -607,8 +605,6 @@ extension _AdminProductionEditorStudioExtension
           'WORLD_ENVIRONMENT_MASTER',
         },
         title: 'Ambientes',
-        description:
-            'Geografia, luz, elementos permanentes e regras de continuidade dos espaços da história.',
         emptyLabel: 'Nenhum ambiente foi definido para esta obra.',
         addLabel: 'Adicionar ambiente',
         initialCategory: 'LOCATION_MASTER',
@@ -622,8 +618,6 @@ extension _AdminProductionEditorStudioExtension
           'OBJECT_REFERENCE',
         },
         title: 'Adereços',
-        description:
-            'Objetos narrativos com função, estado, posse e pagamento planejados ao longo dos episódios.',
         emptyLabel: 'Nenhum adereço foi definido para esta obra.',
         addLabel: 'Adicionar adereço',
         initialCategory: 'OBJECT_REFERENCE',
@@ -674,6 +668,7 @@ extension _AdminProductionEditorStudioExtension
           children: [
             _buildStudioTopBar(),
             const Divider(height: 1),
+            ?_seriesCoverGenerationBanner(),
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {

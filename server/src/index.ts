@@ -9,7 +9,10 @@ const fastifyStatic = require('@fastify/static');
 
 dotenv.config();
 
-const app = fastify({ logger: false });
+const app = fastify({
+    logger: false,
+    bodyLimit: 50 * 1024 * 1024,
+});
 
 app.register(fastifyCors, {
     origin: '*', // Permitir todas as origens. Ajuste conforme necessário.

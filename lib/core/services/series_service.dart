@@ -1,6 +1,7 @@
 import '../network/api_client.dart';
 import '../constants/api_constants.dart';
 import '../models/series_model.dart';
+import '../models/episode_model.dart';
 
 /// Series Service for VERTIX
 class SeriesService {
@@ -50,6 +51,46 @@ class SeriesService {
         message: 'Erro ao carregar serie',
       );
     }
+  }
+
+  Future<({SeriesResponse series, List<EpisodeModel> episodes})>
+  getSeriesDetail(int id) async {
+    try {
+      final response = await _client.get('${ApiConstants.series}/$id');
+      final raw = response.data is Map<String, dynamic>
+          ? response.data as Map<String, dynamic>
+          : <String, dynamic>{};
+      return (
+        series: SeriesResponse.fromJson(raw),
+        episodes: parseEmbeddedEpisodes(raw),
+      );
+    } catch (e) {
+      return (
+        series: SeriesResponse(
+          success: false,
+          message: 'Erro ao carregar serie',
+        ),
+        episodes: const <EpisodeModel>[],
+      );
+    }
+  }
+
+  List<EpisodeModel> parseEmbeddedEpisodes(Map<String, dynamic> raw) {
+    final payload = raw['data'] is Map<String, dynamic>
+        ? raw['data'] as Map<String, dynamic>
+        : raw;
+    final seriesId = payload['id'] as int?;
+    final episodes = payload['episodes'];
+    if (episodes is! List) return const [];
+    return episodes
+        .whereType<Map>()
+        .map(
+          (item) => EpisodeModel.fromJson({
+            ...Map<String, dynamic>.from(item),
+            if (seriesId != null) 'seriesId': seriesId,
+          }),
+        )
+        .toList();
   }
 
   /// Get trending series

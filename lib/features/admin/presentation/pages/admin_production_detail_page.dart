@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/fullscreen_image_viewer.dart';
 
 class AdminProductionDetailPage extends StatefulWidget {
   final int seriesId;
@@ -335,12 +336,18 @@ class _AdminProductionDetailPageState extends State<AdminProductionDetailPage> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
       itemCount: production.referenceAssets.length,
       itemBuilder: (context, index) {
-        return _buildAssetCard(production.referenceAssets[index]);
+        return _buildAssetCard(
+          production.referenceAssets[index],
+          assets: production.referenceAssets,
+        );
       },
     );
   }
 
-  Widget _buildAssetCard(AdminReferenceAsset asset) {
+  Widget _buildAssetCard(
+    AdminReferenceAsset asset, {
+    List<AdminReferenceAsset> assets = const [],
+  }) {
     if (asset.isVideo && asset.publicUrl.isNotEmpty) {
       return Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -379,10 +386,16 @@ class _AdminProductionDetailPageState extends State<AdminProductionDetailPage> {
               height: 92,
               color: AppColors.surfaceLight,
               child: asset.isImage && asset.publicUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: asset.publicUrl,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _assetFallback(asset),
+                  ? MouseRegion(
+                      cursor: SystemMouseCursors.zoomIn,
+                      child: GestureDetector(
+                        onTap: () => _openAssetFullscreen(asset, assets),
+                        child: CachedNetworkImage(
+                          imageUrl: asset.publicUrl,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => _assetFallback(asset),
+                        ),
+                      ),
                     )
                   : _assetFallback(asset),
             ),
@@ -444,6 +457,36 @@ class _AdminProductionDetailPageState extends State<AdminProductionDetailPage> {
           _buildValueSection('Metadata', asset.metadata, compact: true),
         ],
       ],
+    );
+  }
+
+  Future<void> _openAssetFullscreen(
+    AdminReferenceAsset asset,
+    List<AdminReferenceAsset> assets,
+  ) {
+    final images = assets
+        .where((item) => item.isImage && item.publicUrl.trim().isNotEmpty)
+        .toList();
+    if (images.isEmpty) {
+      images.add(asset);
+    }
+    var index = images.indexWhere((item) => item.id == asset.id);
+    if (index < 0) {
+      images.insert(0, asset);
+      index = 0;
+    }
+    return showFullscreenImageViewer(
+      context,
+      images: images
+          .map(
+            (item) => FullscreenImageSource(
+              title: item.label,
+              subtitle: item.category,
+              networkUrl: item.publicUrl,
+            ),
+          )
+          .toList(),
+      initialIndex: index,
     );
   }
 

@@ -65,6 +65,7 @@ class MicroDramaThemeComposer {
     int maxShotDurationSeconds = 10,
     bool automaticReview = true,
     bool automaticPreparation = false,
+    String videoGenerationPresetId = '',
   }) {
     final seed =
         idea.hashCode ^ genre.hashCode ^ background.hashCode ^ trope.hashCode;
@@ -72,6 +73,10 @@ class MicroDramaThemeComposer {
     final protagonist = names.$1;
     final opposing = names.$2;
     final title = _title(idea: idea, trope: trope, language: language);
+    final presetId = videoGenerationPresetId.trim();
+    final resolvedMax = presetId.isNotEmpty
+        ? VideoGenerationPreset.byId(presetId).maxShotDurationSeconds
+        : maxShotDurationSeconds;
     return MicroDramaProjectConfig(
       title: title,
       logline: _logline(
@@ -106,9 +111,10 @@ class MicroDramaThemeComposer {
       episodeCount: episodeCount,
       firstEpisodeDurationSeconds: firstEpisodeDurationSeconds,
       episodeDurationSeconds: episodeDurationSeconds,
-      maxShotDurationSeconds: maxShotDurationSeconds,
+      maxShotDurationSeconds: resolvedMax,
       automaticReview: automaticReview,
       automaticPreparation: automaticPreparation,
+      videoGenerationPresetId: presetId,
     );
   }
 

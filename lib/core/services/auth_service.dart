@@ -33,6 +33,18 @@ class AuthService {
   /// Inicializa o servico carregando usuario do cache
   Future<void> init() async {
     await _loadCachedUser();
+    await ensureDevelopmentAdminSession();
+  }
+
+  /// Em builds de debug, entra automaticamente com a conta técnica
+  /// se ainda não houver sessão. Assim o app já abre autenticado,
+  /// sem precisar ir até a tela de login.
+  Future<void> ensureDevelopmentAdminSession() async {
+    if (!kDebugMode) return;
+    if (await isAuthenticated() && _currentUser != null) return;
+
+    Logger.auth('Login automático de desenvolvimento na inicialização');
+    await loginAsDevelopmentAdmin();
   }
 
   /// Carrega usuario do cache local

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/local_production_workspace_service.dart';
+import '../../features/home/presentation/pages/browse_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/for_you/presentation/pages/for_you_page.dart';
 import '../../features/my_vertix/presentation/pages/my_vertix_page.dart';
@@ -65,6 +66,15 @@ class AppRouter {
                 item: state.extra is ProductionCatalogItem
                     ? state.extra as ProductionCatalogItem
                     : null,
+              ),
+            ),
+          ),
+          GoRoute(
+            path: '/browse',
+            name: 'browse',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: BrowsePage(
+                genre: state.uri.queryParameters['genre'],
               ),
             ),
           ),

@@ -55,12 +55,18 @@ class _MainShellState extends State<MainShell> {
     return false;
   }
 
+  bool _isStudioEditor(String location) {
+    final path = Uri.tryParse(location)?.path ?? location;
+    return RegExp(r'^/admin-production/[^/]+/?$').hasMatch(path);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedIndex = _calculateSelectedIndex(context);
     final isDesktop = Responsive.isDesktop(context);
     final location = GoRouterState.of(context).uri.path;
     final overlayHero = location == '/';
+    final hideChrome = _isStudioEditor(location);
     final destinations = [
       const NavigationDestination(
         icon: Icon(Icons.home_outlined),
@@ -91,7 +97,7 @@ class _MainShellState extends State<MainShell> {
         child: Stack(
           children: [
             widget.child,
-            if (isDesktop)
+            if (isDesktop && !hideChrome)
               Positioned(
                 top: 0,
                 left: 0,
@@ -106,7 +112,7 @@ class _MainShellState extends State<MainShell> {
           ],
         ),
       ),
-      bottomNavigationBar: isDesktop
+      bottomNavigationBar: isDesktop || hideChrome
           ? null
           : Container(
               decoration: const BoxDecoration(

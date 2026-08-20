@@ -83,10 +83,19 @@ class SearchService {
       final response = await _client.get(ApiConstants.searchGenres);
 
       if (response.data['success'] == true) {
-        return (response.data['genres'] as List<dynamic>?)
-                ?.map((e) => e.toString())
-                .toList() ??
-            [];
+        final raw = response.data['data'] ?? response.data['genres'];
+        if (raw is! List) return [];
+        return raw
+            .map((item) {
+              if (item is String) return item;
+              if (item is Map) {
+                return (item['name'] ?? item['genre'] ?? item['id'] ?? '')
+                    .toString();
+              }
+              return item.toString();
+            })
+            .where((genre) => genre.trim().isNotEmpty)
+            .toList();
       }
       return [];
     } catch (e) {

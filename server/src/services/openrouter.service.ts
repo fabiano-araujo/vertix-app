@@ -25,6 +25,12 @@ export const AVAILABLE_MODELS = {
   MISTRAL_SMALL_3_1_24B: 'mistralai/mistral-small-3.1-24b-instruct',
 };
 
+// :nitro = sort throughput (mais rápido). Sem sufixo o OpenRouter usa o roteamento padrão (Balanced).
+const OPENROUTER_ROUTING_SUFFIX = /:(nitro|floor|exacto)\b/gi;
+
+const toDefaultProviderModel = (model: string): string =>
+  model.replace(OPENROUTER_ROUTING_SUFFIX, '').trim();
+
 // Tipos para as mensagens
 interface TextContent {
   type: 'text';
@@ -142,7 +148,7 @@ export const analyzeImage = async (
 
     // Versão simplificada da mensagem para compatibilidade
     const request = {
-      model,
+      model: toDefaultProviderModel(model),
       messages: [
         {
           role: 'user',
@@ -200,7 +206,12 @@ export const analyzeImage = async (
     }
   } catch (error: any) {
     // Verifica se o erro foi causado por um abort manual
-    if (error.name === 'AbortError' || error.message === 'canceled') {
+    if (
+      error.name === 'AbortError' ||
+      error.name === 'CanceledError' ||
+      error.code === 'ERR_CANCELED' ||
+      error.message === 'canceled'
+    ) {
       console.log('Requisição cancelada pelo usuário');
       throw new Error('Requisição cancelada pelo usuário');
     }
@@ -226,7 +237,7 @@ export const generateText = async (
     streaming?: boolean;
     timeout?: number;
     reasoning?: {
-      effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high';
+      effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
       max_tokens?: number;
       exclude?: boolean;
     };
@@ -251,9 +262,9 @@ export const generateText = async (
       messages = [{ role: 'user', content: prompt }];
     }
 
-    // Versão simplificada para compatibilidade
+    // Sem `provider.sort` / `:nitro`: o OpenRouter escolhe o provedor padrão (Balanced).
     const request: Record<string, unknown> = {
-      model: options.model || AVAILABLE_MODELS.DEEPSEEK_V4_FLASH,
+      model: toDefaultProviderModel(options.model || AVAILABLE_MODELS.DEEPSEEK_V4_FLASH),
       messages: messages,
       temperature: options.temperature,
       max_tokens: options.max_tokens,
@@ -312,7 +323,12 @@ export const generateText = async (
     }
   } catch (error: any) {
     // Verifica se o erro foi causado por um abort manual
-    if (error.name === 'AbortError' || error.message === 'canceled') {
+    if (
+      error.name === 'AbortError' ||
+      error.name === 'CanceledError' ||
+      error.code === 'ERR_CANCELED' ||
+      error.message === 'canceled'
+    ) {
       console.log('Requisição cancelada pelo usuário');
       throw new Error('Requisição cancelada pelo usuário');
     }

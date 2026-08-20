@@ -54,10 +54,14 @@ node_modules/
 # Claude
 .claude/
 
+# Cursor (regras, skills e config local — não versionar)
+.cursor/
+
 # Local development tools and browser/test artifacts
 /.codex_tools/
 /.playwright-mcp/
 /.playwright-cli/
+/tools/playwright-runner/test-results/
 /tmp/
 /*.png
 
@@ -71,6 +75,7 @@ node_modules/
 /series_bibles/
 /seedance_notion_prompts/
 /server/public/openrouter-video-runs/
+/server/public/dola-runs/
 /.codex-runtime/
 /*.mp4
 /dorama_*.md

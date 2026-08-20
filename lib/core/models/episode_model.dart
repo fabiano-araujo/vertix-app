@@ -20,6 +20,12 @@ class EpisodeModel {
   final SeriesModel? series;
   final bool isLiked;
   final double watchProgress;
+  final bool isLocked;
+  final bool isUnlocked;
+  final int unlockCost;
+  final int? freeEpisodeCount;
+  final int? paywallEpisode;
+  final bool hasSubscriptionAccess;
 
   EpisodeModel({
     required this.id,
@@ -40,34 +46,63 @@ class EpisodeModel {
     this.series,
     this.isLiked = false,
     this.watchProgress = 0,
+    this.isLocked = false,
+    this.isUnlocked = true,
+    this.unlockCost = 1,
+    this.freeEpisodeCount,
+    this.paywallEpisode,
+    this.hasSubscriptionAccess = false,
   });
 
   factory EpisodeModel.fromJson(Map<String, dynamic> json) {
+    final nested = json['episode'];
+    final source = nested is Map<String, dynamic>
+        ? Map<String, dynamic>.from(nested)
+        : json;
+    final seriesRaw = source['series'] ?? json['series'];
+    final series = seriesRaw is Map<String, dynamic>
+        ? SeriesModel.fromJson(seriesRaw)
+        : null;
+    final seriesId =
+        source['seriesId'] as int? ??
+        json['seriesId'] as int? ??
+        series?.id ??
+        0;
+    final progress =
+        json['progress'] ?? json['watchProgress'] ?? source['watchProgress'];
+
     return EpisodeModel(
-      id: json['id'] as int,
-      seriesId: json['seriesId'] as int,
-      episodeNumber: json['episodeNumber'] as int,
-      title: json['title'] as String,
-      description: json['description'] as String?,
-      videoUrl: json['videoUrl'] as String,
-      thumbnailUrl: json['thumbnailUrl'] as String?,
-      duration: json['duration'] as int,
-      views: json['views'] as int? ?? 0,
-      likesCount: json['likesCount'] as int? ?? 0,
-      commentsCount: json['commentsCount'] as int? ?? 0,
-      sharesCount: json['sharesCount'] as int? ?? 0,
-      completionRate: (json['completionRate'] as num?)?.toDouble() ?? 0,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String)
+      id: source['id'] as int,
+      seriesId: seriesId,
+      episodeNumber: source['episodeNumber'] as int? ?? 0,
+      title: source['title'] as String? ?? '',
+      description: source['description'] as String?,
+      videoUrl: source['videoUrl'] as String? ?? '',
+      thumbnailUrl: source['thumbnailUrl'] as String? ?? series?.coverUrl,
+      duration: source['duration'] as int? ?? 0,
+      views: source['views'] as int? ?? 0,
+      likesCount: source['likesCount'] as int? ?? 0,
+      commentsCount: source['commentsCount'] as int? ?? 0,
+      sharesCount: source['sharesCount'] as int? ?? 0,
+      completionRate: (source['completionRate'] as num?)?.toDouble() ?? 0,
+      createdAt: source['createdAt'] != null
+          ? DateTime.parse(source['createdAt'] as String)
           : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'] as String)
+      updatedAt: source['updatedAt'] != null
+          ? DateTime.parse(source['updatedAt'] as String)
           : null,
-      series: json['series'] != null
-          ? SeriesModel.fromJson(json['series'] as Map<String, dynamic>)
-          : null,
-      isLiked: json['isLiked'] as bool? ?? false,
-      watchProgress: (json['watchProgress'] as num?)?.toDouble() ?? 0,
+      series: series,
+      isLiked: source['isLiked'] as bool? ?? json['isLiked'] as bool? ?? false,
+      watchProgress: (progress as num?)?.toDouble() ?? 0,
+      isLocked: source['isLocked'] as bool? ?? json['isLocked'] as bool? ?? false,
+      isUnlocked: source['isUnlocked'] as bool? ?? json['isUnlocked'] as bool? ?? true,
+      unlockCost: source['unlockCost'] as int? ?? json['unlockCost'] as int? ?? 1,
+      freeEpisodeCount: source['freeEpisodeCount'] as int? ?? json['freeEpisodeCount'] as int?,
+      paywallEpisode: source['paywallEpisode'] as int? ?? json['paywallEpisode'] as int?,
+      hasSubscriptionAccess:
+          source['hasSubscriptionAccess'] as bool? ??
+          json['hasSubscriptionAccess'] as bool? ??
+          false,
     );
   }
 
@@ -105,6 +140,12 @@ class EpisodeModel {
     SeriesModel? series,
     bool? isLiked,
     double? watchProgress,
+    bool? isLocked,
+    bool? isUnlocked,
+    int? unlockCost,
+    int? freeEpisodeCount,
+    int? paywallEpisode,
+    bool? hasSubscriptionAccess,
   }) {
     return EpisodeModel(
       id: id ?? this.id,
@@ -123,6 +164,13 @@ class EpisodeModel {
       series: series ?? this.series,
       isLiked: isLiked ?? this.isLiked,
       watchProgress: watchProgress ?? this.watchProgress,
+      isLocked: isLocked ?? this.isLocked,
+      isUnlocked: isUnlocked ?? this.isUnlocked,
+      unlockCost: unlockCost ?? this.unlockCost,
+      freeEpisodeCount: freeEpisodeCount ?? this.freeEpisodeCount,
+      paywallEpisode: paywallEpisode ?? this.paywallEpisode,
+      hasSubscriptionAccess:
+          hasSubscriptionAccess ?? this.hasSubscriptionAccess,
     );
   }
 
@@ -139,6 +187,8 @@ class EpisodeModel {
   String get formattedLikes => _formatNumber(likesCount);
   String get formattedComments => _formatNumber(commentsCount);
   String get formattedShares => _formatNumber(sharesCount);
+
+  bool get isInProgress => watchProgress > 0.05 && watchProgress < 0.9;
 
   String _formatNumber(int number) {
     if (number >= 1000000) {

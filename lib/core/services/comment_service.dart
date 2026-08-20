@@ -62,8 +62,8 @@ class CommentService {
   Future<CommentResponse> createComment(int episodeId, String content) async {
     try {
       final response = await _client.post(
-        '${ApiConstants.episodes}/$episodeId/comments',
-        data: {'content': content},
+        ApiConstants.comments,
+        data: {'episodeId': episodeId, 'content': content},
       );
       return CommentResponse.fromJson(response.data);
     } catch (e) {

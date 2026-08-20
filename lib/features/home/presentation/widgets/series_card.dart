@@ -53,7 +53,9 @@ class _SeriesCardState extends State<SeriesCard> {
             child: Container(
               width: width,
               height: widget.height,
-              margin: const EdgeInsets.symmetric(horizontal: 6),
+              margin: widget.width == double.infinity
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.symmetric(horizontal: 6),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(radius),
                 boxShadow: [

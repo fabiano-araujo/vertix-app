@@ -19,6 +19,9 @@ class SeriesModel {
   final DateTime? updatedAt;
   final UserModel? createdBy;
   final int? episodeCount;
+  final int? freeEpisodeCount;
+  final int? episodeUnlockCost;
+  final int? paywallEpisode;
 
   SeriesModel({
     required this.id,
@@ -38,16 +41,21 @@ class SeriesModel {
     this.updatedAt,
     this.createdBy,
     this.episodeCount,
+    this.freeEpisodeCount,
+    this.episodeUnlockCost,
+    this.paywallEpisode,
   });
 
   factory SeriesModel.fromJson(Map<String, dynamic> json) {
     return SeriesModel(
       id: json['id'] as int,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      coverUrl: json['coverUrl'] as String,
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      coverUrl: json['coverUrl'] as String? ??
+          json['thumbnailUrl'] as String? ??
+          '',
       thumbnailUrl: json['thumbnailUrl'] as String?,
-      genre: json['genre'] as String,
+      genre: json['genre'] as String? ?? '',
       tags: json['tags'] as String?,
       totalEpisodes: json['totalEpisodes'] as int? ?? 0,
       createdById: json['createdById'] as int?,
@@ -66,7 +74,10 @@ class SeriesModel {
           : null,
       episodeCount: json['_count'] != null
           ? (json['_count'] as Map<String, dynamic>)['episodes'] as int?
-          : null,
+          : (json['episodes'] is List ? (json['episodes'] as List).length : null),
+      freeEpisodeCount: json['freeEpisodeCount'] as int?,
+      episodeUnlockCost: json['episodeUnlockCost'] as int?,
+      paywallEpisode: json['paywallEpisode'] as int?,
     );
   }
 
