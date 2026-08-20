@@ -11,6 +11,7 @@ import 'package:video_player/video_player.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/services/admin_service.dart';
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/services/character_sheet.dart';
 import '../../../../core/services/dola_generation_service.dart';
 import '../../../../core/services/local_production_workspace_service.dart';
 import '../../../../core/services/micro_drama_theme_composer.dart';
@@ -22,6 +23,7 @@ part 'admin_production_editor_studio_part.dart';
 part 'admin_production_editor_content_part.dart';
 part 'admin_production_editor_takes_part.dart';
 part 'admin_production_editor_references_part.dart';
+part 'admin_production_editor_characters_part.dart';
 part 'admin_production_editor_timeline_part.dart';
 part 'admin_production_editor_audio_part.dart';
 part 'admin_production_editor_shared_part.dart';
@@ -71,6 +73,8 @@ class _StudioChatAction {
   final String id;
   final String label;
 }
+
+enum _ReferenceGenerationMode { sheets, images, both }
 
 class _StudioChatTurn {
   const _StudioChatTurn({
@@ -144,7 +148,10 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   bool _referenceImageRetryAvailable = false;
   Set<String> _referenceImageIdsInProgress = <String>{};
   final Set<String> _appliedReferenceImageIds = <String>{};
+  String? _activeCoverImageStatus;
   bool _isAutomaticPreparationRunning = false;
+  String? _selectedCharacterId;
+  String? _selectedLookId;
   bool _automaticPreparationScheduled = false;
   int _automaticPreparationCompleted = 0;
   int _automaticPreparationTotal = 0;
@@ -181,6 +188,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   String? _error;
   bool _generationCancelRequested = false;
   Completer<void>? _generationCancelGate;
+  final Map<String, String> _activeDolaJobIds = {};
+  final Map<String, String> _activeDolaMessages = {};
+  final Set<String> _dolaStopRequestedTakeIds = {};
+  bool _episodeGenerationCancelRequested = false;
+  DolaProfileInventory? _dolaProfiles;
 
   bool get _isAdmin => _authService.currentUser?.isAdmin == true;
   bool get _isAiBusy => _activeAiAction != null;
@@ -295,13 +307,17 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _isLoading = false;
       });
       _restoreStudioSession(project);
-      final cleaned = _withoutGeneratingPlaceholders(_project ?? project);
-      if (!identical(cleaned, _project)) {
-        setState(() => _project = cleaned);
-        unawaited(_persistProject(cleaned));
+      final cleaned = _withoutStaleDolaTakes(
+        _withoutGeneratingPlaceholders(_project ?? project),
+      );
+      final synced = _workspaceService.syncProjectTakeStoryReferences(cleaned);
+      if (!identical(synced, _project)) {
+        setState(() => _project = synced);
+        unawaited(_persistProject(synced));
       }
       _scheduleAutomaticPreparationIfRequested(_project ?? cleaned);
       unawaited(_recoverInterruptedOutline());
+      unawaited(_refreshDolaProfiles());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -713,6 +729,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
   Future<void> _generateReferenceImagesWithCodex({
     ProductionReferenceItem? reference,
     bool regenerateExisting = false,
+    String family = 'all',
   }) async {
     final initialProject = _project;
     if (initialProject == null || _isReferenceImageBusy) return;
@@ -720,6 +737,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         ? _workspaceService.automaticReferenceTargets(
             initialProject,
             regenerateExisting: regenerateExisting,
+            family: family,
           )
         : <ProductionReferenceItem>[reference];
     if (targets.isEmpty) {
@@ -748,7 +766,10 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
                 'category': item.category,
                 'description': item.description,
                 'canonical': item.canonical,
-                'metadata': item.metadata,
+                'metadata': _workspaceService.referenceImageJobMetadata(
+                  project,
+                  item,
+                ),
               },
             )
             .toList(),
@@ -773,9 +794,17 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _referenceImageRetryAvailable = false;
         _referenceImageIdsInProgress = <String>{};
         _appliedReferenceImageIds.clear();
+        _activeCoverImageStatus = targets.any(
+          (item) => item.category.toUpperCase() == 'APP_COVER',
+        )
+            ? 'PENDING'
+            : null;
       });
 
       unawaited(_watchReferenceImageJob(started.job.id));
+      if (started.job.outputData != null) {
+        _applyReferenceImageJobProgress(started.job);
+      }
       final opened = await _openActiveReferenceImageBridge();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -798,6 +827,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _referenceImageBridgeNeedsRetry = false;
         _referenceImageRetryAvailable = true;
         _referenceImageIdsInProgress = <String>{};
+        _activeCoverImageStatus = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Não foi possível abrir o Codex: $error')),
@@ -846,6 +876,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           _referenceImageBridgeNeedsRetry = false;
           _referenceImageRetryAvailable = true;
           _referenceImageIdsInProgress = <String>{};
+          _activeCoverImageStatus = null;
         });
       }
       await _generateReferenceImagesWithCodex();
@@ -950,6 +981,11 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           _referenceImageBridgeNeedsRetry = false;
           if (!completedSuccessfully) _referenceImageRetryAvailable = true;
           _referenceImageIdsInProgress = <String>{};
+          if (_activeCoverImageStatus == 'PENDING' ||
+              _activeCoverImageStatus == 'GENERATING' ||
+              _activeCoverImageStatus == 'UPLOADING') {
+            _activeCoverImageStatus = completedSuccessfully ? 'COMPLETED' : 'FAILED';
+          }
         });
       }
     }
@@ -966,6 +1002,32 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     var changed = false;
     for (final item in items) {
       final id = item['id']?.toString() ?? '';
+      final compiledPrompt = item['prompt']?.toString() ?? '';
+      if (id.isNotEmpty && compiledPrompt.isNotEmpty && updated != null) {
+        final index = updated.references.indexWhere((item) => item.id == id);
+        if (index >= 0) {
+          final existing = updated.references[index];
+          final already = existing.metadata['compiledPrompt']?.toString();
+          if (already != compiledPrompt) {
+            final references = updated.references.toList();
+            references[index] = ProductionReferenceItem(
+              id: existing.id,
+              label: existing.label,
+              category: existing.category,
+              assetPath: existing.assetPath,
+              publicUrl: existing.publicUrl,
+              description: existing.description,
+              canonical: existing.canonical,
+              metadata: {
+                ...existing.metadata,
+                'compiledPrompt': compiledPrompt,
+              },
+            );
+            updated = updated.copyWith(references: references);
+            changed = true;
+          }
+        }
+      }
       final rawReference = item['reference'];
       if (item['status'] == 'COMPLETED' &&
           id.isNotEmpty &&
@@ -986,11 +1048,26 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         .map((item) => item['id']?.toString() ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
+    Map<String, dynamic>? coverItem;
+    for (final item in items) {
+      if (item['category']?.toString().toUpperCase() == 'APP_COVER') {
+        coverItem = item;
+        break;
+      }
+    }
+    final coverStatus = coverItem?['status']?.toString().toUpperCase();
+    final generatingCover =
+        coverStatus == 'GENERATING' || coverStatus == 'UPLOADING';
+    final jobMessage = output?['message']?.toString();
     setState(() {
       if (changed && updated != null) _project = updated;
       _activeReferenceImageProgress = job.progress;
-      _activeReferenceImageMessage =
-          output?['message']?.toString() ?? 'Gerando imagens no Codex...';
+      _activeCoverImageStatus = coverStatus ?? _activeCoverImageStatus;
+      _activeReferenceImageMessage = generatingCover
+          ? (coverStatus == 'UPLOADING'
+                ? 'Enviando a arte da capa da série...'
+                : 'Gerando a arte da capa da série...')
+          : (jobMessage ?? 'Gerando imagens no Codex...');
       final bridge = output?['bridge'];
       final bridgeStatus = bridge is Map
           ? bridge['status']?.toString().toUpperCase()
@@ -1172,6 +1249,49 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     }
     if (!changed) return project;
     return project.copyWith(episodes: episodes);
+  }
+
+  ProductionProject _withoutStaleDolaTakes(ProductionProject project) {
+    var changed = false;
+    final episodes = <ProductionEpisodeItem>[];
+    for (final episode in project.episodes) {
+      final takes = [
+        for (final take in episode.takes)
+          _idleTakeAfterStoppedGeneration(take, force: true),
+      ];
+      if (!_sameTakeStatuses(episode.takes, takes)) changed = true;
+      episodes.add(episode.copyWith(takes: takes));
+    }
+    if (!changed) return project;
+    return project.copyWith(episodes: episodes);
+  }
+
+  bool _sameTakeStatuses(
+    List<ProductionTakeItem> current,
+    List<ProductionTakeItem> next,
+  ) {
+    if (current.length != next.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      if (current[index].status != next[index].status ||
+          current[index].progress != next[index].progress) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  ProductionTakeItem _idleTakeAfterStoppedGeneration(
+    ProductionTakeItem take, {
+    bool force = false,
+  }) {
+    if (take.status != 'GENERATING' && take.status != 'QUEUED') return take;
+    if (!force && _activeDolaJobIds.containsKey(take.id)) return take;
+    final completed = (take.outputUrl ?? '').trim().isNotEmpty;
+    return take.copyWith(
+      status: completed ? 'COMPLETED' : 'READY',
+      progress: completed ? 1 : 0,
+      errorMessage: '',
+    );
   }
 
   Future<void> _persistInterruptedOutline() async {
@@ -1441,24 +1561,147 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     }
   }
 
-  Future<void> _generateStorySheetsWithCodex({String family = 'all'}) async {
+  Future<bool> _confirmStudioGeneration({
+    required String title,
+    required String message,
+    String confirmLabel = 'Gerar',
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  Future<_ReferenceGenerationMode?> _chooseReferenceGenerationMode({
+    required String title,
+    required String scopeHint,
+  }) {
+    return showDialog<_ReferenceGenerationMode>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                scopeHint,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'O que você quer gerar agora?',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _ReferenceGenerationMode.both,
+                ),
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Fichas e imagens'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _ReferenceGenerationMode.sheets,
+                ),
+                icon: const Icon(Icons.description_outlined, size: 18),
+                label: const Text('Apenas as fichas'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(
+                  dialogContext,
+                  _ReferenceGenerationMode.images,
+                ),
+                icon: const Icon(Icons.image_outlined, size: 18),
+                label: const Text('Apenas as imagens'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _generateStorySheetsWithCodex({
+    String family = 'all',
+    bool regenerate = false,
+    ProductionReferenceItem? reference,
+    bool skipConfirm = false,
+    bool notifyResult = true,
+  }) async {
     final project = _project;
-    if (project == null || _isAnyGenerationBusy) return;
-    final prompt = switch (family) {
-      'characters' =>
-        'Gere as fichas de personagens desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
-      'locations' =>
-        'Gere as fichas de ambientes desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
-      'props' =>
-        'Gere as fichas de adereços desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
-      _ =>
-        'Gere as fichas de personagens, ambientes e adereços a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+    if (project == null || _isAnyGenerationBusy) return false;
+    final familyLabel = switch (family) {
+      'characters' => 'personagens',
+      'locations' => 'ambientes',
+      'props' => 'adereços',
+      _ => 'personagens, ambientes e adereços',
     };
+    final scopedLabel = reference?.label.trim() ?? '';
+    if (regenerate && !skipConfirm) {
+      final confirmed = await _confirmStudioGeneration(
+        title: scopedLabel.isEmpty
+            ? 'Gerar fichas de $familyLabel novamente'
+            : 'Gerar ficha de $scopedLabel novamente',
+        message: scopedLabel.isEmpty
+            ? 'A IA vai reescrever as fichas de $familyLabel a partir do esboço já existente. Título, contrato e episódios permanecem travados.'
+            : 'A IA vai reescrever só os dados de $scopedLabel. As outras fichas, o título e os episódios permanecem iguais.',
+        confirmLabel: scopedLabel.isEmpty ? 'Gerar fichas' : 'Gerar ficha',
+      );
+      if (!confirmed || !mounted) return false;
+    }
+    final prompt = scopedLabel.isNotEmpty
+        ? 'Gere novamente somente a ficha de $scopedLabel. SCOPE: $family. REFERENCE_ID: ${reference!.id}. Não reescreva as outras fichas. Não invente título, contrato nem episódios novos.'
+        : switch (family) {
+            'characters' => regenerate
+                ? 'Gere novamente as fichas de personagens desta obra a partir do esboço já existente. Reescreva as fichas atuais desta família. Não invente título, contrato nem episódios novos.'
+                : 'Gere as fichas de personagens desta obra a partir do esboço já existente. Escreva a ficha de aparência no formato Altura / Proporção / Etnia / Compleição / Cabelo / Traços faciais / Roupa. Personalidade em tags distintivas. Visuais extras só se o roteiro ou o esboço exigirem outra roupa; coadjuvantes em geral só aparência padrão. Não invente título, contrato nem episódios novos.',
+            'locations' => regenerate
+                ? 'Gere novamente as fichas de ambientes desta obra a partir do esboço já existente. Reescreva as fichas atuais desta família. Não invente título, contrato nem episódios novos.'
+                : 'Gere as fichas de ambientes desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+            'props' => regenerate
+                ? 'Gere novamente as fichas de adereços desta obra a partir do esboço já existente. Reescreva as fichas atuais desta família. Não invente título, contrato nem episódios novos.'
+                : 'Gere as fichas de adereços desta obra a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+            _ => regenerate
+                ? 'Gere novamente as fichas de personagens, ambientes e adereços a partir do esboço já existente. Reescreva as fichas atuais. Não invente título, contrato nem episódios novos.'
+                : 'Gere as fichas de personagens, ambientes e adereços a partir do esboço já existente. Não invente título, contrato nem episódios novos.',
+          };
     try {
       final output = await _runAiWorkflow(
         action: 'GENERATE_STORY_SHEETS',
         instruction: [
           'SCOPE: $family',
+          if (reference != null) 'REFERENCE_ID: ${reference.id}',
           prompt,
           'Título travado: ${project.title}',
           'Logline: ${project.seriesBible['logline'] ?? project.description}',
@@ -1469,20 +1712,12 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         _project ?? project,
         output,
         family: family,
+        referenceId: reference?.id,
       );
-      if (!mounted) return;
-      setState(() {
-        _project = updated;
-        if (family == 'characters' || family == 'all') {
-          _studioTabIndex = 2;
-        } else if (family == 'locations') {
-          _studioTabIndex = 3;
-        } else if (family == 'props') {
-          _studioTabIndex = 4;
-        }
-      });
+      if (!mounted) return false;
+      setState(() => _project = updated);
       await _persistProject(updated);
-      if (!mounted) return;
+      if (!mounted) return false;
       final count = updated.references.where((item) {
         final category = item.category.toUpperCase();
         return switch (family) {
@@ -1495,24 +1730,76 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           _ => true,
         };
       }).length;
+      if (notifyResult) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              scopedLabel.isNotEmpty
+                  ? 'Ficha de $scopedLabel atualizada.'
+                  : count == 0
+                  ? 'A IA não retornou fichas para esta aba.'
+                  : family == 'characters'
+                  ? '$count fichas de personagens prontas para revisão.'
+                  : family == 'locations'
+                  ? '$count fichas de ambientes prontas para revisão.'
+                  : family == 'props'
+                  ? '$count fichas de adereços prontas para revisão.'
+                  : '$count fichas prontas para revisão.',
+            ),
+          ),
+        );
+      }
+      return count > 0 || scopedLabel.isNotEmpty;
+    } catch (error) {
+      _notifyGenerationFailure(error, 'Não foi possível gerar as fichas: $error');
+      return false;
+    }
+  }
+
+  Future<void> _generateSheetsThenImagesWithCodex({
+    required String family,
+  }) async {
+    final project = _project;
+    if (project == null || _isAnyGenerationBusy || _isReferenceImageBusy) {
+      return;
+    }
+    final isAll = family == 'all';
+    final familyLabel = switch (family) {
+      'characters' => 'personagens',
+      'locations' => 'ambientes',
+      'props' => 'adereços',
+      _ => 'personagens, ambientes e adereços',
+    };
+    final mode = await _chooseReferenceGenerationMode(
+      title: isAll ? 'Gerar obra inteira' : 'Gerar todos os $familyLabel',
+      scopeHint: isAll
+          ? 'A ação vale para personagens, ambientes, adereços e, se houver imagens, também a capa da série. Título, contrato e episódios permanecem travados.'
+          : 'A ação vale só para $familyLabel desta aba. As outras famílias não entram.',
+    );
+    if (mode == null || !mounted) return;
+    if (mode != _ReferenceGenerationMode.images) {
+      final sheetsOk = await _generateStorySheetsWithCodex(
+        family: family,
+        regenerate: true,
+        skipConfirm: true,
+        notifyResult: mode == _ReferenceGenerationMode.sheets,
+      );
+      if (!sheetsOk || !mounted) return;
+      if (mode == _ReferenceGenerationMode.sheets) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            count == 0
-                ? 'A IA não retornou fichas para esta aba.'
-                : family == 'characters'
-                ? '$count fichas de personagens prontas para revisão.'
-                : family == 'locations'
-                ? '$count fichas de ambientes prontas para revisão.'
-                : family == 'props'
-                ? '$count fichas de adereços prontas para revisão.'
-                : '$count fichas prontas para revisão.',
+            isAll
+                ? 'Fichas da obra prontas. Abrindo o Codex para gerar as imagens, inclusive a capa da série.'
+                : 'Fichas de $familyLabel prontas. Abrindo o Codex para gerar as imagens desta aba.',
           ),
         ),
       );
-    } catch (error) {
-      _notifyGenerationFailure(error, 'Não foi possível gerar as fichas: $error');
     }
+    await _generateReferenceImagesWithCodex(
+      family: family,
+      regenerateExisting: true,
+    );
   }
 
   Future<void> _showAutomaticPreparationDialog() async {
@@ -2311,7 +2598,15 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       return;
     }
 
+    take = _workspaceService.syncTakeStoryReferences(
+      _project!,
+      take,
+      episodeNumber: episode.number,
+    );
+    _replaceTake(takeIndex, take);
+
     final references = _referencesForTake(take)
+        .where(LocalProductionWorkspaceService.referenceHasGeneratedImage)
         .map(
           (reference) => <String, dynamic>{
             'id': reference.id,
@@ -2324,8 +2619,28 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
         )
         .toList();
 
-    _replaceTake(takeIndex, take.copyWith(status: 'QUEUED', progress: 0.04));
+    final previousStatus = take.status;
+    final takeId = take.id;
+    _dolaStopRequestedTakeIds.remove(takeId);
+    _activeDolaMessages[takeId] = 'Abrindo o Playwright local...';
+    _replaceTake(
+      takeIndex,
+      take.copyWith(status: 'QUEUED', progress: 0.04, errorMessage: ''),
+    );
     try {
+      if (_wasDolaStopRequested(takeId)) {
+        throw const DolaCancelledException();
+      }
+      final inventory = await _ensureLocalDolaProfiles(takeId);
+      if (!mounted) return;
+      if (inventory.available.isEmpty) {
+        throw const DolaGenerationException(
+          'Nenhum perfil Playwright disponível hoje no dola-session.json.',
+        );
+      }
+      _activeDolaMessages[takeId] =
+          'Abrindo Chrome no perfil ${inventory.available.first} · ${inventory.availableCount} livres';
+      if (mounted) setState(() {});
       final preset = VideoGenerationPreset.fromBible(
         _project?.seriesBible ?? const {},
       );
@@ -2333,31 +2648,47 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           ? (take.durationSeconds <= 5 ? 5 : 10)
           : (take.durationSeconds >= 10 ? 10 : 5);
       final job = await _dolaGenerationService.startJob(
-        prompt: prompt,
+        prompt: take.visualPrompt.trim(),
         takeId: take.id,
         takeTitle: take.title,
         durationSeconds: dolaDuration,
         model: preset.dolaModel ?? 'Dreamina Seedance 2.5',
         references: references,
+        profiles: inventory.available,
       );
       if (!mounted) return;
+      _activeDolaJobIds[takeId] = job.id;
+      _activeDolaMessages[takeId] = job.message;
+      if (_wasDolaStopRequested(takeId)) {
+        await _dolaGenerationService.cancelJob(job.id);
+        throw const DolaCancelledException();
+      }
       _replaceTake(
         takeIndex,
         take.copyWith(
           status: 'GENERATING',
           progress: job.progress <= 0 ? 0.12 : job.progress,
+          errorMessage: '',
         ),
       );
       final completed = await _dolaGenerationService.waitForJob(
         job.id,
+        isCancelled: () => _wasDolaStopRequested(takeId),
         onProgress: (current) {
-          if (!mounted) return;
+          if (!mounted || _wasDolaStopRequested(takeId)) return;
+          if (current.isFailed || current.isCancelled) return;
+          final liveMessage = current.message.trim();
+          if (liveMessage.isNotEmpty &&
+              !liveMessage.trimLeft().startsWith('{') &&
+              !liveMessage.contains('"event"')) {
+            _activeDolaMessages[takeId] = liveMessage;
+          }
           final latest = _episode?.takes[takeIndex];
           if (latest == null) return;
           _replaceTake(
             takeIndex,
             latest.copyWith(
-              status: current.isCompleted ? 'GENERATING' : 'GENERATING',
+              status: 'GENERATING',
               progress: current.progress <= 0 ? 0.12 : current.progress,
             ),
           );
@@ -2367,7 +2698,9 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
       take = _episode!.takes[takeIndex];
       final videoUrl = completed.videoUrl?.trim() ?? '';
       if (videoUrl.isEmpty) {
-        throw StateError('O Dola terminou sem devolver o MP4.');
+        throw const DolaGenerationException(
+          'O Dola terminou sem devolver o MP4.',
+        );
       }
       final endpoint =
           _takeStartSeconds(_episode!, takeIndex) + take.durationSeconds;
@@ -2381,6 +2714,7 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           progress: 1,
           outputUrl: videoUrl,
           lastFrameLabel: 'Dola $profileLabel • ${_timecode(endpoint)}',
+          errorMessage: '',
         ),
       );
       await _saveProject(notify: false);
@@ -2391,18 +2725,168 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
           ),
         );
       }
-    } catch (error) {
+    } on DolaCancelledException {
       if (!mounted) return;
       take = _episode!.takes[takeIndex];
-      _replaceTake(takeIndex, take.copyWith(status: 'READY', progress: 0));
+      _replaceTake(
+        takeIndex,
+        take.copyWith(
+          status: previousStatus == 'COMPLETED' ? 'COMPLETED' : 'READY',
+          progress: previousStatus == 'COMPLETED' ? 1 : 0,
+          errorMessage: '',
+        ),
+      );
+      if (!silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Geração Dola interrompida.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      if (_isDolaCancelled(error)) {
+        take = _episode!.takes[takeIndex];
+        _replaceTake(
+          takeIndex,
+          take.copyWith(
+            status: previousStatus == 'COMPLETED' ? 'COMPLETED' : 'READY',
+            progress: previousStatus == 'COMPLETED' ? 1 : 0,
+            errorMessage: '',
+          ),
+        );
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Geração Dola interrompida.')),
+          );
+        }
+        return;
+      }
+      take = _episode!.takes[takeIndex];
+      final message = describeDolaError(
+        error is DolaGenerationException ? error.message : error.toString(),
+      );
+      _replaceTake(
+        takeIndex,
+        take.copyWith(status: 'FAILED', progress: 0, errorMessage: message),
+      );
+      await _saveProject(notify: false);
+      if (!mounted) return;
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(error.toString().replaceFirst('Bad state: ', '')),
+            backgroundColor: AppColors.error,
+            content: Text('Erro no Dola: $message'),
           ),
         );
       }
+    } finally {
+      _activeDolaJobIds.remove(takeId);
+      _activeDolaMessages.remove(takeId);
+      _dolaStopRequestedTakeIds.remove(takeId);
     }
+  }
+
+  Future<void> _refreshDolaProfiles() async {
+    final inventory = await _dolaGenerationService.tryListProfiles();
+    if (!mounted) return;
+    setState(() => _dolaProfiles = inventory);
+  }
+
+  Future<DolaProfileInventory> _ensureLocalDolaProfiles(String takeId) async {
+    var inventory = await _dolaGenerationService.tryListProfiles();
+    if (inventory != null) {
+      if (mounted) setState(() => _dolaProfiles = inventory);
+      return inventory;
+    }
+    try {
+      await launchUrl(
+        Uri(scheme: ApiConstants.dolaBridgeScheme, host: 'serve'),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      throw const DolaGenerationException(
+        'Não foi possível abrir o Playwright neste PC. Instale a ponte local em tools/vertix-dola-bridge/install.ps1.',
+      );
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (DateTime.now().isBefore(deadline)) {
+      if (_wasDolaStopRequested(takeId)) {
+        throw const DolaCancelledException();
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      inventory = await _dolaGenerationService.tryListProfiles();
+      if (inventory != null) {
+        if (mounted) setState(() => _dolaProfiles = inventory);
+        return inventory;
+      }
+    }
+    throw const DolaGenerationException(
+      'O Playwright local não abriu. Confirme a ponte vertixdola e o dola-session.json.',
+    );
+  }
+
+  bool _wasDolaStopRequested(String takeId) =>
+      _dolaStopRequestedTakeIds.contains(takeId) ||
+      _episodeGenerationCancelRequested;
+
+  bool _isDolaCancelled(Object error) {
+    if (error is DolaCancelledException) return true;
+    return describeDolaError(error.toString()) == 'Geração interrompida.';
+  }
+
+  Future<void> _stopDolaGeneration([String? takeId]) async {
+    final project = _project;
+    if (project == null) return;
+    final takeIds = takeId == null
+        ? {
+            ..._activeDolaJobIds.keys,
+            for (final episode in project.episodes)
+              for (final take in episode.takes)
+                if (take.status == 'GENERATING' || take.status == 'QUEUED')
+                  take.id,
+          }
+        : {takeId};
+    if (takeId == null || _isGeneratingEpisode) {
+      _episodeGenerationCancelRequested = true;
+    }
+    for (final id in takeIds) {
+      _dolaStopRequestedTakeIds.add(id);
+    }
+    _resetStoppedDolaTakes(takeIds);
+    unawaited(_saveProject(notify: false));
+    for (final id in takeIds) {
+      final jobId = _activeDolaJobIds[id];
+      if (jobId == null) continue;
+      try {
+        await _dolaGenerationService.cancelJob(jobId);
+      } catch (_) {}
+    }
+  }
+
+  void _resetStoppedDolaTakes(Set<String> takeIds) {
+    final project = _project;
+    if (project == null || takeIds.isEmpty || !mounted) return;
+    var changed = false;
+    final episodes = <ProductionEpisodeItem>[];
+    for (final episode in project.episodes) {
+      final takes = <ProductionTakeItem>[];
+      for (final take in episode.takes) {
+        if (!takeIds.contains(take.id)) {
+          takes.add(take);
+          continue;
+        }
+        final next = _idleTakeAfterStoppedGeneration(take, force: true);
+        if (next.status != take.status || next.progress != take.progress) {
+          changed = true;
+        }
+        takes.add(next);
+      }
+      episodes.add(episode.copyWith(takes: takes));
+    }
+    for (final id in takeIds) {
+      _activeDolaMessages.remove(id);
+    }
+    if (!changed) return;
+    setState(() => _project = project.copyWith(episodes: episodes));
   }
 
   Future<void> _generateAllTakes() async {
@@ -2421,37 +2905,55 @@ class _AdminProductionEditorPageState extends State<AdminProductionEditorPage> {
     }
     setState(() {
       _isGeneratingEpisode = true;
+      _episodeGenerationCancelRequested = false;
       _sectionIndex = 2;
       _episodeProductionMode = true;
     });
     var generated = 0;
     var failed = 0;
+    var stopped = false;
     try {
       for (var index = 0; index < _episode!.takes.length; index++) {
         if (!mounted) return;
+        if (_episodeGenerationCancelRequested) {
+          stopped = true;
+          break;
+        }
         final status = _episode!.takes[index].status;
         if (status == 'COMPLETED') continue;
         setState(() => _selectedTakeIndex = index);
         await _generateTakeWithDola(index, silent: true);
         if (!mounted) return;
+        if (_episodeGenerationCancelRequested) {
+          stopped = true;
+          break;
+        }
         if (_episode!.takes[index].status == 'COMPLETED') {
           generated += 1;
-        } else {
+        } else if (_episode!.takes[index].status == 'FAILED') {
           failed += 1;
         }
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          backgroundColor: failed > 0 ? AppColors.error : null,
           content: Text(
-            failed == 0
+            stopped
+                ? 'Geração dos takes interrompida.'
+                : failed == 0
                 ? 'Geração dos takes concluída ($generated).'
-                : 'Takes gerados: $generated. Falhas: $failed.',
+                : 'Takes gerados: $generated. Erros no Dola: $failed.',
           ),
         ),
       );
     } finally {
-      if (mounted) setState(() => _isGeneratingEpisode = false);
+      if (mounted) {
+        setState(() {
+          _isGeneratingEpisode = false;
+          _episodeGenerationCancelRequested = false;
+        });
+      }
     }
   }
 

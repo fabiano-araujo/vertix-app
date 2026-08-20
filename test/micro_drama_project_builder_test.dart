@@ -132,9 +132,22 @@ void main() {
     final project = service.buildMicroDramaProjectForTesting(_config);
 
     expect(service.automaticReferenceTargets(project), hasLength(15));
+    expect(
+      service.automaticReferenceTargets(project, family: 'characters'),
+      hasLength(5),
+    );
+    expect(
+      service.automaticReferenceTargets(project, family: 'locations'),
+      hasLength(5),
+    );
+    expect(
+      service.automaticReferenceTargets(project, family: 'props'),
+      hasLength(4),
+    );
     final coverTarget = service.automaticReferenceTargets(project).last;
     expect(coverTarget.category, 'APP_COVER');
-    expect(coverTarget.label, project.title);
+    expect(coverTarget.label, 'Capa da série');
+    expect(coverTarget.metadata['seriesTitle'], project.title);
     expect(coverTarget.metadata['targetField'], 'Series.coverUrl');
     final target = project.references.first;
     final withImage = service.applyGeneratedReferenceImage(project, {
@@ -1039,6 +1052,743 @@ void main() {
     expect(
       withSheets.references.any((item) => item.id == 'location-cozinha'),
       isFalse,
+    );
+  });
+
+  test('single story sheet regeneration keeps the other characters', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final seeded = outline.copyWith(
+      seriesBible: {
+        ...outline.seriesBible,
+        'characters': [
+          {
+            'reference_id': 'character-marta',
+            'name': 'Marta',
+            'appearance': 'Chef de 34 anos, avental marcado.',
+          },
+          {
+            'reference_id': 'character-helena',
+            'name': 'Helena',
+            'appearance': 'Investidora de 41 anos, terno preto.',
+          },
+        ],
+      },
+      references: const [
+        ProductionReferenceItem(
+          id: 'character-marta',
+          label: 'Marta',
+          category: 'CHARACTER_MASTER',
+          description: 'Chef de 34 anos, avental marcado.',
+          canonical: true,
+        ),
+        ProductionReferenceItem(
+          id: 'character-helena',
+          label: 'Helena',
+          category: 'CHARACTER_MASTER',
+          description: 'Investidora de 41 anos, terno preto.',
+          canonical: true,
+        ),
+      ],
+    );
+    final updated = service.applyCodexStorySheets(
+      seeded,
+      {
+        'summary': 'Ficha de Marta',
+        'result': {
+          'seriesBiblePatch': {
+            'characters': [
+              {
+                'reference_id': 'character-marta',
+                'name': 'Marta',
+                'appearance':
+                    'Chef de 34 anos, cabelo preso, avental de linho marcado.',
+              },
+            ],
+          },
+          'references': [
+            {
+              'id': 'character-marta',
+              'label': 'Marta',
+              'category': 'CHARACTER_MASTER',
+              'description':
+                  'Chef de 34 anos, cabelo preso, avental de linho marcado.',
+              'canonical': true,
+            },
+          ],
+        },
+      },
+      family: 'characters',
+      referenceId: 'character-marta',
+    );
+
+    expect(
+      updated.references.firstWhere((item) => item.id == 'character-marta').description,
+      contains('avental de linho marcado'),
+    );
+    expect(
+      updated.references.firstWhere((item) => item.id == 'character-helena').description,
+      'Investidora de 41 anos, terno preto.',
+    );
+    final characters = (updated.seriesBible['characters'] as List)
+        .cast<Map>();
+    expect(characters, hasLength(2));
+    expect(
+      characters.firstWhere((item) => item['reference_id'] == 'character-helena')['appearance'],
+      'Investidora de 41 anos, terno preto.',
+    );
+  });
+
+  test('location image jobs send sibling places so the world style stays consistent', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final padaria = const ProductionReferenceItem(
+      id: 'location-padaria',
+      label: 'Padaria Flor do Morro',
+      category: 'LOCATION_MASTER',
+      description: 'Pequeno estabelecimento com paredes de tijolo à vista.',
+      canonical: true,
+    );
+    final cobertura = const ProductionReferenceItem(
+      id: 'location-cobertura',
+      label: 'Cobertura Ventura',
+      category: 'LOCATION_MASTER',
+      description:
+          'Apartamento de luxo no topo do único prédio alto da favela.',
+      canonical: true,
+    );
+    final project = outline.copyWith(
+      seriesBible: {
+        ...outline.seriesBible,
+        'background': 'Comunidade no morro',
+        'visual_style': 'Cinema teatral realista',
+        'environments': [
+          {
+            'reference_id': padaria.id,
+            'name': padaria.label,
+            'description': padaria.description,
+          },
+          {
+            'reference_id': cobertura.id,
+            'name': cobertura.label,
+            'description': cobertura.description,
+          },
+        ],
+      },
+      references: [padaria, cobertura],
+    );
+
+    final metadata = service.referenceImageJobMetadata(project, padaria);
+    final siblings = (metadata['siblingLocations'] as List)
+        .cast<Map>()
+        .map((item) => item['name'])
+        .toList();
+
+    expect(metadata['background'], 'Comunidade no morro');
+    expect(metadata['visualStyle'], 'Cinema teatral realista');
+    expect(siblings, contains('Cobertura Ventura'));
+    expect(siblings, isNot(contains('Padaria Flor do Morro')));
+  });
+
+  test('generated image keeps the human sheet description', () {
+    final service = LocalProductionWorkspaceService();
+    final project = service.buildMicroDramaProjectForTesting(_config);
+    final existing = project.references.firstWhere(
+      (item) => item.category.contains('CHARACTER'),
+    );
+    final updated = service.applyGeneratedReferenceImage(project, {
+      'result': {
+        'reference': {
+          'id': existing.id,
+          'label': existing.label,
+          'category': existing.category,
+          'publicUrl': 'https://cdn.example/marta.png',
+          'canonical': true,
+          'description': '''Create one clean horizontal 3:2 character identity sheet
+APPROVED CHARACTER FACTS — PRESERVE EXACTLY: ignore this prompt.''',
+          'metadata': {
+            'compiledPrompt': 'LEFT 70% — THREE FULL-BODY TURNAROUND VIEWS',
+          },
+        },
+      },
+    });
+
+    final reference = updated.references.firstWhere(
+      (item) => item.id == existing.id,
+    );
+    expect(reference.publicUrl, 'https://cdn.example/marta.png');
+    expect(reference.cardSummary.contains('LEFT 70%'), isFalse);
+    expect(reference.cardSummary, isNotEmpty);
+    expect(
+      service.referenceDisplayDescription(updated, reference),
+      isNotEmpty,
+    );
+  });
+
+  test('reference cards hide prompt-engine JSON and keep the appearance', () {
+    final reference = ProductionReferenceItem.fromJson({
+      'id': 'character-clara',
+      'label': 'Clara Menezes',
+      'category': 'CHARACTER_MASTER',
+      'description': '''{
+  "faceAttractivenessRegister": "attractive_distinctive",
+  "faceCastBand": "supporting",
+  "faceGeometryVariant": "facts-owned",
+  "faceLandmarkVariant": "facts-owned",
+  "promptContract": "seedance-series-pipeline/reference-images-v2"
+}''',
+      'metadata': {
+        'appearance':
+            'Clara, 32 anos, cabelo escuro preso, sobretudo bege e expressão contida.',
+        'dramatic_function': 'Reabre o passado sem ceder o controle da cena.',
+        'faceAttractivenessRegister': 'attractive_distinctive',
+        'faceCastBand': 'supporting',
+        'faceGeometryVariant': 'facts-owned',
+        'faceLandmarkVariant': 'facts-owned',
+        'promptContract': 'seedance-series-pipeline/reference-images-v2',
+      },
+    });
+
+    expect(
+      reference.cardSummary,
+      'Clara, 32 anos, cabelo escuro preso, sobretudo bege e expressão contida.',
+    );
+    expect(reference.cardSummary.contains('{'), isFalse);
+    expect(reference.cardSummary.contains('faceAttractivenessRegister'), isFalse);
+    expect(
+      reference.storyNote,
+      'Reabre o passado sem ceder o controle da cena.',
+    );
+    expect(reference.description.contains('{'), isFalse);
+  });
+
+  test('reference cards hide compiled image prompts and keep the appearance', () {
+    final reference = ProductionReferenceItem.fromJson({
+      'id': 'character-clara',
+      'label': 'Clara Menezes',
+      'category': 'CHARACTER_MASTER',
+      'description': '''Create one clean horizontal 3:2 character identity sheet
+APPROVED CHARACTER FACTS — PRESERVE EXACTLY: should not appear on the card.
+LEFT 70% — THREE FULL-BODY TURNAROUND VIEWS''',
+      'metadata': {
+        'appearance':
+            'Clara, 32 anos, cabelo escuro preso, sobretudo bege e expressão contida.',
+      },
+    });
+
+    expect(
+      reference.cardSummary,
+      'Clara, 32 anos, cabelo escuro preso, sobretudo bege e expressão contida.',
+    );
+    expect(reference.cardSummary.contains('LEFT 70%'), isFalse);
+    expect(reference.cardSummary.contains('APPROVED CHARACTER FACTS'), isFalse);
+  });
+
+  test('outline batch of five does not fill the rest of the season as generating', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final batch = service.applyCodexSeriesOutline(
+      outline,
+      {
+        'summary': 'Lote 1-5',
+        'result': {
+          'title': outline.title,
+          'outlineBatch': {
+            'fromEpisode': 1,
+            'throughEpisode': 5,
+            'targetEpisodeCount': 8,
+            'remaining': 3,
+            'canContinue': true,
+            'nextFromEpisode': 6,
+            'batchSize': 5,
+            'isFullSeason': false,
+          },
+          'seriesBiblePatch': {
+            'logline': outline.description,
+            'season_architecture': outline.seriesBible['season_architecture'],
+            'reserved_reveals': outline.seriesBible['reserved_reveals'],
+            'episode_cards': [
+              for (var number = 1; number <= 5; number++)
+                {'episode': number, 'title': 'EP$number'},
+            ],
+          },
+          'episodes': [
+            for (var number = 1; number <= 5; number++)
+              {
+                'number': number,
+                'title': 'Episódio $number',
+                'summary': 'Resumo do lote $number.',
+                'cliffhanger': 'Gancho $number.',
+                'durationSeconds': number == 1 ? 120 : 60,
+              },
+          ],
+          'references': const [],
+        },
+      },
+      allowPartial: true,
+    );
+
+    expect(batch.episodes, hasLength(5));
+    expect(batch.episodes.last.number, 5);
+    expect(
+      batch.episodes.every((item) => item.status != 'GENERATING'),
+      isTrue,
+    );
+    expect(batch.seriesBible['episode_cards'], hasLength(5));
+
+    final streaming = service.applyCodexSeriesOutline(
+      outline,
+      {
+        'partial': true,
+        'summary': 'Gerando lote',
+        'result': {
+          'title': outline.title,
+          'outlineBatch': {
+            'fromEpisode': 1,
+            'throughEpisode': 5,
+            'targetEpisodeCount': 8,
+            'remaining': 3,
+            'canContinue': true,
+            'nextFromEpisode': 6,
+          },
+          'seriesBiblePatch': {
+            'episode_cards': [
+              {'episode': 1, 'title': 'EP1'},
+            ],
+          },
+          'episodes': [
+            {
+              'number': 1,
+              'title': 'Primeiro',
+              'summary': 'Começo.',
+              'cliffhanger': 'Corte.',
+              'durationSeconds': 120,
+            },
+          ],
+          'references': const [],
+        },
+      },
+      allowPartial: true,
+      fillMissingSlots: true,
+    );
+    expect(streaming.episodes, hasLength(5));
+    expect(streaming.episodes.where((item) => item.status == 'GENERATING'), hasLength(4));
+
+    final continued = service.applyCodexSeriesOutline(
+      batch,
+      {
+        'summary': 'Lote 6-8',
+        'result': {
+          'title': batch.title,
+          'outlineBatch': {
+            'fromEpisode': 6,
+            'throughEpisode': 8,
+            'targetEpisodeCount': 8,
+            'remaining': 0,
+            'canContinue': false,
+            'nextFromEpisode': null,
+            'batchSize': 5,
+            'isFullSeason': false,
+          },
+          'seriesBiblePatch': {
+            'season_architecture': batch.seriesBible['season_architecture'],
+            'episode_cards': [
+              for (var number = 6; number <= 8; number++)
+                {'episode': number, 'title': 'EP$number'},
+            ],
+          },
+          'episodes': [
+            for (var number = 6; number <= 8; number++)
+              {
+                'number': number,
+                'title': 'Episódio $number',
+                'summary': 'Resumo do lote $number.',
+                'cliffhanger': 'Gancho $number.',
+                'durationSeconds': 60,
+              },
+          ],
+          'references': const [],
+        },
+      },
+      allowPartial: true,
+    );
+    expect(continued.episodes, hasLength(8));
+    expect(continued.episodes.first.summary, 'Resumo do lote 1.');
+    expect(continued.episodes.last.number, 8);
+    expect(continued.seriesBible['episode_scripts'], isEmpty);
+  });
+
+  test(
+    'production takes attach scene cast, location and mentioned props, not the first series prop',
+    () {
+      final service = LocalProductionWorkspaceService();
+      const rafael = ProductionReferenceItem(
+        id: 'character-rafael',
+        label: 'Rafael Kim',
+        category: 'CHARACTER_MASTER',
+        description: 'Homem de camisa branca e calça escura.',
+        canonical: true,
+      );
+      const entrada = ProductionReferenceItem(
+        id: 'location-entrada-favela',
+        label: 'Entrada da Favela',
+        category: 'LOCATION_MASTER',
+        description: 'Portão noturno da comunidade.',
+        canonical: true,
+      );
+      const becos = ProductionReferenceItem(
+        id: 'location-beco',
+        label: 'Beco Gourmet',
+        category: 'LOCATION_MASTER',
+        description: 'Beco colorido à noite.',
+        canonical: true,
+      );
+      const mensagem = ProductionReferenceItem(
+        id: 'prop-mensagem',
+        label: 'Mensagem nunca entregue',
+        category: 'PROP_MASTER',
+        description: 'Carta antiga dobrada.',
+        canonical: true,
+      );
+      const caderno = ProductionReferenceItem(
+        id: 'prop-caderno',
+        label: 'Caderno de receitas',
+        category: 'PROP_MASTER',
+        description: 'Caderno gasto no bolso.',
+        canonical: true,
+      );
+      final outline = service.buildMicroDramaProjectForTesting(_config);
+      final withBible = outline.copyWith(
+        seriesBible: {
+          ...outline.seriesBible,
+          'characters': [
+            {'reference_id': rafael.id, 'name': rafael.label},
+          ],
+          'environments': [
+            {'reference_id': entrada.id, 'name': entrada.label},
+            {'reference_id': becos.id, 'name': becos.label},
+          ],
+          'props': [
+            {'reference_id': mensagem.id, 'name': mensagem.label},
+            {'reference_id': caderno.id, 'name': caderno.label},
+          ],
+        },
+        references: [rafael, entrada, mensagem, caderno, becos],
+      );
+      final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+        withBible,
+        episodeNumber: 1,
+      );
+      final scripts =
+          (scripted.seriesBible['episode_scripts'] as List<dynamic>)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+      final script = scripts.first;
+      final scenes = (script['scenes'] as List<dynamic>)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+      final scene = Map<String, dynamic>.from(scenes.first);
+      final shots = (scene['shots'] as List<dynamic>)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+      final shot = Map<String, dynamic>.from(shots.first);
+      final rows = (shot['rows'] as List<dynamic>)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+      rows[rows.length - 1] = {
+        ...rows.last,
+        'text':
+            'Ele ajusta o caderno de receitas no bolso enquanto pisa na terra batida.',
+        'provider_text':
+            'Ele ajusta o caderno de receitas no bolso enquanto pisa na terra batida.',
+      };
+      shot['rows'] = rows;
+      shot['final_state'] =
+          'Ele ajusta o caderno de receitas no bolso enquanto pisa na terra batida.';
+      shots[0] = shot;
+      scene['shots'] = shots;
+      scene['location_id'] = entrada.id;
+      scene['location'] = entrada.label;
+      scene['cast_ids'] = [rafael.id];
+      scene['cast'] = [rafael.label];
+      scenes[0] = scene;
+      script['scenes'] = scenes;
+      scripts[0] = script;
+      final patched = scripted.copyWith(
+        seriesBible: {
+          ...scripted.seriesBible,
+          'episode_scripts': scripts,
+        },
+      );
+
+      final production = service
+          .approveMicroDramaEpisodeScriptForProductionForTesting(
+            patched,
+            episodeNumber: 1,
+          );
+      final take = production.episodes.first.takes.first;
+
+      expect(
+        take.referenceIds,
+        [rafael.id, entrada.id, caderno.id],
+      );
+      expect(take.referenceIds, isNot(contains(mensagem.id)));
+      expect(take.referenceIds, isNot(contains(becos.id)));
+      expect(
+        take.visualPrompt,
+        contains('@Image1 = Use Rafael Kim from this image.'),
+      );
+      expect(
+        take.visualPrompt,
+        contains(
+          '@Image2 = Entrada da Favela LOCATION MASTER; use only its established geometry, materials and motivated lighting.',
+        ),
+      );
+      expect(
+        take.visualPrompt,
+        contains(
+          '@Image3 = Caderno de receitas PROP MASTER; preserve its design, condition and scale without duplication.',
+        ),
+      );
+      expect(
+        take.visualPrompt,
+        isNot(contains('@Image3 = Mensagem nunca entregue')),
+      );
+
+      final broken = take.copyWith(
+        referenceIds: [becos.id],
+        visualPrompt:
+            'REFERENCE INDEX CONTRACT — DO NOT REORDER\n@Image3 = Mensagem nunca entregue PROP MASTER; preserve its design, condition and scale without duplication.\n\n${take.aiShortCore}',
+      );
+      final repaired = service.syncTakeStoryReferences(
+        production,
+        broken,
+        episodeNumber: 1,
+      );
+      expect(repaired.referenceIds, [rafael.id, entrada.id, caderno.id]);
+      expect(
+        repaired.visualPrompt,
+        startsWith(
+          'REFERENCE INDEX CONTRACT — DO NOT REORDER\n@Image1 = Use Rafael Kim from this image.',
+        ),
+      );
+      expect(repaired.visualPrompt, isNot(contains('@Image3 = Mensagem')));
+
+      final unsynced = production.copyWith(
+        episodes: [
+          production.episodes.first.copyWith(takes: [broken]),
+          ...production.episodes.skip(1),
+        ],
+      );
+      final synced = service.syncProjectTakeStoryReferences(unsynced);
+      expect(
+        synced.episodes.first.takes.first.referenceIds,
+        [rafael.id, entrada.id, caderno.id],
+      );
+    },
+  );
+
+  test('seed character sheets use labeled appearance and script-driven looks', () {
+    final service = LocalProductionWorkspaceService();
+    final project = service.buildMicroDramaProjectForTesting(_config);
+    final characters = (project.seriesBible['characters'] as List)
+        .cast<Map>();
+    final marta = characters.firstWhere(
+      (item) => item['name'] == 'Marta',
+    );
+    final helena = characters.firstWhere(
+      (item) => item['name'] == 'Helena',
+    );
+    final catalyst = characters.firstWhere(
+      (item) => item['role'] == 'Catalisador',
+    );
+
+    expect(marta['appearance'].toString(), contains('Altura:'));
+    expect(marta['appearance'].toString(), contains('Etnia:'));
+    expect(marta['appearance_card'], isA<Map>());
+    expect((marta['personality'] as List).first, isNot(equals('determinado')));
+    final martaLooks = marta['looks'] as List;
+    expect(martaLooks, isNotEmpty);
+    expect((martaLooks.first as Map)['kind'], 'default');
+    expect(
+      martaLooks.any((item) => (item as Map)['id'] == 'em-casa'),
+      isTrue,
+    );
+    expect(
+      (helena['looks'] as List),
+      hasLength(1),
+    );
+    expect((catalyst['looks'] as List), hasLength(1));
+    expect(
+      project.references.where(
+        (item) => item.category == 'CHARACTER_LOOK',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('story sheets materialize extra character looks as image targets', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final stripped = outline.copyWith(references: const []);
+    final updated = service.applyCodexStorySheets(stripped, {
+      'summary': 'Fichas',
+      'result': {
+        'seriesBiblePatch': {
+          'characters': [
+            {
+              'reference_id': 'character-marta',
+              'name': 'Marta',
+              'role': 'Protagonista',
+              'appearance':
+                  'Altura: 167cm\nProporção cabeça-corpo: 7.5 cabeças\nEtnia: Europeia do Sul (portuguesa)\nCompleição: esbelta\nCabelo: castanho preso\nTraços faciais: olhos âmbar\nRoupa e adereços: jaqueta de chef branca',
+              'appearance_card': {
+                'height_cm': 167,
+                'clothing': 'jaqueta de chef branca',
+              },
+              'personality': ['protetora feroz', 'língua afiada sob pressão'],
+              'looks': [
+                {
+                  'id': 'default',
+                  'label': 'Aparência padrão',
+                  'kind': 'default',
+                  'primary': true,
+                  'wardrobe': 'jaqueta de chef branca',
+                },
+                {
+                  'id': 'jantar',
+                  'label': 'jantar de trabalho',
+                  'kind': 'wardrobe',
+                  'needed_because': 'EP3 jantar com investidores',
+                  'wardrobe': 'blusa de seda verde-garrafa',
+                  'prompt':
+                      'Keep the character from image 1 unchanged. Change the outfit to: blusa de seda verde-garrafa',
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }, family: 'characters');
+
+    expect(
+      updated.references.where((item) => item.id == 'character-marta'),
+      hasLength(1),
+    );
+    final look = updated.references.firstWhere(
+      (item) => item.category == 'CHARACTER_LOOK',
+    );
+    expect(look.id, 'character-marta-look-jantar');
+    expect(look.description, contains('Keep the character from image 1'));
+    expect(look.metadata['parent_character_id'], 'character-marta');
+    expect(
+      service.automaticReferenceTargets(updated, family: 'characters'),
+      hasLength(2),
+    );
+  });
+
+  test('seed intimate scenes declare the home look for Marta', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+      outline,
+      episodeNumber: 1,
+    );
+    final martaId = outline.references
+        .firstWhere((item) => item.label == 'Marta')
+        .id;
+    final scripts =
+        (scripted.seriesBible['episode_scripts'] as List<dynamic>)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+    final scenes = (scripts.first['scenes'] as List<dynamic>)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    final intimate = scenes.firstWhere(
+      (scene) => scene['location'].toString().contains('íntimo'),
+    );
+    final looks = Map<String, dynamic>.from(intimate['cast_looks'] as Map);
+    expect(looks[martaId], 'em-casa');
+  });
+
+  test('production takes use the scene wardrobe look, not the identity master', () {
+    final service = LocalProductionWorkspaceService();
+    final outline = service.buildMicroDramaProjectForTesting(_config);
+    final withLooks = service.syncCharacterLookReferences(outline);
+    final marta = withLooks.references.firstWhere(
+      (item) => item.label == 'Marta',
+    );
+    final look = withLooks.references.firstWhere(
+      (item) => item.id == '${marta.id}-look-em-casa',
+    );
+    final home = withLooks.references.firstWhere(
+      (item) => item.label.contains('íntimo'),
+    );
+    final withImages = withLooks.copyWith(
+      references: [
+        for (final item in withLooks.references)
+          if (item.id == marta.id || item.id == look.id || item.id == home.id)
+            item.copyWith(publicUrl: 'https://cdn.example.com/${item.id}.png')
+          else
+            item,
+      ],
+    );
+    final scripted = service.generateMicroDramaEpisodeScriptForTesting(
+      withImages,
+      episodeNumber: 1,
+    );
+    final scripts =
+        (scripted.seriesBible['episode_scripts'] as List<dynamic>)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+    final script = scripts.first;
+    final scenes = (script['scenes'] as List<dynamic>)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    final scene = Map<String, dynamic>.from(scenes.first);
+    scene['location_id'] = home.id;
+    scene['location'] = home.label;
+    scene['cast_ids'] = [marta.id];
+    scene['cast'] = [marta.label];
+    scene['cast_looks'] = {marta.id: 'em-casa'};
+    scenes[0] = scene;
+    script['scenes'] = scenes;
+    scripts[0] = script;
+    final patched = scripted.copyWith(
+      seriesBible: {
+        ...scripted.seriesBible,
+        'episode_scripts': scripts,
+      },
+    );
+
+    final production = service
+        .approveMicroDramaEpisodeScriptForProductionForTesting(
+          patched,
+          episodeNumber: 1,
+        );
+    final take = production.episodes.first.takes.first;
+    expect(take.referenceIds, contains(look.id));
+    expect(take.referenceIds, contains(home.id));
+    expect(take.referenceIds, isNot(contains(marta.id)));
+    expect(
+      take.visualPrompt,
+      contains('@Image1 = Use ${look.label} from this image.'),
+    );
+
+    final withoutLookImage = production.copyWith(
+      references: [
+        for (final item in production.references)
+          if (item.id == look.id) item.copyWith(publicUrl: '') else item,
+      ],
+    );
+    final fallback = service.syncProjectTakeStoryReferences(withoutLookImage);
+    expect(
+      fallback.episodes.first.takes.first.referenceIds,
+      contains(marta.id),
+    );
+    expect(
+      fallback.episodes.first.takes.first.referenceIds,
+      isNot(contains(look.id)),
     );
   });
 }

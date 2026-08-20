@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'admin_service.dart';
+import 'character_sheet.dart';
 import 'season_architecture.dart';
 
 int? _asEpisodeNumber(dynamic value) {
@@ -37,18 +38,105 @@ bool _looksLikeJsonBlob(String value) {
       (text.startsWith('[') && text.contains(']'));
 }
 
+bool _isPromptEngineMetadataKey(String key) {
+  const keys = {
+    'faceattractivenessregister',
+    'facecastband',
+    'facegeometryvariant',
+    'facelandmarkvariant',
+    'promptcontract',
+    'visualreferencemode',
+    'compiledprompt',
+    'assetrole',
+    'targetfield',
+    'aspectratio',
+    'covercompositionvariant',
+    'covertypographyvariant',
+    'coverpalettevariant',
+    'storagekey',
+    'generatedby',
+    'imagemodel',
+    'jobid',
+    'referenceid',
+  };
+  return keys.contains(key.toLowerCase().replaceAll(RegExp(r'[^a-z]'), ''));
+}
+
+bool _looksLikeCompiledImagePrompt(dynamic value) {
+  if (value is! String) return false;
+  final text = value.toLowerCase();
+  return text.contains('left 70%') ||
+      text.contains('approved character facts') ||
+      text.contains('approved location facts') ||
+      text.contains('approved prop facts') ||
+      text.contains('identity sheet') ||
+      text.contains('location-scout photograph') ||
+      text.contains('canonical prop continuity') ||
+      text.contains('white seamless studio cyclorama') ||
+      text.contains('create one clean horizontal') ||
+      text.contains('create one canonical landscape');
+}
+
+bool _isPromptEngineMetadata(dynamic value) {
+  if (value is Map) {
+    if (value.isEmpty) return false;
+    const humanKeys = {
+      'appearance',
+      'description',
+      'summary',
+      'treatment',
+      'story',
+      'text',
+      'dramatic_function',
+      'story_function',
+      'visual_contract',
+      'visualContract',
+      'role',
+      'logline',
+      'title',
+      'appearance_card',
+      'looks',
+      'ethnicity',
+      'clothing',
+      'wardrobe',
+    };
+    if (value.keys.any((key) => humanKeys.contains(key.toString()))) {
+      return false;
+    }
+    final technical = value.keys
+        .where((key) => _isPromptEngineMetadataKey(key.toString()))
+        .length;
+    return technical >= 3 || technical == value.length;
+  }
+  if (value is String && _looksLikeJsonBlob(value)) {
+    try {
+      return _isPromptEngineMetadata(jsonDecode(value));
+    } catch (_) {
+      return true;
+    }
+  }
+  return false;
+}
+
 String _humanReadableText(dynamic value) {
   if (value == null) return '';
+  if (_isPromptEngineMetadata(value) || _looksLikeCompiledImagePrompt(value)) {
+    return '';
+  }
   if (value is Map) {
     for (final key in const [
       'summary',
       'treatment',
       'story',
       'text',
+      'appearance',
       'description',
       'cold_open',
       'logline',
       'title',
+      'dramatic_function',
+      'story_function',
+      'visual_contract',
     ]) {
       final nested = _humanReadableText(value[key]);
       if (nested.isNotEmpty) return nested;
@@ -72,6 +160,54 @@ String _humanReadableText(dynamic value) {
     }
   }
   return text;
+}
+
+String _referenceCardSummary({
+  required String description,
+  Map<String, dynamic> metadata = const {},
+}) {
+  if (isCharacterLookReference(category: '', metadata: metadata)) {
+    for (final candidate in [
+      metadata['prompt'],
+      description,
+      metadata['wardrobe'],
+      metadata['outfit_lock'],
+    ]) {
+      final text = _humanReadableText(candidate);
+      if (text.isNotEmpty) return text;
+    }
+  }
+  final formattedAppearance = formatCharacterAppearance(
+    metadata['appearance'] ?? description,
+    card: metadata['appearance_card'],
+  );
+  if (formattedAppearance.isNotEmpty) return formattedAppearance;
+  for (final candidate in [
+    metadata['appearance'],
+    description,
+    metadata['description'],
+    metadata['dramatic_function'],
+    metadata['story_function'],
+    metadata['visual_contract'],
+    metadata['visualContract'],
+    metadata['lighting_contract'],
+    metadata['lightingContract'],
+  ]) {
+    final text = _humanReadableText(candidate);
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+String _referenceStoryNote(Map<String, dynamic> metadata) {
+  for (final candidate in [
+    metadata['dramatic_function'],
+    metadata['story_function'],
+  ]) {
+    final text = _humanReadableText(candidate);
+    if (text.isNotEmpty) return text;
+  }
+  return '';
 }
 
 List<Map<String, dynamic>> _asObjectList(dynamic value) {
@@ -117,6 +253,132 @@ bool _storySheetCategoryMatches(String family, String category) {
   };
 }
 
+String _storySheetFamilyOf(String category) {
+  final value = category.toUpperCase();
+  if (value.contains('CHARACTER') || value.contains('OPPOSING_FORCE')) {
+    return 'characters';
+  }
+  if (value.contains('PROP') || value.contains('OBJECT')) {
+    return 'props';
+  }
+  if (value.contains('LOCATION') ||
+      value.contains('ENVIRONMENT') ||
+      value.contains('WORLD')) {
+    return 'locations';
+  }
+  return 'all';
+}
+
+bool _isLocationReferenceCategory(String category) {
+  return _storySheetFamilyOf(category) == 'locations';
+}
+
+String _storySheetEntryId(Map<String, dynamic> item) {
+  return (item['reference_id'] ?? item['id'] ?? '').toString().trim();
+}
+
+String _normalizeReferenceKey(String value) =>
+    value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+bool _sameReferenceKey(String left, String right) {
+  final a = _normalizeReferenceKey(left);
+  final b = _normalizeReferenceKey(right);
+  return a.isNotEmpty && a == b;
+}
+
+bool _haystackMentions(String haystack, String needle) {
+  final value = needle.trim();
+  if (value.length < 4) return false;
+  return haystack.toLowerCase().contains(value.toLowerCase());
+}
+
+bool _sheetEntryMatches(Map<String, dynamic> item, String referenceId) {
+  if (referenceId.trim().isEmpty) return false;
+  return _sameReferenceKey(_storySheetEntryId(item), referenceId) ||
+      _sameReferenceKey((item['name'] ?? item['label'] ?? '').toString(), referenceId);
+}
+
+List<Map<String, dynamic>> _normalizeSheetEntries(
+  List<Map<String, dynamic>> items,
+) {
+  return items.map((item) {
+    final id = _storySheetEntryId(item);
+    final name = (item['name'] ?? item['label'] ?? '').toString().trim();
+    return {
+      ...item,
+      if (id.isNotEmpty) 'reference_id': id,
+      if (name.isNotEmpty) 'name': name,
+    };
+  }).toList();
+}
+
+List<Map<String, dynamic>> _upsertStorySheetEntries(
+  List<Map<String, dynamic>> current,
+  List<Map<String, dynamic>> incoming, {
+  required String referenceId,
+}) {
+  final updates = incoming
+      .where((item) => _storySheetEntryId(item) == referenceId)
+      .toList();
+  if (updates.isEmpty) return current;
+  final update = updates.first;
+  final result = current.map((item) {
+    if (_storySheetEntryId(item) != referenceId) return item;
+    return {...item, ...update};
+  }).toList();
+  if (!result.any((item) => _storySheetEntryId(item) == referenceId)) {
+    result.add(update);
+  }
+  return result;
+}
+
+Map<String, dynamic> _mergeSingleStorySheetPatch({
+  required Map<String, dynamic> existing,
+  required Map<String, dynamic> patch,
+  required String referenceId,
+}) {
+  const aliases = {
+    'characters': 'character_bible',
+    'character_bible': 'characters',
+    'environments': 'location_bible',
+    'location_bible': 'environments',
+    'props': 'object_bible',
+    'object_bible': 'props',
+  };
+  final merged = <String, dynamic>{};
+  for (final key in aliases.keys) {
+    if (patch[key] == null) continue;
+    final current = _asObjectList(existing[key]);
+    final fallback = _asObjectList(existing[aliases[key]]);
+    merged[key] = _upsertStorySheetEntries(
+      current.isNotEmpty ? current : fallback,
+      _asObjectList(patch[key]),
+      referenceId: referenceId,
+    );
+  }
+  return merged;
+}
+
+Map<String, dynamic>? _bibleSheetEntryFor(
+  Map<String, dynamic> bible,
+  String referenceId,
+) {
+  if (referenceId.isEmpty) return null;
+  for (final key in const [
+    'characters',
+    'character_bible',
+    'environments',
+    'location_bible',
+    'props',
+    'object_bible',
+  ]) {
+    for (final item in _asObjectList(bible[key])) {
+      if (_storySheetEntryId(item) == referenceId) return item;
+    }
+  }
+  return null;
+}
+
 void _appendStorySheetReferences(
   List<Map<String, dynamic>> references, {
   required List<Map<String, dynamic>> entries,
@@ -125,14 +387,34 @@ void _appendStorySheetReferences(
   for (final item in entries) {
     final id = (item['reference_id'] ?? item['id'] ?? '').toString().trim();
     if (id.isEmpty) continue;
-    if (references.any((reference) => reference['id']?.toString() == id)) {
+    final description = formatCharacterAppearance(
+      item['appearance'] ?? item['description'],
+      card: item['appearance_card'],
+    );
+    final index = references.indexWhere(
+      (reference) => reference['id']?.toString() == id,
+    );
+    if (index >= 0) {
+      final current = Map<String, dynamic>.from(references[index]);
+      references[index] = {
+        ...current,
+        'label': item['name'] ?? item['label'] ?? current['label'] ?? id,
+        if (description.isNotEmpty) 'description': description,
+        'canonical': true,
+        'metadata': {
+          ...Map<String, dynamic>.from(current['metadata'] as Map? ?? const {}),
+          ...item,
+        },
+      };
       continue;
     }
     references.add({
       'id': id,
       'label': item['name'] ?? item['label'] ?? id,
       'category': category,
-      'description': item['appearance'] ?? item['description'] ?? '',
+      'description': description.isNotEmpty
+          ? description
+          : item['appearance'] ?? item['description'] ?? '',
       'canonical': true,
       'metadata': item,
     });
@@ -410,19 +692,34 @@ class ProductionReferenceItem {
     this.metadata = const {},
   });
 
-  factory ProductionReferenceItem.fromJson(Map<String, dynamic> json) =>
-      ProductionReferenceItem(
-        id: json['id'] as String? ?? '',
-        label: json['label'] as String? ?? 'Referencia',
-        category: json['category'] as String? ?? 'REFERENCE',
-        assetPath: json['assetPath'] as String?,
-        publicUrl: json['publicUrl'] as String?,
-        description: json['description'] as String? ?? '',
-        canonical: _readBool(json['canonical'], fallback: false),
-        metadata: Map<String, dynamic>.from(
-          json['metadata'] as Map? ?? const {},
-        ),
-      );
+  factory ProductionReferenceItem.fromJson(Map<String, dynamic> json) {
+    final metadata = Map<String, dynamic>.from(
+      json['metadata'] as Map? ?? const {},
+    );
+    return ProductionReferenceItem(
+      id: json['id'] as String? ?? '',
+      label: json['label'] as String? ?? 'Referencia',
+      category: json['category'] as String? ?? 'REFERENCE',
+      assetPath: json['assetPath'] as String?,
+      publicUrl: json['publicUrl'] as String?,
+      description: _referenceCardSummary(
+        description: _humanReadableText(json['description']),
+        metadata: metadata,
+      ),
+      canonical: _readBool(json['canonical'], fallback: false),
+      metadata: metadata,
+    );
+  }
+
+  String get cardSummary => _referenceCardSummary(
+    description: description,
+    metadata: metadata,
+  );
+
+  String get storyNote {
+    final note = _referenceStoryNote(metadata);
+    return note == cardSummary ? '' : note;
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -434,6 +731,28 @@ class ProductionReferenceItem {
     'canonical': canonical,
     'metadata': metadata,
   };
+
+  ProductionReferenceItem copyWith({
+    String? id,
+    String? label,
+    String? category,
+    String? assetPath,
+    String? publicUrl,
+    String? description,
+    bool? canonical,
+    Map<String, dynamic>? metadata,
+  }) {
+    return ProductionReferenceItem(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      category: category ?? this.category,
+      assetPath: assetPath ?? this.assetPath,
+      publicUrl: publicUrl ?? this.publicUrl,
+      description: description ?? this.description,
+      canonical: canonical ?? this.canonical,
+      metadata: metadata ?? this.metadata,
+    );
+  }
 }
 
 class ProductionTakeItem {
@@ -454,6 +773,7 @@ class ProductionTakeItem {
   final String? outputUrl;
   final String? lastFrameLabel;
   final String notes;
+  final String errorMessage;
 
   const ProductionTakeItem({
     required this.id,
@@ -473,6 +793,7 @@ class ProductionTakeItem {
     this.outputUrl,
     this.lastFrameLabel,
     this.notes = '',
+    this.errorMessage = '',
   });
 
   factory ProductionTakeItem.fromJson(Map<String, dynamic> json) =>
@@ -502,6 +823,7 @@ class ProductionTakeItem {
         outputUrl: json['outputUrl'] as String?,
         lastFrameLabel: json['lastFrameLabel'] as String?,
         notes: json['notes'] as String? ?? '',
+        errorMessage: json['errorMessage'] as String? ?? '',
       );
 
   ProductionTakeItem copyWith({
@@ -522,6 +844,7 @@ class ProductionTakeItem {
     String? outputUrl,
     String? lastFrameLabel,
     String? notes,
+    String? errorMessage,
   }) => ProductionTakeItem(
     id: id ?? this.id,
     number: number ?? this.number,
@@ -540,6 +863,7 @@ class ProductionTakeItem {
     outputUrl: outputUrl ?? this.outputUrl,
     lastFrameLabel: lastFrameLabel ?? this.lastFrameLabel,
     notes: notes ?? this.notes,
+    errorMessage: errorMessage ?? this.errorMessage,
   );
 
   Map<String, dynamic> toJson() => {
@@ -560,6 +884,7 @@ class ProductionTakeItem {
     'outputUrl': outputUrl,
     'lastFrameLabel': lastFrameLabel,
     'notes': notes,
+    'errorMessage': errorMessage,
   };
 }
 
@@ -2586,14 +2911,16 @@ class LocalProductionWorkspaceService {
             )
             .toList();
 
-    return _ensureMicroDramaFormat(project).copyWith(
-      formatFamily: _microDramaFormatFamily,
-      title: generatedTitle.isNotEmpty ? generatedTitle : project.title,
-      description: biblePatch['logline']?.toString() ?? project.description,
-      updatedAt: DateTime.now(),
-      episodes: episodes,
-      references: referencesById.values.toList(),
-      seriesBible: mergedBible,
+    return syncCharacterLookReferences(
+      _ensureMicroDramaFormat(project).copyWith(
+        formatFamily: _microDramaFormatFamily,
+        title: generatedTitle.isNotEmpty ? generatedTitle : project.title,
+        description: biblePatch['logline']?.toString() ?? project.description,
+        updatedAt: DateTime.now(),
+        episodes: episodes,
+        references: referencesById.values.toList(),
+        seriesBible: mergedBible,
+      ),
     );
   }
 
@@ -2805,7 +3132,10 @@ class LocalProductionWorkspaceService {
         title: generated['title']?.toString() ?? base.title,
         durationSeconds: base.durationSeconds,
         aiShortCore: core,
-        visualPrompt: '$core\n\n$fixedSuffix',
+        visualPrompt: _withReferenceIndexContract(
+          '${_stripReferenceIndexContract(core)}\n\n$fixedSuffix',
+          _referencesInDeclaredOrder(locked.references, base.referenceIds),
+        ),
         audioPrompt: generated['audioPrompt']?.toString() ?? base.audioPrompt,
         transitionMode:
             generated['transitionMode']?.toString() ?? base.transitionMode,
@@ -2817,10 +3147,7 @@ class LocalProductionWorkspaceService {
           generated['generateSeedanceAudio'],
           fallback: base.generateSeedanceAudio,
         ),
-        referenceIds:
-            (generated['referenceIds'] as List<dynamic>? ?? base.referenceIds)
-                .map((item) => item.toString())
-                .toList(),
+        referenceIds: base.referenceIds,
         notes: generated['notes']?.toString() ?? base.notes,
       );
     }).toList();
@@ -2874,6 +3201,16 @@ class LocalProductionWorkspaceService {
     final index = references.indexWhere((item) => item.id == generated.id);
     if (index >= 0) {
       final existing = references[index];
+      final generatedDescription = generated.description.trim();
+      final existingDescription = existing.description.trim();
+      final generatedLooksLikePrompt =
+          generatedDescription.isEmpty ||
+          _looksLikeCompiledImagePrompt(generatedDescription) ||
+          _isPromptEngineMetadata(generatedDescription);
+      final keepExistingDescription =
+          existingDescription.isNotEmpty &&
+          !_looksLikeCompiledImagePrompt(existingDescription) &&
+          generatedLooksLikePrompt;
       references[index] = ProductionReferenceItem(
         id: existing.id,
         label: generated.label.isNotEmpty ? generated.label : existing.label,
@@ -2882,9 +3219,11 @@ class LocalProductionWorkspaceService {
             : existing.category,
         assetPath: existing.assetPath,
         publicUrl: generated.publicUrl,
-        description: generated.description.isNotEmpty
-            ? generated.description
-            : existing.description,
+        description: keepExistingDescription
+            ? existing.description
+            : (generatedDescription.isNotEmpty
+                  ? generated.description
+                  : existing.description),
         canonical: generated.canonical || existing.canonical,
         metadata: {...existing.metadata, ...generated.metadata},
       );
@@ -2892,7 +3231,7 @@ class LocalProductionWorkspaceService {
       references.add(generated);
     }
     final isAppCover = generated.category.toUpperCase() == 'APP_COVER';
-    return project.copyWith(
+    final next = project.copyWith(
       coverUrl: isAppCover ? generated.publicUrl : project.coverUrl,
       updatedAt: DateTime.now(),
       references: references,
@@ -2901,6 +3240,11 @@ class LocalProductionWorkspaceService {
         'last_image_provider': 'gpt-image-2',
       },
     );
+    final applied = index >= 0 ? references[index] : generated;
+    if (isCharacterLookItem(applied) || isCharacterIdentityItem(applied)) {
+      return syncProjectTakeStoryReferences(next);
+    }
+    return next;
   }
 
   static bool isStoryMasterReference(ProductionReferenceItem reference) {
@@ -2912,6 +3256,17 @@ class LocalProductionWorkspaceService {
         category.contains('WORLD') ||
         category.contains('PROP') ||
         category.contains('OBJECT');
+  }
+
+  static bool isCharacterLookItem(ProductionReferenceItem reference) {
+    return isCharacterLookReference(
+      category: reference.category,
+      metadata: reference.metadata,
+    );
+  }
+
+  static bool isCharacterIdentityItem(ProductionReferenceItem reference) {
+    return isCharacterIdentityCategory(reference.category);
   }
 
   static bool referenceHasGeneratedImage(ProductionReferenceItem reference) {
@@ -2954,7 +3309,9 @@ class LocalProductionWorkspaceService {
   }
 
   String? videoGenerationBlockedByReferencesReason(ProductionProject project) {
-    final masters = storyMasterReferences(project);
+    final masters = storyMasterReferences(
+      project,
+    ).where((reference) => !isCharacterLookItem(reference)).toList();
     if (masters.isEmpty) {
       return 'Gere as referências de personagens, ambientes e objetos antes do vídeo.';
     }
@@ -2967,7 +3324,9 @@ class LocalProductionWorkspaceService {
     if (missingFamilies.isNotEmpty) {
       return 'Faltam fichas de ${missingFamilies.join(', ')} antes de gerar o vídeo.';
     }
-    final missing = missingStoryReferenceImages(project);
+    final missing = missingStoryReferenceImages(project)
+        .where((reference) => !isCharacterLookItem(reference))
+        .toList();
     if (missing.isEmpty) return null;
     final counts = <String, int>{};
     for (final reference in missing) {
@@ -2989,14 +3348,203 @@ class LocalProductionWorkspaceService {
     return 'Gere as imagens de todas as referências antes do vídeo. Ainda faltam $parts.';
   }
 
+  List<ProductionReferenceItem> storyReferencesForTake(
+    ProductionProject project,
+    ProductionTakeItem take, {
+    int? episodeNumber,
+  }) {
+    final required = _requiredStoryReferencesForTake(
+      project,
+      take,
+      episodeNumber: episodeNumber,
+    );
+    final requiredIds = {for (final item in required) item.id};
+    final requiredFamilies = {
+      for (final item in required) _storyReferenceFamily(item),
+    };
+    final requiredCharacterKeys = {
+      for (final item in required)
+        if (_storyReferenceFamily(item) == 'personagem')
+          _characterIdentityKey(item),
+    };
+    final extras = <ProductionReferenceItem>[];
+    for (final id in take.referenceIds) {
+      final item = _matchStoryReference(project.references, id: id);
+      if (item == null || requiredIds.contains(item.id)) continue;
+      if (_storyReferenceFamily(item) == 'ambiente' &&
+          requiredFamilies.contains('ambiente')) {
+        continue;
+      }
+      if (_storyReferenceFamily(item) == 'personagem' &&
+          requiredCharacterKeys.contains(_characterIdentityKey(item))) {
+        continue;
+      }
+      extras.add(item);
+    }
+    return [...required, ...extras];
+  }
+
+  ProductionTakeItem syncTakeStoryReferences(
+    ProductionProject project,
+    ProductionTakeItem take, {
+    int? episodeNumber,
+  }) {
+    final references = storyReferencesForTake(
+      project,
+      take,
+      episodeNumber: episodeNumber,
+    );
+    return take.copyWith(
+      referenceIds: references.map((item) => item.id).toList(),
+      visualPrompt: _withReferenceIndexContract(take.visualPrompt, references),
+    );
+  }
+
+  ProductionProject syncProjectTakeStoryReferences(ProductionProject project) {
+    var changed = false;
+    final episodes = <ProductionEpisodeItem>[];
+    for (final episode in project.episodes) {
+      final takes = [
+        for (final take in episode.takes)
+          syncTakeStoryReferences(
+            project,
+            take,
+            episodeNumber: episode.number,
+          ),
+      ];
+      if (_sameTakeStoryBindings(episode.takes, takes)) {
+        episodes.add(episode);
+      } else {
+        changed = true;
+        episodes.add(episode.copyWith(takes: takes));
+      }
+    }
+    if (!changed) return project;
+    return project.copyWith(episodes: episodes, updatedAt: DateTime.now());
+  }
+
+  bool _sameTakeStoryBindings(
+    List<ProductionTakeItem> current,
+    List<ProductionTakeItem> next,
+  ) {
+    if (current.length != next.length) return false;
+    for (var index = 0; index < current.length; index++) {
+      if (current[index].visualPrompt != next[index].visualPrompt) {
+        return false;
+      }
+      final left = current[index].referenceIds;
+      final right = next[index].referenceIds;
+      if (left.length != right.length) return false;
+      for (var idIndex = 0; idIndex < left.length; idIndex++) {
+        if (left[idIndex] != right[idIndex]) return false;
+      }
+    }
+    return true;
+  }
+
+    Map<String, dynamic> referenceImageJobMetadata(
+    ProductionProject project,
+    ProductionReferenceItem item,
+  ) {
+    final metadata = Map<String, dynamic>.from(item.metadata);
+    if (isCharacterLookItem(item)) {
+      final parentId = (metadata['parent_character_id'] ?? metadata['parentId'])
+          .toString()
+          .trim();
+      ProductionReferenceItem? parent;
+      for (final reference in project.references) {
+        if (reference.id == parentId) {
+          parent = reference;
+          break;
+        }
+      }
+      if (parent != null) {
+        metadata['identity_source_url'] =
+            parent.publicUrl ?? parent.assetPath;
+        metadata['appearance'] ??= identityAppearanceWithoutClothing(
+          parent.metadata['appearance'] ?? parent.description,
+          card: parent.metadata['appearance_card'],
+        );
+        metadata['appearance_card'] ??= parent.metadata['appearance_card'];
+        metadata['role'] ??= parent.metadata['role'];
+      }
+      return metadata;
+    }
+    if (!_isLocationReferenceCategory(item.category)) return metadata;
+    final bible = project.seriesBible;
+    final seen = <String>{
+      item.id.trim().toLowerCase(),
+      item.label.trim().toLowerCase(),
+    };
+    final siblings = <Map<String, String>>[];
+    void addSibling(String id, String name, String description) {
+      final trimmedName = name.trim();
+      final trimmedDescription = description.trim();
+      if (trimmedName.isEmpty && trimmedDescription.isEmpty) return;
+      final keys = [
+        id.trim().toLowerCase(),
+        trimmedName.toLowerCase(),
+      ].where((value) => value.isNotEmpty);
+      if (keys.any(seen.contains)) return;
+      for (final key in keys) {
+        seen.add(key);
+      }
+      siblings.add({
+        'name': trimmedName.isEmpty ? id : trimmedName,
+        'description': trimmedDescription,
+      });
+    }
+
+    for (final reference in project.references) {
+      if (!_isLocationReferenceCategory(reference.category)) continue;
+      addSibling(reference.id, reference.label, reference.description);
+    }
+    for (final raw in _asObjectList(
+      bible['environments'] ?? bible['location_bible'],
+    )) {
+      addSibling(
+        (raw['reference_id'] ?? raw['id'] ?? '').toString(),
+        (raw['name'] ?? raw['label'] ?? '').toString(),
+        (raw['description'] ??
+                raw['world_visual_lock'] ??
+                raw['visual_lock'] ??
+                '')
+            .toString(),
+      );
+    }
+    metadata['background'] ??= bible['background'];
+    metadata['visualStyle'] ??= bible['visual_style'];
+    metadata['worldSetting'] ??= bible['background'];
+    metadata['logline'] ??= bible['logline'] ?? project.description;
+    if (siblings.isNotEmpty) {
+      metadata['siblingLocations'] = siblings.take(8).toList();
+    }
+    return metadata;
+  }
+
   List<ProductionReferenceItem> automaticReferenceTargets(
     ProductionProject project, {
     bool regenerateExisting = false,
+    String family = 'all',
   }) {
     final targets = storyMasterReferences(project).where((reference) {
+      if (!_storySheetCategoryMatches(family, reference.category)) {
+        return false;
+      }
       if (regenerateExisting) return true;
       return !referenceHasGeneratedImage(reference);
     }).toList();
+
+    int rank(ProductionReferenceItem reference) {
+      if (isCharacterLookItem(reference)) return 4;
+      if (isCharacterIdentityItem(reference)) return 0;
+      if (_isLocationReferenceCategory(reference.category)) return 1;
+      return 2;
+    }
+
+    targets.sort((left, right) => rank(left).compareTo(rank(right)));
+
+    if (family != 'all') return targets;
 
     ProductionReferenceItem? existingCover;
     for (final reference in project.references) {
@@ -3013,7 +3561,7 @@ class LocalProductionWorkspaceService {
     targets.add(
       ProductionReferenceItem(
         id: existingCover?.id ?? '${project.id}-app-cover',
-        label: project.title,
+        label: 'Capa da série',
         category: 'APP_COVER',
         assetPath: existingCover?.assetPath,
         publicUrl: existingCover?.publicUrl,
@@ -3153,11 +3701,34 @@ class LocalProductionWorkspaceService {
     );
   }
 
+  String referenceDisplayDescription(
+    ProductionProject project,
+    ProductionReferenceItem reference,
+  ) {
+    final summary = reference.cardSummary.trim();
+    if (summary.isNotEmpty) return summary;
+    final entry = _bibleSheetEntryFor(project.seriesBible, reference.id);
+    if (entry == null) return '';
+    return _referenceCardSummary(description: '', metadata: entry);
+  }
+
+  Map<String, dynamic> characterSheetEntry(
+    ProductionProject project,
+    String referenceId,
+  ) {
+    return _bibleSheetEntryFor(project.seriesBible, referenceId) ?? const {};
+  }
+
+  static String storySheetFamilyOf(ProductionReferenceItem reference) {
+    return _storySheetFamilyOf(reference.category);
+  }
+
   /// Applies character, location and prop sheets without rewriting title or episodes.
   ProductionProject applyCodexStorySheets(
     ProductionProject project,
     Map<String, dynamic> output, {
     String family = 'all',
+    String? referenceId,
   }) {
     final result = _codexResult(output);
     final nestedPatch = Map<String, dynamic>.from(
@@ -3172,10 +3743,18 @@ class LocalProductionWorkspaceService {
       ),
     };
     final allowedKeys = _storySheetBibleKeys(family);
-    final seriesBiblePatch = <String, dynamic>{
+    var seriesBiblePatch = <String, dynamic>{
       for (final key in allowedKeys)
         if (rawPatch[key] != null) key: rawPatch[key],
     };
+    final scopedReferenceId = referenceId?.trim() ?? '';
+    if (scopedReferenceId.isNotEmpty) {
+      seriesBiblePatch = _mergeSingleStorySheetPatch(
+        existing: project.seriesBible,
+        patch: seriesBiblePatch,
+        referenceId: scopedReferenceId,
+      );
+    }
     if (seriesBiblePatch['characters'] != null) {
       seriesBiblePatch['character_bible'] = seriesBiblePatch['characters'];
     }
@@ -3211,6 +3790,15 @@ class LocalProductionWorkspaceService {
             item['category']?.toString() ?? '',
           ),
         )
+        .where(
+          (item) =>
+              scopedReferenceId.isEmpty ||
+              item['id']?.toString() == scopedReferenceId ||
+              (item['metadata'] is Map &&
+                  (item['metadata']['parent_character_id']?.toString() ??
+                          '') ==
+                      scopedReferenceId),
+        )
         .toList();
     final workflow = Map<String, dynamic>.from(
       project.seriesBible['workflow'] as Map? ?? const {},
@@ -3231,7 +3819,7 @@ class LocalProductionWorkspaceService {
       workflow['characters_locations_props'] = 'GENERATED_REVIEW_REQUIRED';
     }
 
-    return applyCodexProjectRevision(project, {
+    final revised = applyCodexProjectRevision(project, {
       ...output,
       'result': {
         'projectPatch': {
@@ -3243,6 +3831,112 @@ class LocalProductionWorkspaceService {
         },
       },
     });
+    if (family != 'characters' &&
+        family != 'all' &&
+        !seriesBiblePatch.containsKey('characters')) {
+      return revised;
+    }
+    return syncCharacterLookReferences(
+      revised,
+      onlyCharacterId: scopedReferenceId.isEmpty ? null : scopedReferenceId,
+    );
+  }
+
+  ProductionProject syncCharacterLookReferences(
+    ProductionProject project, {
+    String? onlyCharacterId,
+  }) {
+    final charactersById = <String, Map<String, dynamic>>{};
+    for (final key in const ['characters', 'character_bible']) {
+      for (final item in _asObjectList(project.seriesBible[key])) {
+        final id = _storySheetEntryId(item);
+        if (id.isNotEmpty) charactersById[id] = item;
+      }
+    }
+    if (charactersById.isEmpty) return project;
+
+    var references = project.references.toList();
+    final updatedCharacters = <String, Map<String, dynamic>>{};
+
+    for (final character in charactersById.values) {
+      final characterId = _storySheetEntryId(character);
+      if (onlyCharacterId != null &&
+          onlyCharacterId.isNotEmpty &&
+          characterId != onlyCharacterId) {
+        updatedCharacters[characterId] = character;
+        continue;
+      }
+      final looks = normalizeCharacterLooks(character);
+      final formatted = formatCharacterAppearance(
+        character['appearance'],
+        card: character['appearance_card'],
+      );
+      final updatedCharacter = {
+        ...character,
+        if (formatted.isNotEmpty) 'appearance': formatted,
+        'looks': looks,
+      };
+      updatedCharacters[characterId] = updatedCharacter;
+
+      final masterIndex = references.indexWhere((item) => item.id == characterId);
+      if (masterIndex >= 0) {
+        final master = references[masterIndex];
+        references[masterIndex] = master.copyWith(
+          description: formatted.isNotEmpty ? formatted : master.description,
+          metadata: {
+            ...master.metadata,
+            ...updatedCharacter,
+          },
+        );
+      }
+
+      final wantedIds = <String>{};
+      for (final look in looks) {
+        if (look['primary'] == true || look['kind'] == 'default') continue;
+        final json = characterLookReferenceJson(
+          character: updatedCharacter,
+          look: look,
+        );
+        final lookId = json['id']?.toString() ?? '';
+        if (lookId.isEmpty) continue;
+        wantedIds.add(lookId);
+        final existingIndex = references.indexWhere((item) => item.id == lookId);
+        final generated = ProductionReferenceItem.fromJson(json);
+        if (existingIndex < 0) {
+          references.add(generated);
+        } else {
+          final existing = references[existingIndex];
+          references[existingIndex] = existing.copyWith(
+            label: generated.label,
+            category: generated.category,
+            description: generated.description,
+            metadata: {
+              ...existing.metadata,
+              ...generated.metadata,
+            },
+          );
+        }
+      }
+      references = [
+        for (final item in references)
+          if (!isCharacterLookItem(item) ||
+              (item.metadata['parent_character_id']?.toString() ?? '') !=
+                  characterId ||
+              wantedIds.contains(item.id) ||
+              referenceHasGeneratedImage(item))
+            item,
+      ];
+    }
+
+    final nextCharacters = updatedCharacters.values.toList();
+    return project.copyWith(
+      references: references,
+      seriesBible: {
+        ...project.seriesBible,
+        'characters': nextCharacters,
+        'character_bible': nextCharacters,
+      },
+    );
   }
 
   static Map<String, dynamic> _codexResult(Map<String, dynamic> output) {
@@ -3387,7 +4081,7 @@ class LocalProductionWorkspaceService {
     episodeScripts[scriptIndex] = lockedScript;
 
     final config = _microDramaConfigFromProject(project);
-    final creativePackage = _buildMicroDramaCreativePackage(config, project.id);
+    final creativePackage = _creativePackageFromProject(project);
     final takes = _productionTakesFromEpisodeScript(
       config,
       projectId: project.id,
@@ -3770,12 +4464,25 @@ class LocalProductionWorkspaceService {
         'name': config.protagonist,
         'role': 'Protagonista',
         'appearance':
-            'Presença central imediatamente reconhecível, silhueta limpa e expressiva em 9:16. Visual-base em ${config.visualStyle}, com figurino funcional ligado a ${config.background}; rosto, cabelo, proporções, acessórios e paleta devem permanecer constantes entre episódios.',
+            'Altura: 167cm\nProporção cabeça-corpo: 7.5 cabeças\nEtnia: Europeia do Sul (portuguesa)\nCompleição: esbelta com ombros firmes de quem carrega tabuleiros\nCabelo: castanho-escuro ondulado apanhado num coque baixo descontraído, madeixas soltas junto às têmporas\nTraços faciais: rosto oval, sobrancelhas arqueadas naturais, olhos castanho-âmbar expressivos, nariz fino e lábios cheios\nRoupa e adereços: jaqueta de chef branca de colarinho mandarim com botões pretos, avental de linho cinza-ardósia atado à cintura, calças pretas justas, ténis brancos de cozinha, relógio simples de pulseira de couro no pulso esquerdo',
+        'appearance_card': {
+          'height_cm': 167,
+          'head_body_ratio': '7.5 cabeças',
+          'ethnicity': 'Europeia do Sul (portuguesa)',
+          'build': 'esbelta com ombros firmes de quem carrega tabuleiros',
+          'hair':
+              'castanho-escuro ondulado apanhado num coque baixo descontraído, madeixas soltas junto às têmporas',
+          'facial_features':
+              'rosto oval, sobrancelhas arqueadas naturais, olhos castanho-âmbar expressivos, nariz fino e lábios cheios',
+          'clothing':
+              'jaqueta de chef branca de colarinho mandarim com botões pretos, avental de linho cinza-ardósia atado à cintura, calças pretas justas, ténis brancos de cozinha, relógio simples de pulseira de couro no pulso esquerdo',
+        },
         'personality': [
-          'determinado sob pressão',
-          'afetivamente contraditório',
-          'observador',
-          'capaz de decisões irreversíveis',
+          'protetora feroz',
+          'orgulhosa ao ponto de teimosa',
+          'língua afiada sob pressão',
+          'ternura escondida',
+          'workaholic',
         ],
         'dramatic_function':
             'Conduz a ação e responde progressivamente à pergunta central.',
@@ -3783,19 +4490,52 @@ class LocalProductionWorkspaceService {
         'fear': config.stakes,
         'arc':
             'Parte tentando preservar controle e termina obrigado a escolher diante do custo máximo.',
-        'looks': ['Aparência padrão', 'Estado íntimo', 'Confronto final'],
+        'looks': [
+          {
+            'id': 'default',
+            'label': 'Aparência padrão',
+            'kind': 'default',
+            'primary': true,
+            'wardrobe':
+                'jaqueta de chef branca de colarinho mandarim com botões pretos, avental de linho cinza-ardósia atado à cintura, calças pretas justas, ténis brancos de cozinha, relógio simples de pulseira de couro no pulso esquerdo',
+          },
+          {
+            'id': 'em-casa',
+            'label': 'fora de serviço em casa',
+            'kind': 'wardrobe',
+            'needed_because':
+                'cenas no espaço íntimo de ${config.protagonist}, longe da cozinha',
+            'wardrobe':
+                'camisola de malha creme de gola larga descaída num ombro, calças de ganga de cintura alta azul médio com barra dobrada, chinelos de feltro cinza, cabelo solto em ondas naturais sobre os ombros, brincos pequenos de argola dourada, caneca de chá na mão direita',
+            'prompt':
+                'Keep the character from image 1 unchanged. Change the outfit to: Camisola de malha creme de gola larga descaída num ombro, calças de ganga de cintura alta azul médio com barra dobrada, chinelos de feltro cinza, cabelo solto em ondas naturais sobre os ombros, brincos pequenos de argola dourada, caneca de chá na mão direita',
+          },
+        ],
       },
       {
         'reference_id': opposingForceId,
         'name': config.opposingForce,
         'role': 'Força oposta',
         'appearance':
-            'Visual de contraste com ${config.protagonist}: linhas, postura e paleta comunicam poder antes do diálogo. Aparência coerente com ${config.visualStyle}, incluindo um acessório-assinatura preservado em todos os episódios.',
+            'Altura: 174cm\nProporção cabeça-corpo: 8 cabeças\nEtnia: Europeia do Sul (portuguesa)\nCompleição: alta, ombros estreitos e postura de quem mede o quarto ao entrar\nCabelo: preto curto com risco lateral nítido, volume controlado, nunca solto na cozinha alheia\nTraços faciais: rosto alongado, maçãs altas, olhos cinza-verde frios, boca fina que quase não sorri em público\nRoupa e adereços: blazer preto de corte arquitectónico, camisa de seda marfim, calças de fato justas, sapatos rasos pretos, um anel de sinete no dedo mínimo direito',
+        'appearance_card': {
+          'height_cm': 174,
+          'head_body_ratio': '8 cabeças',
+          'ethnicity': 'Europeia do Sul (portuguesa)',
+          'build':
+              'alta, ombros estreitos e postura de quem mede o quarto ao entrar',
+          'hair':
+              'preto curto com risco lateral nítido, volume controlado, nunca solto na cozinha alheia',
+          'facial_features':
+              'rosto alongado, maçãs altas, olhos cinza-verde frios, boca fina que quase não sorri em público',
+          'clothing':
+              'blazer preto de corte arquitectónico, camisa de seda marfim, calças de fato justas, sapatos rasos pretos, um anel de sinete no dedo mínimo direito',
+        },
         'personality': [
-          'estratégico',
-          'controlador',
-          'persuasivo',
-          'perigoso quando perde vantagem',
+          'estratégica sem alarde',
+          'controla o tom da sala',
+          'persuasiva quando convém',
+          'perigosa quando perde vantagem',
         ],
         'dramatic_function':
             'Age por objetivo próprio, aprende com cada avanço e remove uma opção segura.',
@@ -3803,18 +4543,39 @@ class LocalProductionWorkspaceService {
         'fear': 'Perder poder, reputação ou o vínculo que usa como alavanca.',
         'arc':
             'Começa dominando as regras e termina exposto pela consequência das próprias contrajogadas.',
-        'looks': ['Aparência padrão', 'Imagem pública', 'Estado de ruptura'],
+        'looks': [
+          {
+            'id': 'default',
+            'label': 'Aparência padrão',
+            'kind': 'default',
+            'primary': true,
+            'wardrobe':
+                'blazer preto de corte arquitectónico, camisa de seda marfim, calças de fato justas, sapatos rasos pretos, um anel de sinete no dedo mínimo direito',
+          },
+        ],
       },
       {
         'reference_id': '$projectId-character-confidant',
         'name': supportingNames[0],
         'role': 'Confidente',
         'appearance':
-            'Coadjuvante de leitura calorosa e prática, com paleta complementar à de ${config.protagonist}. Figurino cotidiano, um detalhe visual memorável e expressão corporal direta.',
+            'Altura: 162cm\nProporção cabeça-corpo: 7.5 cabeças\nEtnia: Leste-asiática (coreana)\nCompleição: compacta e rápida, ombros de quem trabalha em pé\nCabelo: preto liso cortado num bob assimétrico que não se confunde com ${config.protagonist}\nTraços faciais: rosto em coração, óculos redondos de aro fino, olhos escuros atentos, boca pequena que denuncia logo a opinião\nRoupa e adereços: camisa oxford azul-clara arregaçada, avental curto de ganga, ténis gastos, pulseira de contas que nunca tira',
+        'appearance_card': {
+          'height_cm': 162,
+          'head_body_ratio': '7.5 cabeças',
+          'ethnicity': 'Leste-asiática (coreana)',
+          'build': 'compacta e rápida, ombros de quem trabalha em pé',
+          'hair':
+              'preto liso cortado num bob assimétrico que não se confunde com ${config.protagonist}',
+          'facial_features':
+              'rosto em coração, óculos redondos de aro fino, olhos escuros atentos, boca pequena que denuncia logo a opinião',
+          'clothing':
+              'camisa oxford azul-clara arregaçada, avental curto de ganga, ténis gastos, pulseira de contas que nunca tira',
+        },
         'personality': [
-          'leal',
-          'prático',
-          'franco',
+          'franco até doer',
+          'leal sem encobrir',
+          'prático no caos',
           'corajoso no momento crítico',
         ],
         'dramatic_function':
@@ -3822,40 +4583,88 @@ class LocalProductionWorkspaceService {
         'desire': 'Proteger o protagonista sem encobrir seus erros.',
         'fear': 'Ser usado como álibi para mais uma fuga.',
         'arc': 'De apoio discreto a testemunha ativa da verdade.',
-        'looks': ['Aparência padrão', 'Variação de crise'],
+        'looks': [
+          {
+            'id': 'default',
+            'label': 'Aparência padrão',
+            'kind': 'default',
+            'primary': true,
+          },
+        ],
       },
       {
         'reference_id': '$projectId-character-catalyst',
         'name': supportingNames[1],
         'role': 'Catalisador',
         'appearance':
-            'Figura ligada ao segredo de ${config.trope}, visual simples e emocionalmente legível em close. Um elemento de figurino conecta esta pessoa ao objeto narrativo principal.',
-        'personality': ['curioso', 'espontâneo', 'perceptivo', 'imprevisível'],
+            'Altura: 138cm\nProporção cabeça-corpo: 6.5 cabeças\nEtnia: Latino-americana (mexicana)\nCompleição: miúdo, energia de quem entra na conversa dos adultos sem pedir\nCabelo: castanho-escuro curto com franja rebelde\nTraços faciais: olhos pretos muito abertos, sardas no nariz, boca pronta a perguntar o que ninguém quer ouvir\nRoupa e adereços: camisola de escola com o crachá torto, mochila pequena sempre aberta, um objecto da premissa à vista num bolso',
+        'appearance_card': {
+          'height_cm': 138,
+          'head_body_ratio': '6.5 cabeças',
+          'ethnicity': 'Latino-americana (mexicana)',
+          'build': 'miúdo, energia de quem entra na conversa dos adultos sem pedir',
+          'hair': 'castanho-escuro curto com franja rebelde',
+          'facial_features':
+              'olhos pretos muito abertos, sardas no nariz, boca pronta a perguntar o que ninguém quer ouvir',
+          'clothing':
+              'camisola de escola com o crachá torto, mochila pequena sempre aberta, um objecto da premissa à vista num bolso',
+        },
+        'personality': [
+          'pergunta o interdito',
+          'espontâneo',
+          'perceptivo demais',
+          'imprevisível',
+        ],
         'dramatic_function':
             'Torna a premissa visível e dispara revelações sem depender de exposição verbal.',
         'desire': 'Entender o vínculo que os adultos tentam esconder.',
         'fear': 'Ser abandonado quando a verdade vier à tona.',
         'arc': 'De peça protegida do segredo a agente que exige uma resposta.',
-        'looks': ['Aparência padrão'],
+        'looks': [
+          {
+            'id': 'default',
+            'label': 'Aparência padrão',
+            'kind': 'default',
+            'primary': true,
+          },
+        ],
       },
       {
         'reference_id': '$projectId-character-wildcard',
         'name': supportingNames[2],
         'role': 'Aliado ambíguo',
         'appearance':
-            'Presença institucional ou social associada a ${config.background}; composição visual sóbria, adereço funcional e postura capaz de mudar de lado sem perder coerência.',
+            'Altura: 180cm\nProporção cabeça-corpo: 8 cabeças\nEtnia: Africana ocidental (nigeriana)\nCompleição: alta e sóbria, mãos que tratam documentos como prova\nCabelo: pretos curtos bem alinhados, um fio grisalho na têmpora\nTraços faciais: face alongada, olhar que mede a sala antes de falar, um anel institucional que não remove\nRoupa e adereços: casaco de lã antracite, camisa branca, pasta fina de couro, crachá de ${config.background} no bolso interior',
+        'appearance_card': {
+          'height_cm': 180,
+          'head_body_ratio': '8 cabeças',
+          'ethnicity': 'Africana ocidental (nigeriana)',
+          'build': 'alta e sóbria, mãos que tratam documentos como prova',
+          'hair': 'pretos curtos bem alinhados, um fio grisalho na têmpora',
+          'facial_features':
+              'face alongada, olhar que mede a sala antes de falar, um anel institucional que não remove',
+          'clothing':
+              'casaco de lã antracite, camisa branca, pasta fina de couro, crachá de ${config.background} no bolso interior',
+        },
         'personality': [
-          'cauteloso',
+          'cauteloso com provas',
           'bem informado',
-          'ambíguo',
-          'sensível a provas',
+          'ambíguo até decidir',
+          'sensível a consequências públicas',
         ],
         'dramatic_function':
             'Valida consequências externas e impede que o clímax dependa apenas da palavra dos protagonistas.',
         'desire': 'Sair do conflito com posição e consciência preservadas.',
         'fear': 'Ser responsabilizado pela decisão errada.',
         'arc': 'Da neutralidade conveniente a uma tomada de posição pública.',
-        'looks': ['Aparência padrão', 'Variação formal'],
+        'looks': [
+          {
+            'id': 'default',
+            'label': 'Aparência padrão',
+            'kind': 'default',
+            'primary': true,
+          },
+        ],
       },
     ];
 
@@ -4052,9 +4861,13 @@ class LocalProductionWorkspaceService {
 
   static List<String> _microDramaSupportingNames(String language) {
     final normalized = language.toLowerCase();
-    if (normalized.contains('english')) return const ['Maya', 'Theo', 'Morgan'];
-    if (normalized.contains('español')) return const ['Lucía', 'Teo', 'Álex'];
-    return const ['Lia', 'Theo', 'Alex'];
+    if (normalized.contains('english')) {
+      return const ['Sora Park', 'Mateo Ruiz', 'Amara Okoye'];
+    }
+    if (normalized.contains('español')) {
+      return const ['Sora Kim', 'Mateo Ruiz', 'Amara Okoye'];
+    }
+    return const ['Sora Kim', 'Mateo Ruiz', 'Amara Okoye'];
   }
 
   static String? _nonEmptyHookText(dynamic value) {
@@ -4465,6 +5278,11 @@ class LocalProductionWorkspaceService {
       final counterId = usesSupporting ? supportingId : opposingId;
       final cast = [config.protagonist, counterName];
       final castIds = [protagonistId, counterId];
+      final sceneStory = sceneIndex == 0
+          ? '${card['cold_open']} ${card['stage_goal']}'
+          : sceneIndex == sceneCount - 1
+          ? '${card['peak_action']} ${episode.cliffhanger}'
+          : episode.summary;
       final shots = <Map<String, dynamic>>[];
 
       for (
@@ -4605,11 +5423,13 @@ class LocalProductionWorkspaceService {
             sceneTitles[sceneIndex.clamp(0, sceneTitles.length - 1).toInt()],
         'cast_ids': castIds,
         'cast': cast,
-        'story': sceneIndex == 0
-            ? '${card['cold_open']} ${card['stage_goal']}'
-            : sceneIndex == sceneCount - 1
-            ? '${card['peak_action']} ${episode.cliffhanger}'
-            : episode.summary,
+        'cast_looks': _seedCastLooksForScene(
+          characters: characters,
+          castIds: castIds,
+          location: environment['name'] as String,
+          story: sceneStory,
+        ),
+        'story': sceneStory,
         'shots': shots,
         'status': 'DRAFT_REVIEW_REQUIRED',
       });
@@ -4663,6 +5483,478 @@ class LocalProductionWorkspaceService {
     };
   }
 
+  static _MicroDramaCreativePackage _creativePackageFromProject(
+    ProductionProject project,
+  ) {
+    final bible = project.seriesBible;
+    final characters = _normalizeSheetEntries(
+      _asObjectList(bible['characters'] ?? bible['character_bible']),
+    );
+    final environments = _normalizeSheetEntries(
+      _asObjectList(bible['environments'] ?? bible['location_bible']),
+    );
+    final props = _normalizeSheetEntries(
+      _asObjectList(bible['props'] ?? bible['object_bible']),
+    );
+    final generated = characters.isEmpty || environments.isEmpty || props.isEmpty
+        ? _buildMicroDramaCreativePackage(
+            _microDramaConfigFromProject(project),
+            project.id,
+          )
+        : null;
+    return _MicroDramaCreativePackage(
+      characters: characters.isNotEmpty
+          ? characters
+          : generated!.characters,
+      environments: environments.isNotEmpty
+          ? environments
+          : generated!.environments,
+      props: props.isNotEmpty ? props : generated!.props,
+      references: project.references.isNotEmpty
+          ? project.references
+          : generated?.references ?? const [],
+    );
+  }
+
+  static ProductionReferenceItem? _matchStoryReference(
+    List<ProductionReferenceItem> references, {
+    String? id,
+    String? name,
+    String? family,
+  }) {
+    final wantedId = id?.trim() ?? '';
+    final wantedName = name?.trim() ?? '';
+    bool matchesFamily(ProductionReferenceItem item) =>
+        family == null || _storyReferenceFamily(item) == family;
+
+    for (final item in references) {
+      if (!matchesFamily(item)) continue;
+      if (wantedId.isNotEmpty && _sameReferenceKey(item.id, wantedId)) {
+        return item;
+      }
+    }
+    for (final item in references) {
+      if (isCharacterLookItem(item)) continue;
+      if (!matchesFamily(item)) continue;
+      if (wantedName.isNotEmpty && _sameReferenceKey(item.label, wantedName)) {
+        return item;
+      }
+      if (wantedId.isNotEmpty && _sameReferenceKey(item.label, wantedId)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  static String _characterIdentityKey(ProductionReferenceItem reference) {
+    if (isCharacterLookItem(reference)) {
+      final parent =
+          (reference.metadata['parent_character_id'] ??
+                  reference.metadata['parentId'] ??
+                  '')
+              .toString()
+              .trim();
+      if (parent.isNotEmpty) return parent;
+    }
+    return reference.id;
+  }
+
+  static Map<String, String> _seedCastLooksForScene({
+    required List<Map<String, dynamic>> characters,
+    required List<String> castIds,
+    required String location,
+    required String story,
+  }) {
+    final haystack = '$location $story';
+    final looks = <String, String>{};
+    for (final id in castIds) {
+      Map<String, dynamic>? character;
+      for (final item in characters) {
+        if (_storySheetEntryId(item) == id) {
+          character = item;
+          break;
+        }
+      }
+      if (character == null) continue;
+      final lookId = resolveSceneCharacterLookId(
+        character: character,
+        haystack: haystack,
+      );
+      if (lookId.isNotEmpty && lookId != 'default') {
+        looks[id] = lookId;
+      }
+    }
+    return looks;
+  }
+
+  static ProductionReferenceItem _characterLookForShot({
+    required ProductionReferenceItem identity,
+    required Map<String, dynamic> scene,
+    required Map<String, dynamic> shot,
+    required List<Map<String, dynamic>> characters,
+    required List<ProductionReferenceItem> references,
+    String extraHaystack = '',
+  }) {
+    Map<String, dynamic>? character;
+    for (final item in characters) {
+      if (_storySheetEntryId(item) == identity.id ||
+          _sameReferenceKey(
+            (item['name'] ?? '').toString(),
+            identity.label,
+          )) {
+        character = item;
+        break;
+      }
+    }
+    character ??= Map<String, dynamic>.from(identity.metadata);
+    if (_storySheetEntryId(character).isEmpty) {
+      character = {
+        ...character,
+        'reference_id': identity.id,
+        'name': identity.label,
+      };
+    }
+    final haystack = [
+      scene['title'],
+      scene['location'],
+      scene['story'],
+      scene['dramatic_beat'],
+      shot['title'],
+      shot['final_state'],
+      extraHaystack,
+      _shotReferenceHaystack(scene, shot),
+    ].join(' \n ');
+    final lookId = resolveSceneCharacterLookId(
+      character: character,
+      haystack: haystack,
+      explicitLookId: explicitSceneLookId(
+        characterId: identity.id,
+        characterName: identity.label,
+        scene: scene,
+        shot: shot,
+      ),
+    );
+    if (lookId.isEmpty || lookId == 'default') return identity;
+    Map<String, dynamic>? look;
+    for (final item in normalizeCharacterLooks(character)) {
+      if (item['id']?.toString() == lookId) {
+        look = item;
+        break;
+      }
+    }
+    if (look == null || look['primary'] == true) return identity;
+    final lookRefId = characterLookReferenceId(identity.id, look);
+    final lookRef = _matchStoryReference(
+      references,
+      id: lookRefId,
+      family: 'personagem',
+    );
+    if (lookRef != null && referenceHasGeneratedImage(lookRef)) {
+      return lookRef;
+    }
+    return identity;
+  }
+
+  static String _shotReferenceHaystack(
+    Map<String, dynamic> scene,
+    Map<String, dynamic> shot,
+  ) {
+    final parts = <String>[
+      scene['title']?.toString() ?? '',
+      scene['story']?.toString() ?? '',
+      scene['location']?.toString() ?? '',
+      shot['title']?.toString() ?? '',
+      shot['final_state']?.toString() ?? '',
+    ];
+    for (final row in _asObjectList(shot['rows'])) {
+      parts.add(row['text']?.toString() ?? '');
+      parts.add(row['provider_text']?.toString() ?? '');
+      parts.add(row['speaker']?.toString() ?? '');
+    }
+    for (final name in scene['cast'] as List<dynamic>? ?? const []) {
+      parts.add(name.toString());
+    }
+    return parts.join(' \n ');
+  }
+
+  static List<String> _referenceIdsForLockedShot({
+    required Map<String, dynamic> scene,
+    required Map<String, dynamic> shot,
+    required _MicroDramaCreativePackage creativePackage,
+  }) {
+    final pool = creativePackage.references
+        .where(
+          (item) => item.canonical && isStoryMasterReference(item),
+        )
+        .toList();
+    final lookup = pool.isNotEmpty ? pool : creativePackage.references;
+    final ordered = <ProductionReferenceItem>[];
+    final seen = <String>{};
+
+    void add(ProductionReferenceItem? item) {
+      if (item == null || !seen.add(item.id)) return;
+      ordered.add(item);
+    }
+
+    ProductionReferenceItem? match({String? id, String? name, required String family}) {
+      return _matchStoryReference(
+        lookup,
+        id: id,
+        name: name,
+        family: family,
+      );
+    }
+
+    ProductionReferenceItem? characterFor({String? id, String? name}) {
+      final identity = match(id: id, name: name, family: 'personagem');
+      if (identity == null) return null;
+      return _characterLookForShot(
+        identity: identity,
+        scene: scene,
+        shot: shot,
+        characters: creativePackage.characters,
+        references: lookup,
+      );
+    }
+
+    for (final id in scene['cast_ids'] as List<dynamic>? ?? const []) {
+      add(characterFor(id: id.toString()));
+    }
+    for (final name in scene['cast'] as List<dynamic>? ?? const []) {
+      add(characterFor(name: name.toString()));
+    }
+    for (final row in _asObjectList(shot['rows'])) {
+      if (row['type'] != 'dialogue') continue;
+      add(characterFor(name: row['speaker']?.toString()));
+    }
+
+    add(
+      match(
+        id: scene['location_id']?.toString(),
+        name: scene['location']?.toString(),
+        family: 'ambiente',
+      ),
+    );
+
+    final haystack = _shotReferenceHaystack(scene, shot);
+    for (final prop in creativePackage.props) {
+      final name = (prop['name'] ?? '').toString();
+      final id = _storySheetEntryId(prop);
+      if (!_haystackMentions(haystack, name) && !_haystackMentions(haystack, id)) {
+        continue;
+      }
+      add(match(id: id, name: name, family: 'objeto'));
+    }
+    for (final reference in lookup) {
+      if (_storyReferenceFamily(reference) != 'objeto') continue;
+      if (_haystackMentions(haystack, reference.label)) {
+        add(reference);
+      }
+    }
+
+    return ordered.map((item) => item.id).toList();
+  }
+
+  static int? _episodeNumberFromTake(ProductionTakeItem take) {
+    final match = RegExp(
+      r'-ep(\d+)-take',
+      caseSensitive: false,
+    ).firstMatch(take.id);
+    return match == null ? null : int.tryParse(match.group(1)!);
+  }
+
+  static ({Map<String, dynamic> scene, Map<String, dynamic> shot})?
+  _scriptShotForTake(
+    ProductionProject project,
+    ProductionTakeItem take, {
+    int? episodeNumber,
+  }) {
+    final wanted = episodeNumber ?? _episodeNumberFromTake(take);
+    final scripts = _asObjectList(project.seriesBible['episode_scripts']);
+    Map<String, dynamic>? script;
+    for (final item in scripts) {
+      if (wanted == null || _asEpisodeNumber(item['episode']) == wanted) {
+        script = item;
+        break;
+      }
+    }
+    script ??= scripts.isEmpty ? null : scripts.first;
+    if (script == null) return null;
+    final scenes = _asObjectList(script['scenes']);
+    final titleMatch = RegExp(
+      r'Cena\s+(\d+)\s*[·•]\s*Shot\s+(\d+)',
+      caseSensitive: false,
+    ).firstMatch(take.title);
+
+    var globalNumber = 0;
+    ({Map<String, dynamic> scene, Map<String, dynamic> shot})? byNumber;
+    ({Map<String, dynamic> scene, Map<String, dynamic> shot})? byTitle;
+    for (final scene in scenes) {
+      for (final shot in _asObjectList(scene['shots'])) {
+        globalNumber += 1;
+        final pair = (scene: scene, shot: shot);
+        if (globalNumber == take.number) byNumber = pair;
+        if (titleMatch != null &&
+            scene['scene']?.toString() == titleMatch.group(1) &&
+            shot['number']?.toString() == titleMatch.group(2)) {
+          byTitle = pair;
+        }
+      }
+    }
+    return byTitle ?? byNumber;
+  }
+
+  static List<ProductionReferenceItem> _requiredStoryReferencesForTake(
+    ProductionProject project,
+    ProductionTakeItem take, {
+    int? episodeNumber,
+  }) {
+    final package = _creativePackageFromProject(project);
+    final shot = _scriptShotForTake(
+      project,
+      take,
+      episodeNumber: episodeNumber,
+    );
+    final ids = shot != null
+        ? _referenceIdsForLockedShot(
+            scene: shot.scene,
+            shot: shot.shot,
+            creativePackage: package,
+          )
+        : _referenceIdsInferredFromTake(take, package);
+    return _referencesInDeclaredOrder(package.references, ids);
+  }
+
+  static List<String> _referenceIdsInferredFromTake(
+    ProductionTakeItem take,
+    _MicroDramaCreativePackage package,
+  ) {
+    final haystack = [
+      take.title,
+      take.aiShortCore,
+      take.notes,
+    ].join(' \n ');
+    final ordered = <ProductionReferenceItem>[];
+    final seen = <String>{};
+
+    void add(ProductionReferenceItem? item) {
+      if (item == null || !seen.add(item.id)) return;
+      ordered.add(item);
+    }
+
+    ProductionReferenceItem? characterFor({String? id, String? name}) {
+      final identity = _matchStoryReference(
+        package.references,
+        id: id,
+        name: name,
+        family: 'personagem',
+      );
+      if (identity == null) return null;
+      return _characterLookForShot(
+        identity: identity,
+        scene: {
+          'title': take.title,
+          'story': take.aiShortCore,
+          'location': '',
+          'cast_looks': const {},
+        },
+        shot: const {},
+        characters: package.characters,
+        references: package.references,
+        extraHaystack: haystack,
+      );
+    }
+
+    final present = RegExp(
+      r'(.+?) are already physically present in (.+?) at frame 1',
+      caseSensitive: false,
+    ).firstMatch(take.aiShortCore);
+    if (present != null) {
+      for (final name in present.group(1)!.split(RegExp(r'\s+and\s+'))) {
+        add(characterFor(name: name));
+      }
+      add(
+        _matchStoryReference(
+          package.references,
+          name: present.group(2),
+          family: 'ambiente',
+        ),
+      );
+    }
+
+    for (final match in RegExp(
+      r'From \d+ to \d+ seconds, ([^,]+),',
+      caseSensitive: false,
+    ).allMatches(take.aiShortCore)) {
+      add(characterFor(name: match.group(1)));
+    }
+
+    for (final reference in package.references) {
+      if (_storyReferenceFamily(reference) != 'objeto') continue;
+      if (_haystackMentions(haystack, reference.label)) {
+        add(reference);
+      }
+    }
+    return ordered.map((item) => item.id).toList();
+  }
+
+  static List<ProductionReferenceItem> _referencesInDeclaredOrder(
+    List<ProductionReferenceItem> pool,
+    List<String> ids,
+  ) {
+    final result = <ProductionReferenceItem>[];
+    final seen = <String>{};
+    for (final id in ids) {
+      final item = _matchStoryReference(pool, id: id);
+      if (item == null || !seen.add(item.id)) continue;
+      result.add(item);
+    }
+    return result;
+  }
+
+  static final _referenceIndexContractPattern = RegExp(
+    r'^REFERENCE INDEX CONTRACT — DO NOT REORDER\n(?:@Image\d+[^\n]*\n?)*\n*',
+  );
+
+  static String _stripReferenceIndexContract(String prompt) {
+    return prompt.replaceFirst(_referenceIndexContractPattern, '').trimLeft();
+  }
+
+  static String _referenceIndexContractLines(
+    List<ProductionReferenceItem> references,
+  ) {
+    if (references.isEmpty) return '';
+    final lines = <String>[
+      for (var index = 0; index < references.length; index++)
+        _referenceIndexLine(references[index], index + 1),
+    ];
+    return 'REFERENCE INDEX CONTRACT — DO NOT REORDER\n${lines.join('\n')}';
+  }
+
+  static String _referenceIndexLine(
+    ProductionReferenceItem reference,
+    int index,
+  ) {
+    final family = _storyReferenceFamily(reference);
+    if (family == 'personagem') {
+      return '@Image$index = Use ${reference.label} from this image.';
+    }
+    if (family == 'ambiente') {
+      return '@Image$index = ${reference.label} LOCATION MASTER; use only its established geometry, materials and motivated lighting.';
+    }
+    return '@Image$index = ${reference.label} PROP MASTER; preserve its design, condition and scale without duplication.';
+  }
+
+  static String _withReferenceIndexContract(
+    String prompt,
+    List<ProductionReferenceItem> references,
+  ) {
+    final body = _stripReferenceIndexContract(prompt);
+    final contract = _referenceIndexContractLines(references);
+    if (contract.isEmpty) return body;
+    return '$contract\n\n$body';
+  }
+
   static List<ProductionTakeItem> _productionTakesFromEpisodeScript(
     MicroDramaProjectConfig config, {
     required String projectId,
@@ -4681,7 +5973,6 @@ class LocalProductionWorkspaceService {
       dialogueMaster['voices'] as Map? ?? const {},
     );
     final takes = <ProductionTakeItem>[];
-    final propId = creativePackage.props.first['reference_id'] as String;
     var globalTakeNumber = 1;
 
     for (final scene in scenes) {
@@ -4697,13 +5988,11 @@ class LocalProductionWorkspaceService {
         final dialogueRows = rows
             .where((row) => row['type'] == 'dialogue')
             .toList();
-        final referenceIds = <String>{
-          ...(scene['cast_ids'] as List<dynamic>? ?? const []).map(
-            (item) => item.toString(),
-          ),
-          if (scene['location_id'] != null) scene['location_id'].toString(),
-          propId,
-        }.toList();
+        final referenceIds = _referenceIdsForLockedShot(
+          scene: scene,
+          shot: shot,
+          creativePackage: creativePackage,
+        );
         final aiShortCore = _buildMicroDramaAiShortCore(
           scene: scene,
           shot: shot,
@@ -5085,7 +6374,7 @@ class LocalProductionWorkspaceService {
       List<Map<String, dynamic>> values,
       String referenceId,
     ) => values.firstWhere(
-      (item) => item['reference_id'] == referenceId,
+      (item) => _sheetEntryMatches(item, referenceId),
       orElse: () => const <String, dynamic>{},
     );
 
@@ -5112,10 +6401,16 @@ class LocalProductionWorkspaceService {
     final cast = (scene['cast'] as List<dynamic>? ?? const [])
         .map((item) => item.toString())
         .toList();
-    final environment = findReference(
+    var environment = findReference(
       creativePackage.environments,
       scene['location_id']?.toString() ?? '',
     );
+    if (environment.isEmpty) {
+      environment = findReference(
+        creativePackage.environments,
+        scene['location']?.toString() ?? '',
+      );
+    }
     final providerFinalState = rows.isNotEmpty
         ? rows.last['provider_text']?.toString() ??
               shot['final_state']?.toString() ??
@@ -5139,37 +6434,11 @@ class LocalProductionWorkspaceService {
     required _MicroDramaCreativePackage creativePackage,
     required String aiShortCore,
   }) {
-    Map<String, dynamic> findReference(
-      List<Map<String, dynamic>> values,
-      String referenceId,
-    ) => values.firstWhere(
-      (item) => item['reference_id'] == referenceId,
-      orElse: () => const <String, dynamic>{},
+    final attached = _referencesInDeclaredOrder(
+      creativePackage.references,
+      referenceIds,
     );
-
-    final referenceLines = <String>[];
-    for (var index = 0; index < referenceIds.length; index++) {
-      final referenceId = referenceIds[index];
-      final character = findReference(creativePackage.characters, referenceId);
-      final environment = findReference(
-        creativePackage.environments,
-        referenceId,
-      );
-      final prop = findReference(creativePackage.props, referenceId);
-      if (character.isNotEmpty) {
-        referenceLines.add(
-          '@Image${index + 1} = Use ${character['name']} from this image.',
-        );
-      } else if (environment.isNotEmpty) {
-        referenceLines.add(
-          '@Image${index + 1} = ${environment['name']} LOCATION MASTER; use only its established geometry, materials and motivated lighting.',
-        );
-      } else if (prop.isNotEmpty) {
-        referenceLines.add(
-          '@Image${index + 1} = ${prop['name']} PROP MASTER; preserve its design, condition and scale without duplication.',
-        );
-      }
-    }
+    final contract = _referenceIndexContractLines(attached);
 
     final activeSpeakers = rows
         .where((row) => row['type'] == 'dialogue')
@@ -5193,8 +6462,7 @@ class LocalProductionWorkspaceService {
     final preset = _microDramaStylePreset(config.visualStyle);
 
     return <String>[
-      if (referenceLines.isNotEmpty)
-        'REFERENCE INDEX CONTRACT — DO NOT REORDER\n${referenceLines.join('\n')}',
+      if (contract.isNotEmpty) contract,
       aiShortCore,
       if (voiceBlocks.isNotEmpty) voiceBlocks,
       if (performances.isNotEmpty)
@@ -5947,9 +7215,7 @@ class LocalProductionWorkspaceService {
             label: asset.label,
             category: asset.category,
             publicUrl: asset.publicUrl,
-            description: _humanReadableText(asset.metadata).isNotEmpty
-                ? _humanReadableText(asset.metadata)
-                : _stringify(asset.metadata),
+            description: _humanReadableText(asset.metadata),
             canonical:
                 _stringify(asset.metadata).contains('LOCATION_MASTER') ||
                 _stringify(asset.metadata).contains('WORLD_ENVIRONMENT_MASTER'),

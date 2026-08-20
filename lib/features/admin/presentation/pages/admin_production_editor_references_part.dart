@@ -5,12 +5,12 @@ extension _AdminProductionEditorReferencesExtension
   Widget _buildReferences({
     Set<String>? categories,
     String title = 'Pacote visual canônico',
-    String description =
-        'Identidades, locais, objetos e frames formam contratos visuais separados. Preserve os masters canônicos durante toda a produção.',
+    String description = '',
     String emptyLabel =
         'Adicione identidades, locais, objetos ou frames de continuidade.',
     String addLabel = 'Adicionar referência',
     String initialCategory = 'CHARACTER_REFERENCE',
+    String sheetFamily = 'all',
   }) {
     final project = _project!;
     final references = categories == null
@@ -18,14 +18,9 @@ extension _AdminProductionEditorReferencesExtension
         : project.references
               .where((reference) => categories.contains(reference.category))
               .toList();
-    final byCategory = <String, int>{};
-    for (final reference in references) {
-      byCategory.update(
-        reference.category,
-        (value) => value + 1,
-        ifAbsent: () => 1,
-      );
-    }
+    final missingImageCount = _workspaceService
+        .automaticReferenceTargets(project, family: sheetFamily)
+        .length;
     return ListView(
       key: PageStorageKey('production-references-$title'),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 110),
@@ -33,53 +28,86 @@ extension _AdminProductionEditorReferencesExtension
         _panel(
           title: title,
           icon: Icons.collections_bookmark_outlined,
-          trailing: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _isAnyGenerationBusy
-                    ? null
-                    : _showAutomaticPreparationDialog,
-                icon: const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Gerar fichas com Codex'),
-              ),
-              FilledButton.icon(
-                onPressed: _isAnyGenerationBusy
-                    ? null
-                    : () => _showAddReferenceDialog(
-                        initialCategory: initialCategory,
-                      ),
-                icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                label: Text(addLabel),
-              ),
-            ],
+          trailing: FilledButton.icon(
+            onPressed: _isAnyGenerationBusy
+                ? null
+                : () => _showAddReferenceDialog(
+                    initialCategory: initialCategory,
+                  ),
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+            label: Text(addLabel),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                description,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  height: 1.4,
+              if (description.isNotEmpty) ...[
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
+                const SizedBox(height: 14),
+              ],
+              _buildReferenceRegenerateActions(
+                sheetFamily: sheetFamily,
+                missingImageCount: missingImageCount,
               ),
               const SizedBox(height: 12),
+              if (_isReferenceImageBusy) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: _activeReferenceImageProgress / 100,
+                    minHeight: 5,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  _activeReferenceImageMessage ??
+                      'Gerando imagens na tarefa do Codex...',
+                  style: const TextStyle(
+                    color: AppColors.primaryLight,
+                    fontSize: 11,
+                  ),
+                ),
+                if (_activeCoverImageStatus != null) ...[
+                  const SizedBox(height: 8),
+                  _pill(
+                    switch (_activeCoverImageStatus) {
+                      'GENERATING' => 'Gerando arte da capa da série',
+                      'UPLOADING' => 'Enviando arte da capa da série',
+                      'COMPLETED' => 'Capa da série pronta',
+                      'FAILED' => 'Capa da série falhou',
+                      _ => 'Capa da série na fila',
+                    },
+                    _activeCoverImageStatus == 'FAILED'
+                        ? AppColors.error
+                        : _activeCoverImageStatus == 'COMPLETED'
+                        ? AppColors.success
+                        : AppColors.primaryLight,
+                  ),
+                ],
+                if (_referenceImageBridgeNeedsRetry) ...[
+                  const SizedBox(height: 9),
+                  OutlinedButton.icon(
+                    onPressed: _isAnyGenerationBusy
+                        ? null
+                        : _retryOpeningReferenceImageJob,
+                    icon: const Icon(Icons.refresh, size: 17),
+                    label: const Text('Tentar abrir o Codex novamente'),
+                  ),
+                ],
+                const SizedBox(height: 12),
+              ],
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
                   _pill('${references.length} fichas'),
-                  _pill(
-                    '${references.where((item) => item.canonical).length} canônicas',
-                    AppColors.success,
-                  ),
-                  ...byCategory.entries.map(
-                    (entry) => _pill(
-                      '${entry.value} ${_referenceCategoryLabel(entry.key)}',
-                    ),
-                  ),
+                  if (missingImageCount > 0)
+                    _pill('$missingImageCount sem imagem', AppColors.warning),
                 ],
               ),
             ],
@@ -101,7 +129,9 @@ extension _AdminProductionEditorReferencesExtension
             ),
           )
         else
-          LayoutBuilder(
+          sheetFamily == 'characters'
+              ? _buildCharacterBible(references)
+              : LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 1120
                   ? 4
@@ -119,7 +149,10 @@ extension _AdminProductionEditorReferencesExtension
                     .map(
                       (reference) => SizedBox(
                         width: cardWidth,
-                        child: _buildReferenceCard(reference),
+                        child: _buildReferenceCard(
+                          reference,
+                          gallery: references,
+                        ),
                       ),
                     )
                     .toList(),
@@ -130,7 +163,122 @@ extension _AdminProductionEditorReferencesExtension
     );
   }
 
-  Widget _buildReferenceCard(ProductionReferenceItem reference) {
+  Widget _buildReferenceRegenerateActions({
+    required String sheetFamily,
+    required int missingImageCount,
+  }) {
+    final busy = _isAnyGenerationBusy || _isReferenceImageBusy;
+    final familyNoun = switch (sheetFamily) {
+      'characters' => 'personagens',
+      'locations' => 'ambientes',
+      'props' => 'adereços',
+      _ => 'fichas',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (sheetFamily != 'all')
+              _referenceCombinedActionButton(
+                emphasized: true,
+                busy: busy,
+                icon: Icons.auto_awesome,
+                title: 'Todos os $familyNoun',
+                subtitle: 'Escolha fichas, imagens ou os dois',
+                onPressed: () => _generateSheetsThenImagesWithCodex(
+                  family: sheetFamily,
+                ),
+              ),
+            _referenceCombinedActionButton(
+              emphasized: sheetFamily == 'all',
+              busy: busy,
+              icon: Icons.collections_bookmark_outlined,
+              title: 'Obra inteira',
+              subtitle: 'Escolha fichas, imagens ou os dois',
+              onPressed: () =>
+                  _generateSheetsThenImagesWithCodex(family: 'all'),
+            ),
+            if (missingImageCount > 0)
+              OutlinedButton.icon(
+                onPressed: busy
+                    ? null
+                    : () => _generateReferenceImagesWithCodex(
+                        family: sheetFamily,
+                      ),
+                icon: _isReferenceImageBusy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.image_outlined, size: 18),
+                label: Text(
+                  _isReferenceImageBusy
+                      ? 'Codex · $_activeReferenceImageProgress%'
+                      : _referenceImageRetryAvailable
+                      ? 'Tentar imagens faltantes ($missingImageCount)'
+                      : 'Só imagens faltantes ($missingImageCount)',
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _referenceCombinedActionButton({
+    required bool emphasized,
+    required bool busy,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onPressed,
+  }) {
+    final label = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title),
+        Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w400,
+            height: 1.2,
+            color: emphasized
+                ? Colors.white.withAlpha(210)
+                : AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+    if (emphasized) {
+      return FilledButton.icon(
+        onPressed: busy ? null : onPressed,
+        icon: Icon(icon, size: 18),
+        label: label,
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: busy ? null : onPressed,
+      icon: Icon(icon, size: 18),
+      label: label,
+    );
+  }
+
+  Widget _buildReferenceCard(
+    ProductionReferenceItem reference, {
+    List<ProductionReferenceItem>? gallery,
+  }) {
+    final isGenerating = _referenceImageIdsInProgress.contains(reference.id);
+    final canGenerate =
+        LocalProductionWorkspaceService.isStoryMasterReference(reference);
+    final hasImage = LocalProductionWorkspaceService.referenceHasGeneratedImage(
+      reference,
+    );
     final usage = _project!.episodes
         .expand((episode) => episode.takes)
         .where((take) => take.referenceIds.contains(reference.id))
@@ -143,12 +291,14 @@ extension _AdminProductionEditorReferencesExtension
                 const <dynamic>[])
             .map((item) => item.toString())
             .where((item) => item.trim().isNotEmpty)
+            .where((item) => !item.trim().startsWith('{'))
             .take(4)
             .toList();
-    final storyFunction =
-        metadata['dramatic_function']?.toString() ??
-        metadata['story_function']?.toString() ??
-        metadata['visual_contract']?.toString();
+    final summary = _workspaceService.referenceDisplayDescription(
+      _project!,
+      reference,
+    );
+    final storyNote = reference.storyNote;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -168,13 +318,18 @@ extension _AdminProductionEditorReferencesExtension
             child: Stack(
               fit: StackFit.expand,
               children: [
-                _referencePreview(reference),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Color(0xC9000000)],
+                _referencePreview(
+                  reference,
+                  gallery: gallery,
+                ),
+                const IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, Color(0xC9000000)],
+                      ),
                     ),
                   ),
                 ),
@@ -182,19 +337,53 @@ extension _AdminProductionEditorReferencesExtension
                   Positioned(
                     top: 9,
                     left: 9,
-                    child: _pill('MASTER', AppColors.primaryLight),
+                    child: IgnorePointer(
+                      child: _pill('MASTER', AppColors.primaryLight),
+                    ),
+                  ),
+                if (hasImage)
+                  const Positioned(
+                    top: 9,
+                    right: 9,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Color(0x99000000),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.zoom_in,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (isGenerating)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: Colors.black.withAlpha(120),
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 3),
+                      ),
+                    ),
                   ),
                 Positioned(
                   left: 12,
                   right: 12,
                   bottom: 10,
-                  child: Text(
-                    reference.label,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                  child: IgnorePointer(
+                    child: Text(
+                      reference.label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -215,19 +404,29 @@ extension _AdminProductionEditorReferencesExtension
                     _pill('$usage beats'),
                   ],
                 ),
-                if (reference.description.isNotEmpty) ...[
-                  const SizedBox(height: 9),
-                  Text(
-                    reference.description,
-                    maxLines: 6,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                      height: 1.35,
-                    ),
+                const SizedBox(height: 9),
+                Text(
+                  reference.label,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  summary.isNotEmpty
+                      ? summary
+                      : 'Sem descrição textual nesta ficha.',
+                  maxLines: 8,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: summary.isNotEmpty
+                        ? AppColors.textSecondary
+                        : AppColors.textTertiary,
+                    fontSize: 11,
+                    height: 1.4,
+                  ),
+                ),
                 if (traits.isNotEmpty) ...[
                   const SizedBox(height: 10),
                   Wrap(
@@ -236,7 +435,7 @@ extension _AdminProductionEditorReferencesExtension
                     children: traits.map(_referenceTag).toList(),
                   ),
                 ],
-                if (storyFunction?.trim().isNotEmpty == true) ...[
+                if (storyNote.isNotEmpty) ...[
                   const SizedBox(height: 11),
                   Container(
                     width: double.infinity,
@@ -246,7 +445,7 @@ extension _AdminProductionEditorReferencesExtension
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Text(
-                      storyFunction!,
+                      storyNote,
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, height: 1.35),
@@ -256,13 +455,67 @@ extension _AdminProductionEditorReferencesExtension
                 if (reference.publicUrl?.isNotEmpty != true &&
                     reference.assetPath?.isNotEmpty != true) ...[
                   const SizedBox(height: 12),
-                  const Text(
-                    'Imagem não gerada automaticamente. Anexe uma referência quando quiser.',
-                    style: TextStyle(
+                  Text(
+                    isGenerating
+                        ? 'O Codex está gerando esta imagem e a enviará automaticamente.'
+                        : 'Imagem pendente. Gere no Codex ou anexe uma referência local.',
+                    style: const TextStyle(
                       color: AppColors.textTertiary,
                       fontSize: 10,
                       height: 1.35,
                     ),
+                  ),
+                ],
+                if (canGenerate) ...[
+                  const SizedBox(height: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isAnyGenerationBusy
+                            ? null
+                            : () => _generateStorySheetsWithCodex(
+                                family:
+                                    LocalProductionWorkspaceService.storySheetFamilyOf(
+                                      reference,
+                                    ),
+                                regenerate: true,
+                                reference: reference,
+                              ),
+                        icon: const Icon(Icons.description_outlined, size: 17),
+                        label: const Text('Gerar ficha novamente'),
+                      ),
+                      const SizedBox(height: 8),
+                      hasImage
+                          ? OutlinedButton.icon(
+                              onPressed:
+                                  _isAnyGenerationBusy || _isReferenceImageBusy
+                                  ? null
+                                  : () => _generateReferenceImagesWithCodex(
+                                      reference: reference,
+                                      regenerateExisting: true,
+                                    ),
+                              icon: const Icon(Icons.refresh, size: 17),
+                              label: const Text('Gerar imagem novamente'),
+                            )
+                          : FilledButton.icon(
+                              onPressed:
+                                  _isAnyGenerationBusy || _isReferenceImageBusy
+                                  ? null
+                                  : () => _generateReferenceImagesWithCodex(
+                                      reference: reference,
+                                    ),
+                              icon: const Icon(
+                                Icons.auto_awesome_outlined,
+                                size: 17,
+                              ),
+                              label: Text(
+                                isGenerating
+                                    ? 'Gerando imagem...'
+                                    : 'Gerar imagem',
+                              ),
+                            ),
+                    ],
                   ),
                 ],
               ],
@@ -273,22 +526,78 @@ extension _AdminProductionEditorReferencesExtension
     );
   }
 
-  Widget _referencePreview(ProductionReferenceItem reference) {
+  Widget _referencePreview(
+    ProductionReferenceItem reference, {
+    bool openOnTap = true,
+    List<ProductionReferenceItem>? gallery,
+  }) {
+    Widget preview;
     if (reference.assetPath?.isNotEmpty == true) {
-      return Image.asset(
+      preview = Image.asset(
         reference.assetPath!,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => _referenceFallback(reference),
       );
-    }
-    if (reference.publicUrl?.isNotEmpty == true) {
-      return CachedNetworkImage(
+    } else if (reference.publicUrl?.isNotEmpty == true) {
+      preview = CachedNetworkImage(
         imageUrl: _resolveProductionMediaUrl(reference.publicUrl!),
         fit: BoxFit.cover,
         errorWidget: (_, __, ___) => _referenceFallback(reference),
       );
+    } else {
+      preview = _referenceFallback(reference);
     }
-    return _referenceFallback(reference);
+    if (!openOnTap ||
+        !LocalProductionWorkspaceService.referenceHasGeneratedImage(
+          reference,
+        )) {
+      return preview;
+    }
+    return MouseRegion(
+      cursor: SystemMouseCursors.zoomIn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openReferenceFullscreen(reference, gallery: gallery),
+        child: preview,
+      ),
+    );
+  }
+
+  FullscreenImageSource _fullscreenImageSourceFromReference(
+    ProductionReferenceItem reference,
+  ) {
+    final publicUrl = reference.publicUrl?.trim();
+    return FullscreenImageSource(
+      title: reference.label,
+      subtitle: _referenceCategoryLabel(reference.category),
+      assetPath: reference.assetPath,
+      networkUrl: publicUrl == null || publicUrl.isEmpty
+          ? null
+          : _resolveProductionMediaUrl(publicUrl),
+    );
+  }
+
+  Future<void> _openReferenceFullscreen(
+    ProductionReferenceItem reference, {
+    List<ProductionReferenceItem>? gallery,
+  }) {
+    final items =
+        (gallery ?? _project?.references ?? const <ProductionReferenceItem>[])
+            .where(LocalProductionWorkspaceService.referenceHasGeneratedImage)
+            .toList();
+    if (items.isEmpty) {
+      items.add(reference);
+    }
+    var index = items.indexWhere((item) => item.id == reference.id);
+    if (index < 0) {
+      items.insert(0, reference);
+      index = 0;
+    }
+    return showFullscreenImageViewer(
+      context,
+      images: items.map(_fullscreenImageSourceFromReference).toList(),
+      initialIndex: index,
+    );
   }
 
   Widget _referenceFallback(ProductionReferenceItem reference) {
