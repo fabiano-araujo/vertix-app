@@ -25,6 +25,86 @@ export const AVAILABLE_MODELS = {
   MISTRAL_SMALL_3_1_24B: 'mistralai/mistral-small-3.1-24b-instruct',
 };
 
+export type OpenRouterReasoning = {
+  effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  max_tokens?: number;
+  exclude?: boolean;
+};
+
+/** OpenRouter rejects payloads that set both `reasoning.effort` and `reasoning.max_tokens`. */
+export const sanitizeOpenRouterReasoning = (
+  reasoning?: OpenRouterReasoning | null,
+): OpenRouterReasoning | undefined => {
+  if (!reasoning) return undefined;
+  const { effort, max_tokens, exclude } = reasoning;
+  if (effort) {
+    return exclude === undefined ? { effort } : { effort, exclude };
+  }
+  if (typeof max_tokens === 'number') {
+    return exclude === undefined ? { max_tokens } : { max_tokens, exclude };
+  }
+  if (exclude !== undefined) {
+    return { exclude };
+  }
+  return undefined;
+};
+
+const EMPTY_LENGTH_RETRY_MAX_TOKENS = 16384;
+const STORY_MIN_COMPLETION_TOKENS = 8192;
+const STORY_RETRY_REASONING_TOKENS = 2048;
+
+/** Hidden thinking stays on; only the JSON answer is returned. */
+export const STORY_REASONING_HIDDEN: OpenRouterReasoning = {
+  effort: 'high',
+  exclude: true,
+};
+
+export const storyCompletionBudget = (maxTokens: number): number =>
+  Math.max(STORY_MIN_COMPLETION_TOKENS, Math.trunc(maxTokens || 0));
+
+export const nextOpenRouterLengthRetry = (
+  currentMaxTokens: number | undefined,
+  finishReason: string | undefined,
+  content: string,
+  alreadyRetried: boolean,
+): { max_tokens: number; reasoning: OpenRouterReasoning } | null => {
+  if (alreadyRetried || String(content || '').trim()) return null;
+  const finish = String(finishReason || '').toLowerCase();
+  const hitLength = finish === 'length' || finish === 'max_tokens' || !finish;
+  if (!hitLength && finish !== 'stop') return null;
+  const current = Math.max(0, Math.trunc(currentMaxTokens || 0));
+  return {
+    max_tokens: Math.min(
+      EMPTY_LENGTH_RETRY_MAX_TOKENS,
+      Math.max(current * 2, STORY_MIN_COMPLETION_TOKENS),
+    ),
+    reasoning: { max_tokens: STORY_RETRY_REASONING_TOKENS, exclude: true },
+  };
+};
+
+export const openRouterErrorMessage = (error: unknown): string => {
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response;
+  const data = response?.data;
+  const nested =
+    data && typeof data === 'object'
+      ? (data as { error?: { message?: unknown } | string; message?: unknown }).error
+      : undefined;
+  const detail = typeof nested === 'string'
+    ? nested
+    : nested && typeof nested === 'object' && nested.message != null
+      ? String(nested.message)
+      : data && typeof data === 'object' && (data as { message?: unknown }).message != null
+        ? String((data as { message?: unknown }).message)
+        : '';
+  const status = response?.status;
+  if (detail && status) {
+    return `OpenRouter ${status}: ${detail}`;
+  }
+  if (detail) return detail;
+  const fallback = (error as { message?: string })?.message;
+  return fallback || 'Falha no OpenRouter';
+};
+
 // :nitro = sort throughput (mais rápido). Sem sufixo o OpenRouter usa o roteamento padrão (Balanced).
 const OPENROUTER_ROUTING_SUFFIX = /:(nitro|floor|exacto)\b/gi;
 
@@ -236,12 +316,9 @@ export const generateText = async (
     model?: string;
     streaming?: boolean;
     timeout?: number;
-    reasoning?: {
-      effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
-      max_tokens?: number;
-      exclude?: boolean;
-    };
+    reasoning?: OpenRouterReasoning;
     response_format?: { type: 'json_object' | 'text' };
+    lengthRetry?: boolean;
   } = {},
   abortController?: AbortController
 ): Promise<string | Readable> => {
@@ -273,8 +350,9 @@ export const generateText = async (
     if (options.response_format) {
       request.response_format = options.response_format;
     }
-    if (options.reasoning) {
-      request.reasoning = options.reasoning;
+    const reasoning = sanitizeOpenRouterReasoning(options.reasoning);
+    if (reasoning) {
+      request.reasoning = reasoning;
     }
 
     console.log(
@@ -317,6 +395,27 @@ export const generateText = async (
       if (content.trim()) {
         return content;
       }
+      const retry = nextOpenRouterLengthRetry(
+        options.max_tokens,
+        choice?.finish_reason,
+        content,
+        Boolean(options.lengthRetry),
+      );
+      if (retry) {
+        console.warn(
+          `OpenRouter empty finish=${choice?.finish_reason} reasoning=${usage?.completion_tokens_details?.reasoning_tokens || 0}; retrying max_tokens=${retry.max_tokens} with capped hidden thinking`,
+        );
+        return generateText(
+          prompt,
+          {
+            ...options,
+            max_tokens: retry.max_tokens,
+            reasoning: retry.reasoning,
+            lengthRetry: true,
+          },
+          abortController,
+        );
+      }
       throw new Error(
         `OpenRouter retornou resposta vazia (finish=${choice?.finish_reason || 'unknown'}, reasoning_tokens=${usage?.completion_tokens_details?.reasoning_tokens || 0})`,
       );
@@ -332,9 +431,9 @@ export const generateText = async (
       console.log('Requisição cancelada pelo usuário');
       throw new Error('Requisição cancelada pelo usuário');
     }
-    
+
     logDetailedError(error);
-    throw error;
+    throw new Error(openRouterErrorMessage(error));
   }
 };
 
